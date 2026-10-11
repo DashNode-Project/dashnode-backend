@@ -30,9 +30,7 @@ class CreateTaskUseCase:
         self._clock = clock
         self._uow = uow
 
-    def execute(
-        self, cmd: CreateTaskCommand, creator_id: str, creator_role: str
-    ) -> TaskDTO:
+    def execute(self, cmd: CreateTaskCommand, creator_id: str, creator_role: str) -> TaskDTO:
         now = self._clock.now()
         task_id = self._id_gen.generate()
 

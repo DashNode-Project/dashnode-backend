@@ -63,12 +63,8 @@ class ListUserNotificationsUseCase:
     def __init__(self, repo: NotificationRepository) -> None:
         self._repo = repo
 
-    def execute(
-        self, recipient_id: str, unread_only: bool = False
-    ) -> list[NotificationDTO]:
-        items = self._repo.list_by_recipient(
-            recipient_id=recipient_id, unread_only=unread_only
-        )
+    def execute(self, recipient_id: str, unread_only: bool = False) -> list[NotificationDTO]:
+        items = self._repo.list_by_recipient(recipient_id=recipient_id, unread_only=unread_only)
         return [
             NotificationDTO(
                 id=n.id,

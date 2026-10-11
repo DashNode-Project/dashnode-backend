@@ -79,9 +79,7 @@ class AddProjectMemberUseCase:
         self._clock = clock
         self._uow = uow
 
-    def execute(
-        self, project_id: str, cmd: AddMemberCommand, actor_id: str
-    ) -> ProjectMemberDTO:
+    def execute(self, project_id: str, cmd: AddMemberCommand, actor_id: str) -> ProjectMemberDTO:
         project = self._repo.get_by_id(project_id)
         if project is None:
             raise ValueError("Proyecto no encontrado.")

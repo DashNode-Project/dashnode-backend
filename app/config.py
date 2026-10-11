@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     APP_ENV: str = "development"
     DATABASE_URL: str = "postgresql+psycopg://dashnode:dashnode@localhost:5432/dashnode"
-    
+
     JWT_SECRET: str = "super_secret_development_key_only_change_in_prod"  # noqa: S105
     JWT_ALGORITHM: str = "HS256"
     JWT_ISSUER: str = "dashnode"
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     SESSION_TTL_HOURS: int = 8
 
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
-    
+
     API_HOST: str = "0.0.0.0"  # noqa: S104
     API_PORT: int = 8000
 

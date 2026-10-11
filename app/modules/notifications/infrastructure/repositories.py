@@ -48,12 +48,8 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
             return None
         return self._to_domain(result)
 
-    def list_by_recipient(
-        self, recipient_id: str, unread_only: bool = False
-    ) -> list[Notification]:
-        stmt = select(NotificationModel).where(
-            NotificationModel.recipient_id == recipient_id
-        )
+    def list_by_recipient(self, recipient_id: str, unread_only: bool = False) -> list[Notification]:
+        stmt = select(NotificationModel).where(NotificationModel.recipient_id == recipient_id)
         if unread_only:
             stmt = stmt.where(NotificationModel.is_read.is_(False))
         stmt = stmt.order_by(NotificationModel.created_at.desc())

@@ -44,9 +44,8 @@ class SqlAlchemyProjectRepository(ProjectRepository):
         return self._to_domain(result)
 
     def list_by_user(self, user_id: str) -> list[Project]:
-        member_subquery = (
-            select(ProjectMemberModel.project_id)
-            .where(ProjectMemberModel.user_id == user_id)
+        member_subquery = select(ProjectMemberModel.project_id).where(
+            ProjectMemberModel.user_id == user_id
         )
         stmt = (
             select(ProjectModel)

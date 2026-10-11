@@ -1,10 +1,11 @@
 """Initial Tier A Schema
 
 Revision ID: 001_initial_tier_a_schema
-Revises: 
+Revises:
 Create Date: 2026-10-10 18:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa

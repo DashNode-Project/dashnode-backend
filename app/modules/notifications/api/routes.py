@@ -55,9 +55,7 @@ def send_notification(
 def list_notifications(
     unread_only: bool = Query(default=False),
     current_user: CurrentUser = Depends(get_current_user),
-    use_case: ListUserNotificationsUseCase = Depends(
-        get_list_user_notifications_use_case
-    ),
+    use_case: ListUserNotificationsUseCase = Depends(get_list_user_notifications_use_case),
 ) -> list[NotificationDTO]:
     return use_case.execute(recipient_id=current_user.id, unread_only=unread_only)
 
@@ -70,14 +68,10 @@ def list_notifications(
 def mark_as_read(
     notification_id: str,
     current_user: CurrentUser = Depends(get_current_user),
-    use_case: MarkNotificationAsReadUseCase = Depends(
-        get_mark_notification_as_read_use_case
-    ),
+    use_case: MarkNotificationAsReadUseCase = Depends(get_mark_notification_as_read_use_case),
 ) -> NotificationDTO:
     try:
-        return use_case.execute(
-            notification_id=notification_id, recipient_id=current_user.id
-        )
+        return use_case.execute(notification_id=notification_id, recipient_id=current_user.id)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

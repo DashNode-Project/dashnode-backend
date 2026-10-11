@@ -29,8 +29,7 @@ class FakeProjectRepository:
     def list_by_user(self, user_id: str) -> list[Project]:
         member_proj_ids = {m.project_id for m in self.members if m.user_id == user_id}
         return [
-            p for p in self.projects.values()
-            if p.owner_id == user_id or p.id in member_proj_ids
+            p for p in self.projects.values() if p.owner_id == user_id or p.id in member_proj_ids
         ]
 
     def save(self, project: Project) -> None:

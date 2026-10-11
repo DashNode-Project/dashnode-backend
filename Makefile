@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck arch test test-unit test-integration verify run migrate seed docker-up
+.PHONY: install lint format typecheck arch test test-unit test-integration check hooks-install verify run migrate seed docker-up
 
 install:
 	pip install -e .[dev]
@@ -22,6 +22,11 @@ test-integration:
 	pytest tests/integration tests/api --cov=app --cov-append
 
 test: test-unit test-integration
+
+check: lint typecheck arch test
+
+hooks-install:
+	git config core.hooksPath .githooks
 
 verify: install lint typecheck arch test
 

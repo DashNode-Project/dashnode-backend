@@ -27,11 +27,10 @@ class FakeNotificationRepository:
     def get_by_id(self, notification_id: str) -> Notification | None:
         return self.notifications.get(notification_id)
 
-    def list_by_recipient(
-        self, recipient_id: str, unread_only: bool = False
-    ) -> list[Notification]:
+    def list_by_recipient(self, recipient_id: str, unread_only: bool = False) -> list[Notification]:
         return [
-            n for n in self.notifications.values()
+            n
+            for n in self.notifications.values()
             if n.recipient_id == recipient_id and (not unread_only or not n.is_read)
         ]
 

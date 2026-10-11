@@ -86,9 +86,7 @@ class FakeUnitOfWork(UnitOfWork):
 
 
 class FakeTokenService:
-    def create_access_token(
-        self, user_id: str, role: str, email: str, name: str = ""
-    ) -> str:
+    def create_access_token(self, user_id: str, role: str, email: str, name: str = "") -> str:
         return f"token_for_{user_id}_{role}_{email}"
 
     def decode_token(self, token: str) -> dict[str, object] | None:

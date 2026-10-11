@@ -19,9 +19,7 @@ class JwtTokenService(TokenService):
     def __init__(self, clock: Clock) -> None:
         self._clock = clock
 
-    def create_access_token(
-        self, user_id: str, role: str, email: str, name: str = ""
-    ) -> str:
+    def create_access_token(self, user_id: str, role: str, email: str, name: str = "") -> str:
         now = self._clock.now()
         exp = now + timedelta(hours=settings.SESSION_TTL_HOURS)
         payload: dict[str, object] = {
