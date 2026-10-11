@@ -10,7 +10,7 @@
 
 ---
 
-## 🏛️ Arquitectura del Sistema
+## Arquitectura del Sistema
 
 El backend de DashNode está construido bajo los principios de **Arquitectura Hexagonal (Ports & Adapters)** y **Clean Architecture**, estructurado como un **Monolito Modular** desacoplado:
 
@@ -128,7 +128,7 @@ Acceso a la documentación interactiva:
 
 ---
 
-## 🐳 Ejecución con Docker Compose
+## Ejecución con Docker Compose
 
 Para levantar la aplicación junto con PostgreSQL y PgAdmin:
 ```bash
