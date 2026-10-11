@@ -39,7 +39,7 @@ app/
 
 ---
 
-## 🌳 Estrategia Git Trunk (Trunk-Based Development)
+## Estrategia Git Trunk (Trunk-Based Development)
 
 Este proyecto adopta **Trunk-Based Development (TBD)** como modelo oficial de versionamiento e integración continua:
 
@@ -48,11 +48,11 @@ Este proyecto adopta **Trunk-Based Development (TBD)** como modelo oficial de ve
 - **Integración continua diaria**: Integración de código al menos una vez al día con PRs pequeños (< 300 líneas).
 - **Quality Gates obligatorias**: Todos los commits y PRs deben superar el 100% de los controles automáticos de calidad en GitHub Actions (`trunk-ci.yml`).
 
-👉 **Consulta la guía completa de contribución y flujo de trabajo:** [Guía Trunk-Based Development](docs/TRUNK_BASED_DEVELOPMENT.md).
+ **Consulta la guía completa de contribución y flujo de trabajo:** [Guía Trunk-Based Development](docs/TRUNK_BASED_DEVELOPMENT.md).
 
 ---
 
-## 🛡️ Quality Gates Locales y en CI
+## Quality Gates Locales y en CI
 
 El proyecto mantiene una política estricta de **cero advertencias y cero errores**:
 
@@ -82,7 +82,7 @@ make hooks-install
 
 ---
 
-## 🚀 Puesta en Marcha (Local)
+## Puesta en Marcha (Local)
 
 ### 1. Requisitos Previos
 - Python 3.12+
