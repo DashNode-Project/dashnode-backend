@@ -25,6 +25,7 @@ class User:
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    avatar_key: str | None = None
 
     def can_authenticate(self) -> bool:
         """Determines if the user account is allowed to log in."""
@@ -33,6 +34,10 @@ class User:
     def deactivate(self, when: datetime) -> None:
         """Deactivates user account."""
         self.is_active = False
+        self.updated_at = when
+
+    def reactivate(self, when: datetime) -> None:
+        self.is_active = True
         self.updated_at = when
 
 

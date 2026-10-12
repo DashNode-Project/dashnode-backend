@@ -47,6 +47,7 @@ class SqlAlchemyUserRepository(UserRepository):
             name=model.name,
             role=UserRole(model.role),
             is_active=model.is_active,
+            avatar_key=model.avatar_key,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -73,6 +74,7 @@ class SqlAlchemyUserRepository(UserRepository):
             name=user.name,
             role=user.role.value,
             is_active=user.is_active,
+            avatar_key=user.avatar_key,
             created_at=user.created_at,
             updated_at=user.updated_at,
         )
@@ -92,6 +94,7 @@ class SqlAlchemyUserRepository(UserRepository):
             model.name = user.name
             model.role = user.role.value
             model.is_active = user.is_active
+            model.avatar_key = user.avatar_key
             model.updated_at = user.updated_at
 
     def list_all(self) -> list[User]:
@@ -153,6 +156,14 @@ class SqlAlchemySessionRepository(SessionRepository):
 
     def purge_expired_before(self, moment: datetime) -> None:
         self._session.execute(delete(SessionModel).where(SessionModel.expires_at < moment))
+
+    def revoke_all_active_for_user(self, user_id: str, when: datetime) -> None:
+        stmt = select(SessionModel).where(
+            SessionModel.user_id == user_id,
+            SessionModel.revoked_at.is_(None),
+        )
+        for model in self._session.execute(stmt).scalars():
+            model.revoked_at = when
 
 
 class SqlAlchemyLoginAttemptRepository(LoginAttemptRepository):

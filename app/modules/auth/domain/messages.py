@@ -54,3 +54,14 @@ MANAGER_ROLE_CHANGE_BLOCKED = (
     "Reasigne primero la responsabilidad."
 )
 USER_NOT_FOUND = "Usuario no encontrado."
+USER_DEACTIVATED = "Usuario desactivado correctamente."
+USER_REACTIVATED = "Usuario reactivado correctamente."
+SELF_DEACTIVATE_BLOCKED = "No puede desactivar su propia cuenta de Administrador."
+MANAGER_DEACTIVATE_BLOCKED = (
+    "No puede desactivar a un Gerente responsable de proyectos. "
+    "Reasigne primero la responsabilidad."
+)
+REACTIVATE_NOT_INACTIVE = "Solo se pueden reactivar usuarios desactivados."
+PROFILE_UPDATED = "Perfil actualizado correctamente."
+AVATAR_INVALID = "El avatar debe ser una imagen PNG, JPG o WEBP de hasta 2 MB."
+

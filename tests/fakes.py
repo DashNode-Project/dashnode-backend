@@ -155,6 +155,11 @@ class FakeSessionRepository:
     def purge_expired_before(self, moment: datetime) -> None:
         self.sessions = {k: s for k, s in self.sessions.items() if s.expires_at >= moment}
 
+    def revoke_all_active_for_user(self, user_id: str, when: datetime) -> None:
+        for session in self.sessions.values():
+            if session.user_id == user_id and session.revoked_at is None:
+                session.revoke(when)
+
 
 class FakeLoginAttemptRepository:
     def __init__(self) -> None:

@@ -106,3 +106,40 @@ class ManagerRoleChangeBlockedError(AppError):
             messages.MANAGER_ROLE_CHANGE_BLOCKED,
             ErrorKind.VALIDATION,
         )
+
+
+class SelfDeactivateBlockedError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "SELF_DEACTIVATE_BLOCKED",
+            messages.SELF_DEACTIVATE_BLOCKED,
+            ErrorKind.VALIDATION,
+        )
+
+
+class ManagerDeactivateBlockedError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "MANAGER_DEACTIVATE_BLOCKED",
+            messages.MANAGER_DEACTIVATE_BLOCKED,
+            ErrorKind.VALIDATION,
+        )
+
+
+class ReactivateNotInactiveError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "REACTIVATE_NOT_INACTIVE",
+            messages.REACTIVATE_NOT_INACTIVE,
+            ErrorKind.VALIDATION,
+        )
+
+
+class ProfileValidationError(AppError):
+    def __init__(self, code: str, message: str, fields: dict[str, str]) -> None:
+        super().__init__(code, message, ErrorKind.VALIDATION, fields)
+
+
+class AvatarValidationError(AppError):
+    def __init__(self) -> None:
+        super().__init__("AVATAR_INVALID", messages.AVATAR_INVALID, ErrorKind.VALIDATION)

@@ -43,6 +43,24 @@ class UserDTO(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+    avatar_url: str | None = None
+
+
+class ProfileDTO(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: UserRole
+    avatar_url: str | None = None
+
+
+class UpdateProfileCommand(BaseModel):
+    name: str = Field(default="", max_length=1000)
+
+
+class ProfileResponse(BaseModel):
+    message: str | None = None
+    profile: ProfileDTO
 
 
 class RegisterManagerResponse(BaseModel):

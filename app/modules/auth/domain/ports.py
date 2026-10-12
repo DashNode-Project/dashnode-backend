@@ -45,6 +45,8 @@ class SessionRepository(Protocol):
 
     def purge_expired_before(self, moment: datetime) -> None: ...
 
+    def revoke_all_active_for_user(self, user_id: str, when: datetime) -> None: ...
+
 
 class LoginAttemptRepository(Protocol):
     """Port for the brute-force protection ledger."""
@@ -76,6 +78,12 @@ class PasswordCredentialTokenRepository(Protocol):
     def update(self, token: PasswordCredentialToken) -> None: ...
 
     def invalidate_active_for_user(self, user_id: str, purpose: CredentialTokenPurpose) -> None: ...
+
+
+class PendingAssignmentsQuery(Protocol):
+    """Count of non-completed tasks assigned to a user (orchestration adapter)."""
+
+    def count_pending_for_user(self, user_id: str) -> int: ...
 
 
 class ProjectOwnershipQuery(Protocol):
