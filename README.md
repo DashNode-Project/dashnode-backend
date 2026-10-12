@@ -8,6 +8,8 @@
 [![Architecture](https://img.shields.io/badge/architecture-Hexagonal%20%2F%20Ports%20%26%20Adapters-orange.svg)](#arquitectura-del-sistema)
 [![Git Strategy](https://img.shields.io/badge/git%20strategy-Trunk--Based%20Development-success.svg)](docs/TRUNK_BASED_DEVELOPMENT.md)
 
+- [Guía de despliegue (Render + Supabase)](./docs/deployment-guide.md)
+
 ---
 
 ## Arquitectura del Sistema
