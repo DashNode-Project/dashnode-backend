@@ -1,0 +1,118 @@
+"""
+In-memory test doubles for the application ports (shared by application tests).
+"""
+
+from datetime import UTC, datetime, timedelta
+
+from app.modules.auth.domain.entities import User, UserRole
+from app.modules.auth.domain.errors import EmailAlreadyRegisteredError
+from app.shared.application.ports import UnitOfWork
+
+T0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+
+class FakeUserRepository:
+    def __init__(self) -> None:
+        self.users_by_id: dict[str, User] = {}
+        self.users_by_email: dict[str, User] = {}
+
+    def get_by_id(self, user_id: str) -> User | None:
+        return self.users_by_id.get(user_id)
+
+    def get_by_email(self, email: str) -> User | None:
+        return self.users_by_email.get(email)
+
+    def save(self, user: User) -> None:
+        if user.email in self.users_by_email and self.users_by_email[user.email].id != user.id:
+            raise EmailAlreadyRegisteredError
+        self.users_by_id[user.id] = user
+        self.users_by_email[user.email] = user
+
+    def update(self, user: User) -> None:
+        self.users_by_id[user.id] = user
+        self.users_by_email[user.email] = user
+
+
+class FakeClock:
+    def __init__(self, fixed_now: datetime = T0) -> None:
+        self.fixed_now = fixed_now
+
+    def now(self) -> datetime:
+        return self.fixed_now
+
+    def advance(self, **delta: float) -> None:
+        self.fixed_now += timedelta(**delta)
+
+
+class FakeIdGenerator:
+    """Deterministic ids: id-1, id-2, ... (or a fixed one when provided)."""
+
+    def __init__(self, fixed_id: str | None = None) -> None:
+        self._fixed = fixed_id
+        self._counter = 0
+
+    def generate(self) -> str:
+        if self._fixed is not None:
+            return self._fixed
+        self._counter += 1
+        return f"id-{self._counter}"
+
+
+class FakePasswordHasher:
+    def __init__(self) -> None:
+        self.dummy_calls = 0
+
+    def hash(self, password: str) -> str:
+        return f"hashed_{password}"
+
+    def verify(self, password: str, hashed: str) -> bool:
+        return hashed == f"hashed_{password}"
+
+    def verify_dummy(self, password: str) -> None:
+        self.dummy_calls += 1
+
+
+class FakeUnitOfWork(UnitOfWork):
+    def __init__(self) -> None:
+        self.committed = False
+        self.rolled_back = False
+
+    def __enter__(self) -> "FakeUnitOfWork":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object | None,
+    ) -> None:
+        if exc_type is not None:
+            self.rollback()
+
+    def commit(self) -> None:
+        self.committed = True
+
+    def rollback(self) -> None:
+        self.rolled_back = True
+
+
+def make_user(
+    *,
+    user_id: str = "usr-1",
+    email: str = "user@example.com",
+    password: str = "Password1",  # noqa: S107 - test literal
+    role: UserRole = UserRole.MANAGER,
+    is_active: bool = True,
+    name: str = "Test User",
+    hasher: FakePasswordHasher | None = None,
+) -> User:
+    return User(
+        id=user_id,
+        email=email,
+        hashed_password=(hasher or FakePasswordHasher()).hash(password),
+        name=name,
+        role=role,
+        is_active=is_active,
+        created_at=T0,
+        updated_at=T0,
+    )

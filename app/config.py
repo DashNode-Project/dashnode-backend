@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # --- Persistence (required, no default: credentials never live in code) ---
     DATABASE_URL: str = Field(min_length=1)
 
+    # Server where the integration tests may create/drop temporary databases.
+    TEST_POSTGRES_URL: str | None = None
+
     # --- Legacy stateless JWT (superseded by server sessions; removed in HU_DN_01_03) ---
     JWT_SECRET: SecretStr | None = None
     JWT_ALGORITHM: str = "HS256"

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.modules.auth.application.use_cases import (
     GetCurrentUserUseCase,
     LoginUseCase,
-    RegisterUserUseCase,
+    RegisterManagerUseCase,
 )
 from app.modules.auth.infrastructure.repositories import SqlAlchemyUserRepository
 from app.modules.auth.infrastructure.token_service import JwtTokenService
@@ -26,12 +26,12 @@ password_hasher = Argon2PasswordHasher()
 token_service = JwtTokenService(clock=clock)
 
 
-def get_register_user_use_case(
+def get_register_manager_use_case(
     db: Session = Depends(get_db),
-) -> RegisterUserUseCase:
+) -> RegisterManagerUseCase:
     user_repo = SqlAlchemyUserRepository(session=db)
     uow = SqlAlchemyUnitOfWork(session=db)
-    return RegisterUserUseCase(
+    return RegisterManagerUseCase(
         user_repo=user_repo,
         hasher=password_hasher,
         id_gen=id_generator,

@@ -11,11 +11,19 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from app.modules.auth.domain.entities import UserRole
 
 
-class RegisterUserCommand(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8)
-    name: str = Field(min_length=2, max_length=100)
-    role: UserRole = UserRole.DEVELOPER
+class RegisterManagerCommand(BaseModel):
+    """Public registration payload (HU_DN_01_02).
+
+    Business validation is performed by the use case so each failure maps to its
+    literal message; here only types and a generous size guard are enforced. `role` is
+    accepted only to reject any value other than the Manager role explicitly.
+    """
+
+    name: str = Field(default="", max_length=1000)
+    email: str = Field(default="", max_length=1000)
+    password: str = Field(default="", max_length=1000)
+    confirm_password: str = Field(default="", max_length=1000)
+    role: str | None = Field(default=None, max_length=50)
 
 
 class LoginCommand(BaseModel):
@@ -37,3 +45,8 @@ class UserDTO(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+
+
+class RegisterManagerResponse(BaseModel):
+    message: str
+    user: UserDTO

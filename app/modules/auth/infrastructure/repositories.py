@@ -5,9 +5,11 @@ SQLAlchemy repository implementation for Users.
 """
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.auth.domain.entities import User, UserRole
+from app.modules.auth.domain.errors import EmailAlreadyRegisteredError
 from app.modules.auth.domain.ports import UserRepository
 from app.modules.auth.infrastructure.models import UserModel
 
@@ -56,6 +58,11 @@ class SqlAlchemyUserRepository(UserRepository):
             updated_at=user.updated_at,
         )
         self._session.add(model)
+        try:
+            self._session.flush()
+        except IntegrityError as error:
+            # Unique index on email: a concurrent registration won the race.
+            raise EmailAlreadyRegisteredError from error
 
     def update(self, user: User) -> None:
         stmt = select(UserModel).where(UserModel.id == user.id)

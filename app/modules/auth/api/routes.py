@@ -9,17 +9,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.modules.auth.application.dtos import (
     LoginCommand,
-    RegisterUserCommand,
+    RegisterManagerCommand,
+    RegisterManagerResponse,
     TokenResponse,
-    UserDTO,
 )
 from app.modules.auth.application.use_cases import (
     LoginUseCase,
-    RegisterUserUseCase,
+    RegisterManagerUseCase,
 )
 from app.orchestration.auth_container import (
     get_login_use_case,
-    get_register_user_use_case,
+    get_register_manager_use_case,
 )
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
@@ -29,21 +29,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post(
     "/register",
-    response_model=UserDTO,
+    response_model=RegisterManagerResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Registrar un nuevo usuario",
+    summary="Registrar una cuenta con rol Gerente (publico)",
 )
 def register(
-    cmd: RegisterUserCommand,
-    use_case: RegisterUserUseCase = Depends(get_register_user_use_case),
-) -> UserDTO:
-    try:
-        return use_case.execute(cmd)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+    cmd: RegisterManagerCommand,
+    use_case: RegisterManagerUseCase = Depends(get_register_manager_use_case),
+) -> RegisterManagerResponse:
+    return use_case.execute(cmd)
 
 
 @router.post(
