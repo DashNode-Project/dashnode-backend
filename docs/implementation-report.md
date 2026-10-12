@@ -56,3 +56,17 @@ Ver la tabla «Decisiones y supuestos» en `docs/user-stories.md`. Pendiente fue
 python scripts/generate_env.py && docker compose up -d db && alembic upgrade head
 pytest --cov=app --cov-fail-under=80 && make check
 ```
+
+## Validación (Integrador) — 2026-10-11
+
+Re-ejecución de gates y E2E con la pila real (API + Postgres + nginx):
+
+| Control | Resultado |
+|---|---|
+| `pytest --cov=app --cov-fail-under=80` | 218 passed, 94.77 % |
+| ruff / mypy --strict / import-linter / scan_secrets | Verde |
+| `node scripts/e2e-stack.mjs` (desde el frontend) | 51 passed, 0 failed |
+| CORS | Se añadieron orígenes `127.0.0.1:5173` y `127.0.0.1:8080` |
+
+Informe E2E completo: `docs/integration-report.md`.
+

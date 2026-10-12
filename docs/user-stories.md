@@ -1,8 +1,9 @@
-# Historias de usuario implementadas — EP-01 Autenticación y sesiones (backend)
+# Historias de usuario implementadas — EP-01 Autenticación y sesiones
 
-> Alcance de este repositorio (`dashnode-backend`): las partes de backend, seguridad, BD, QA y
-> documentación de las 5 HU de la épica. Las tareas de tipo *Frontend* se implementan y
-> documentan en `dashnode-frontend`. El texto de cada HU se conserva literalmente más abajo.
+> Texto original de las 5 HU de la épica (idéntico en `dashnode-backend` y
+> `dashnode-frontend`). Estado del lote: COMPLETED (2026-10-11).
+> Cada repositorio documenta en `code-structure.md` e `implementation-report.md`
+> solo su capa; `integration-report.md` es el mismo en ambos.
 
 ## Matriz de trazabilidad HU → código → pruebas → evidencia
 
