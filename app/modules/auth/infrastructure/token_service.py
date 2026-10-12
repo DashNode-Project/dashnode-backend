@@ -34,7 +34,7 @@ class JwtTokenService(TokenService):
         }
         token: str = jwt.encode(
             payload,
-            settings.JWT_SECRET,
+            settings.jwt_secret_value,
             algorithm=settings.JWT_ALGORITHM,
         )
         return token
@@ -43,7 +43,7 @@ class JwtTokenService(TokenService):
         try:
             payload: dict[str, object] = jwt.decode(
                 token,
-                settings.JWT_SECRET,
+                settings.jwt_secret_value,
                 algorithms=[settings.JWT_ALGORITHM],
                 audience=settings.JWT_AUDIENCE,
                 issuer=settings.JWT_ISSUER,

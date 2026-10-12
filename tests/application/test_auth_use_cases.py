@@ -60,6 +60,9 @@ class FakePasswordHasher:
     def verify(self, password: str, hashed: str) -> bool:
         return hashed == f"hashed_{password}"
 
+    def verify_dummy(self, password: str) -> None:
+        return None
+
 
 class FakeUnitOfWork(UnitOfWork):
     def __init__(self) -> None:

@@ -44,7 +44,7 @@ def get_current_user(
     try:
         payload: dict[str, object] = jwt.decode(
             credentials.credentials,
-            settings.JWT_SECRET,
+            settings.jwt_secret_value,
             algorithms=[settings.JWT_ALGORITHM],
             audience=settings.JWT_AUDIENCE,
             issuer=settings.JWT_ISSUER,

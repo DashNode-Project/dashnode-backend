@@ -25,10 +25,14 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _database_url() -> str:
+    """Explicit override (tests, tooling) wins; otherwise the configured DATABASE_URL."""
+    return config.get_main_option("sqlalchemy.url") or settings.DATABASE_URL
+
+
 def run_migrations_offline() -> None:
-    url = settings.DATABASE_URL
     context.configure(
-        url=url,
+        url=_database_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -40,7 +44,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+    configuration["sqlalchemy.url"] = _database_url()
 
     connectable = engine_from_config(
         configuration,
