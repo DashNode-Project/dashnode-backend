@@ -4,9 +4,16 @@ Repository and service ports for the Auth module domain.
 @origin [SAD-Propuesto]
 """
 
+from datetime import datetime
 from typing import Protocol
 
-from app.modules.auth.domain.entities import User
+from app.modules.auth.domain.entities import (
+    CredentialTokenPurpose,
+    LoginAttempt,
+    PasswordCredentialToken,
+    User,
+    UserSession,
+)
 
 
 class UserRepository(Protocol):
@@ -20,10 +27,54 @@ class UserRepository(Protocol):
 
     def update(self, user: User) -> None: ...
 
+    def list_all(self) -> list[User]: ...
 
-class TokenService(Protocol):
-    """Port for signing and verifying security tokens."""
 
-    def create_access_token(self, user_id: str, role: str, email: str, name: str = "") -> str: ...
+class SessionRepository(Protocol):
+    """Port for server-side sessions (looked up by the hash of the opaque token)."""
 
-    def decode_token(self, token: str) -> dict[str, object] | None: ...
+    def add(self, session: UserSession) -> None: ...
+
+    def get_by_token_hash(self, token_hash: str) -> UserSession | None: ...
+
+    def update(self, session: UserSession) -> None: ...
+
+    def purge_expired_before(self, moment: datetime) -> None: ...
+
+
+class LoginAttemptRepository(Protocol):
+    """Port for the brute-force protection ledger."""
+
+    def add(self, attempt: LoginAttempt) -> None: ...
+
+    def count_since(self, email: str, since: datetime) -> int: ...
+
+    def delete(self, attempt_id: str) -> None: ...
+
+    def clear_for(self, email: str) -> None: ...
+
+    def purge_before(self, moment: datetime) -> None: ...
+
+
+class SessionTokenService(Protocol):
+    """Port that creates unguessable session tokens and their storable digest."""
+
+    def new_token(self) -> str: ...
+
+    def digest(self, token: str) -> str: ...
+
+
+class PasswordCredentialTokenRepository(Protocol):
+    def add(self, token: PasswordCredentialToken) -> None: ...
+
+    def get_by_token_hash(self, token_hash: str) -> PasswordCredentialToken | None: ...
+
+    def update(self, token: PasswordCredentialToken) -> None: ...
+
+    def invalidate_active_for_user(self, user_id: str, purpose: CredentialTokenPurpose) -> None: ...
+
+
+class TransactionalEmailSender(Protocol):
+    """Sends password/activation links. Must not log message bodies with secrets."""
+
+    def send_password_reset(self, *, to_email: str, reset_url: str) -> None: ...

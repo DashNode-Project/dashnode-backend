@@ -2,7 +2,6 @@
 name = "dashnode-backend"
 version = "1.0.0"
 description = "DashNode Backend API"
-readme = "docs/README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110.0",
@@ -13,7 +12,6 @@ dependencies = [
     "alembic>=1.13.1",
     "psycopg[binary]>=3.1.18",
     "argon2-cffi>=23.1.0",
-    "pyjwt>=2.8.0",
     "email-validator>=2.1.1"
 ]
 
@@ -33,7 +31,9 @@ dev = [
     "httpx>=0.27.0",
     "mypy>=1.9.0",
     "ruff>=0.3.4",
-    "import-linter>=2.0.0"
+    "import-linter>=2.0.0",
+    "hypothesis>=6.100.0",
+    "pip-audit>=2.7.0"
 ]
 
 [tool.ruff]
@@ -47,6 +47,8 @@ ignore = ["S101", "B008"]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "S105", "S106", "TID251"]
 "app/cli/*" = ["T201", "TID251"]
+"app/modules/auth/domain/messages.py" = ["S105"]  # literal user-facing texts, not secrets
+"scripts/*" = ["T201", "S603", "S607", "TID251"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "datetime.datetime.now".msg = "Use Clock port instead (HC-09)"
@@ -80,3 +82,18 @@ forbidden_modules = ["fastapi", "sqlalchemy", "pydantic_settings"]
 name = "BR-4: Module isolation"
 type = "independence"
 modules = ["app.modules.auth", "app.modules.projects", "app.modules.tasks", "app.modules.notifications"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: requires a real PostgreSQL server (TEST_POSTGRES_URL)",
+]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
