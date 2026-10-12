@@ -521,5 +521,6 @@
 | HU | Estado | Evidencia |
 | --- | --- | --- |
 | HU_DN_01_11 | Implementado | `POST /api/v1/auth/admin/users`, activación por correo (`CredentialTokenPurpose.ACTIVATION`), tests `test_user_administration_*` |
+| HU_DN_01_12 | Implementado | `POST /api/v1/auth/manager/users/invite`, rol Desarrollador forzado en servidor |
 
 ---
