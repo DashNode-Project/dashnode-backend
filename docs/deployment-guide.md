@@ -9,11 +9,13 @@
 ## Supabase (PostgreSQL gestionado)
 
 1. En el panel de Supabase, copie la cadena **URI** de conexión (modo `session` o `direct`).
-2. Conviértala al formato SQLAlchemy:
+2. Arme `DATABASE_URL` en `.env` con el usuario, host, puerto, base y `sslmode=require`.
+   Use la contraseña del panel **solo** en `.env` (git-ignored), nunca en documentación versionada.
+   En `.env.example` hay un marcador `CHANGE_ME_DB_PASSWORD` y host `YOUR_PROJECT`.
 
-   `postgresql+psycopg://postgres:SU_CONTRASEÑA@db.PROJECT_REF.supabase.co:5432/postgres?sslmode=require`
+3. Ejemplo de forma (sustituya valores reales únicamente en su `.env` local):
 
-3. Guarde la cadena en `.env` como `DATABASE_URL`. **No suba contraseñas al repositorio.**
+   `postgresql+psycopg://postgres:CHANGE_ME_DB_PASSWORD@db.YOUR_PROJECT.supabase.co:5432/postgres?sslmode=require`
 
 ## Migraciones y datos semilla
 
