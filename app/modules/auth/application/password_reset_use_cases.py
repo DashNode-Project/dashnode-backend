@@ -12,7 +12,6 @@ from app.modules.auth.application.dtos import (
 from app.modules.auth.domain import messages
 from app.modules.auth.domain.entities import CredentialTokenPurpose, PasswordCredentialToken
 from app.modules.auth.domain.errors import (
-    AdminOnlyError,
     AdminResetDisabledTargetError,
     InvalidCredentialTokenError,
     PasswordResetValidationError,
@@ -25,6 +24,7 @@ from app.modules.auth.domain.ports import (
 )
 from app.modules.auth.domain.rules import is_valid_email, is_valid_password, normalize_email
 from app.shared.application.ports import Clock, IdGenerator, PasswordHasher, UnitOfWork
+from app.shared.domain.authorization import AccessDeniedError
 
 
 @dataclass(frozen=True)
@@ -191,7 +191,7 @@ class AdminRequestPasswordResetUseCase:
     def execute(self, *, actor_id: str, target_user_id: str) -> MessageResponse:
         actor = self._actors.get_by_id(actor_id)
         if actor is None or actor.role.value != "admin":
-            raise AdminOnlyError()
+            raise AccessDeniedError()
 
         target = self._users.get_by_id(target_user_id)
         if target is None:
@@ -235,7 +235,7 @@ class ListAdminUsersUseCase:
     def execute(self, *, actor_id: str) -> list[AdminUserSummaryDTO]:
         actor = self._users.get_by_id(actor_id)
         if actor is None or actor.role.value != "admin":
-            raise AdminOnlyError()
+            raise AccessDeniedError()
         return [
             AdminUserSummaryDTO(
                 id=u.id,

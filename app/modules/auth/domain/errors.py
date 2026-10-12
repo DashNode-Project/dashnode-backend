@@ -92,10 +92,3 @@ class AdminResetDisabledTargetError(AppError):
             messages.ADMIN_RESET_DISABLED_TARGET,
             ErrorKind.VALIDATION,
         )
-
-
-class AdminOnlyError(AppError):
-    def __init__(self) -> None:
-        from app.shared.domain.messages import ACCESS_DENIED
-
-        super().__init__("ACCESS_DENIED", ACCESS_DENIED, ErrorKind.FORBIDDEN)

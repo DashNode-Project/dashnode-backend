@@ -50,8 +50,8 @@ def get_current_user(session: CurrentSession = Depends(get_current_session)) -> 
 
 
 def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    from app.modules.auth.domain.errors import AdminOnlyError
+    from app.shared.domain.authorization import AccessDeniedError
 
     if user.role != "admin":
-        raise AdminOnlyError()
+        raise AccessDeniedError()
     return user
