@@ -61,13 +61,6 @@ def security_policy() -> SecurityPolicy:
         attempt_window=timedelta(minutes=settings.LOGIN_ATTEMPT_WINDOW_MINUTES),
     )
 
-def security_policy() -> SecurityPolicy:
-    return SecurityPolicy(
-        session_ttl=timedelta(hours=settings.SESSION_TTL_HOURS),
-        session_retention=timedelta(hours=settings.SESSION_COOKIE_RETENTION_HOURS),
-        max_failed_attempts=settings.LOGIN_MAX_FAILED_ATTEMPTS,
-        attempt_window=timedelta(minutes=settings.LOGIN_ATTEMPT_WINDOW_MINUTES),
-    )
 
 def get_register_manager_use_case(
     db: Session = Depends(get_db),
