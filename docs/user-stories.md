@@ -524,5 +524,6 @@
 | HU_DN_01_12 | Implementado | `POST /api/v1/auth/manager/users/invite`, rol Desarrollador forzado en servidor |
 | HU_DN_01_13 | Implementado | Rechazo 403 `AccessDeniedError` al enviar rol `admin` en creación |
 | HU_DN_01_14 | Implementado | `GET /api/v1/auth/admin/users?name=&role=`, proyección sin hash |
+| HU_DN_01_16 | Implementado | `PATCH /api/v1/auth/admin/users/{id}` vía `user_administration_routes`, guardia Gerente con proyectos |
 
 ---

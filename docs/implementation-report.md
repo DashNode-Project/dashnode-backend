@@ -12,6 +12,7 @@ Rama: `feature/ep-01-auth-sessions` (base `develop`, que parte de `main`). Un co
 | HU_DN_01_04 Logout | Hecho | `feat(HU_DN_01_04)` |
 | HU_DN_01_05 Sesión al recargar | Hecho | `feat(HU_DN_01_05)` |
 | HU_DN_01_06–10 Reset, authz, admin | Hecho | `feat(auth): HU_DN_01_06-10 password reset, authz and admin flows` |
+| EP-02 HU_DN_01_11–16 Usuarios | Hecho | `feat(HU_DN_01_11)` + docs HU_12–16 en `feature/ep-02-users-roles` |
 | HU_DN_01_01 Landing | N/A en backend | Solo frontend |
 
 ## Resultados de validación (local, última ejecución)
