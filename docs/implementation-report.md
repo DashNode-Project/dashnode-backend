@@ -11,13 +11,14 @@ Rama: `feature/ep-01-auth-sessions` (base `develop`, que parte de `main`). Un co
 | HU_DN_01_03 Login | Hecho | `feat(HU_DN_01_03)` |
 | HU_DN_01_04 Logout | Hecho | `feat(HU_DN_01_04)` |
 | HU_DN_01_05 Sesión al recargar | Hecho | `feat(HU_DN_01_05)` |
+| HU_DN_01_06–10 Reset, authz, admin | Hecho | `feat(auth): HU_DN_01_06-10 password reset, authz and admin flows` |
 | HU_DN_01_01 Landing | N/A en backend | Solo frontend |
 
 ## Resultados de validación (local, última ejecución)
 
 | Control | Resultado |
 |---|---|
-| `pytest` (unit, application, api, integration) | 218 pruebas, 0 fallos, 0 omitidas |
+| `pytest` (unit, application, api, integration) | 228 pruebas, 0 fallos, 0 omitidas |
 | Cobertura (`--cov=app`, umbral 80 %) | 94.89 % |
 | `ruff check` / `ruff format --check` (incluye reglas S, DTZ, T20, TID251) | Sin hallazgos |
 | `mypy --strict` | Sin errores |
