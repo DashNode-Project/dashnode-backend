@@ -7,11 +7,9 @@ only here (tests), never in code defaults.
 """
 
 import os
-import secrets
 
 # Values below are non-secret test fixtures that only exist inside the test process.
 _TEST_ENV = {
-    "JWT_SECRET": secrets.token_hex(32),  # random per run; legacy, removed with HU_DN_01_03
     "APP_ENV": "testing",
     "DATABASE_URL": "sqlite+pysqlite:///:memory:",
     "ARGON2_TIME_COST": "1",

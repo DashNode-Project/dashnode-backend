@@ -116,12 +116,3 @@ def test_production_profile_accepts_hardened_configuration() -> None:
         ARGON2_MEMORY_COST_KIB=65536,
     )
     assert cfg.APP_ENV == "production"
-
-
-def test_legacy_jwt_secret_must_be_long_enough(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("JWT_SECRET")
-    with pytest.raises(RuntimeError):
-        _settings(JWT_SECRET="short").jwt_secret_value  # noqa: B018
-    with pytest.raises(RuntimeError):
-        _settings().jwt_secret_value  # noqa: B018
-    assert len(_settings(JWT_SECRET="x" * 40).jwt_secret_value) == 40

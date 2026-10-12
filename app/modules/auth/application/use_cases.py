@@ -5,12 +5,10 @@ Use cases for authentication and user management.
 """
 
 from app.modules.auth.application.dtos import (
-    LoginCommand,
     RegisterManagerCommand,
     RegisterManagerResponse,
-    TokenResponse,
-    UserDTO,
 )
+from app.modules.auth.application.mappers import to_user_dto
 from app.modules.auth.domain import messages
 from app.modules.auth.domain.entities import User, UserRole
 from app.modules.auth.domain.errors import (
@@ -18,7 +16,7 @@ from app.modules.auth.domain.errors import (
     RegistrationRoleNotAllowedError,
     RegistrationValidationError,
 )
-from app.modules.auth.domain.ports import TokenService, UserRepository
+from app.modules.auth.domain.ports import UserRepository
 from app.modules.auth.domain.rules import (
     NAME_MAX_LENGTH,
     is_valid_email,
@@ -28,17 +26,6 @@ from app.modules.auth.domain.rules import (
 from app.shared.application.ports import Clock, IdGenerator, PasswordHasher, UnitOfWork
 
 _FIELD_ORDER = ("name", "email", "password", "confirm_password")
-
-
-def _to_dto(user: User) -> UserDTO:
-    return UserDTO(
-        id=user.id,
-        email=user.email,
-        name=user.name,
-        role=user.role,
-        is_active=user.is_active,
-        created_at=user.created_at,
-    )
 
 
 class RegisterManagerUseCase:
@@ -124,50 +111,4 @@ class RegisterManagerUseCase:
             self._user_repo.save(user)  # raises EmailAlreadyRegisteredError on a race
             self._uow.commit()
 
-        return RegisterManagerResponse(message=messages.REGISTER_SUCCESS, user=_to_dto(user))
-
-
-class LoginUseCase:
-    """Handles user authentication and JWT generation."""
-
-    def __init__(
-        self,
-        user_repo: UserRepository,
-        hasher: PasswordHasher,
-        token_service: TokenService,
-    ) -> None:
-        self._user_repo = user_repo
-        self._hasher = hasher
-        self._token_service = token_service
-
-    def execute(self, cmd: LoginCommand) -> TokenResponse:
-        user = self._user_repo.get_by_email(normalize_email(str(cmd.email)))
-        if user is None:
-            raise ValueError("Credenciales inválidas.")
-
-        if not self._hasher.verify(cmd.password, user.hashed_password):
-            raise ValueError("Credenciales inválidas.")
-
-        if not user.can_authenticate():
-            raise ValueError("La cuenta de usuario está desactivada.")
-
-        token = self._token_service.create_access_token(
-            user_id=user.id,
-            role=user.role.value,
-            email=user.email,
-            name=user.name,
-        )
-        return TokenResponse(access_token=token, token_type="bearer")  # noqa: S106
-
-
-class GetCurrentUserUseCase:
-    """Retrieves profile for an authenticated user."""
-
-    def __init__(self, user_repo: UserRepository) -> None:
-        self._user_repo = user_repo
-
-    def execute(self, user_id: str) -> UserDTO:
-        user = self._user_repo.get_by_id(user_id)
-        if user is None:
-            raise ValueError("Usuario no encontrado.")
-        return _to_dto(user)
+        return RegisterManagerResponse(message=messages.REGISTER_SUCCESS, user=to_user_dto(user))

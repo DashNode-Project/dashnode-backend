@@ -4,9 +4,10 @@ Repository and service ports for the Auth module domain.
 @origin [SAD-Propuesto]
 """
 
+from datetime import datetime
 from typing import Protocol
 
-from app.modules.auth.domain.entities import User
+from app.modules.auth.domain.entities import LoginAttempt, User, UserSession
 
 
 class UserRepository(Protocol):
@@ -21,9 +22,35 @@ class UserRepository(Protocol):
     def update(self, user: User) -> None: ...
 
 
-class TokenService(Protocol):
-    """Port for signing and verifying security tokens."""
+class SessionRepository(Protocol):
+    """Port for server-side sessions (looked up by the hash of the opaque token)."""
 
-    def create_access_token(self, user_id: str, role: str, email: str, name: str = "") -> str: ...
+    def add(self, session: UserSession) -> None: ...
 
-    def decode_token(self, token: str) -> dict[str, object] | None: ...
+    def get_by_token_hash(self, token_hash: str) -> UserSession | None: ...
+
+    def update(self, session: UserSession) -> None: ...
+
+    def purge_expired_before(self, moment: datetime) -> None: ...
+
+
+class LoginAttemptRepository(Protocol):
+    """Port for the brute-force protection ledger."""
+
+    def add(self, attempt: LoginAttempt) -> None: ...
+
+    def count_since(self, email: str, since: datetime) -> int: ...
+
+    def delete(self, attempt_id: str) -> None: ...
+
+    def clear_for(self, email: str) -> None: ...
+
+    def purge_before(self, moment: datetime) -> None: ...
+
+
+class SessionTokenService(Protocol):
+    """Port that creates unguessable session tokens and their storable digest."""
+
+    def new_token(self) -> str: ...
+
+    def digest(self, token: str) -> str: ...

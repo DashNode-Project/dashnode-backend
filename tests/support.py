@@ -46,12 +46,14 @@ def create_user(
     return user_id
 
 
-def legacy_auth_headers(
-    client: TestClient, engine: Engine, *, email: str, role: str = "developer"
-) -> dict[str, str]:
-    """Create a user and obtain a Bearer token (legacy flow, replaced in HU_DN_01_03)."""
-    create_user(engine, email=email, role=role)
+def login_as(client: TestClient, engine: Engine, *, email: str, role: str = "developer") -> str:
+    """Create a user and log in; the session cookie stays in the client's cookie jar.
+
+    Returns the user id.
+    """
+    user_id = create_user(engine, email=email, role=role)
     response = client.post(
         "/api/v1/auth/login", json={"email": email, "password": DEFAULT_PASSWORD}
     )
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    assert response.status_code == 200, response.text
+    return user_id

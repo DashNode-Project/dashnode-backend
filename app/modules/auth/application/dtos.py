@@ -4,9 +4,10 @@ DTOs and Commands for Auth application layer.
 @origin [SAD-Propuesto]
 """
 
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.auth.domain.entities import UserRole
 
@@ -27,13 +28,10 @@ class RegisterManagerCommand(BaseModel):
 
 
 class LoginCommand(BaseModel):
-    email: EmailStr
-    password: str
+    """Login payload (HU_DN_01_03). Validated by the use case for literal messages."""
 
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"  # noqa: S105
+    email: str = Field(default="", max_length=1000)
+    password: str = Field(default="", max_length=1000)
 
 
 class UserDTO(BaseModel):
@@ -50,3 +48,32 @@ class UserDTO(BaseModel):
 class RegisterManagerResponse(BaseModel):
     message: str
     user: UserDTO
+
+
+class SessionInfo(BaseModel):
+    """What the client may know about its session (never the token)."""
+
+    user: UserDTO
+    expires_at: datetime
+
+
+class LogoutResponse(BaseModel):
+    message: str
+
+
+@dataclass(frozen=True)
+class LoginResult:
+    """Internal result: carries the raw token so the API layer can set the cookie."""
+
+    session: SessionInfo
+    token: str = field(repr=False)  # never printed or logged
+
+
+@dataclass(frozen=True)
+class SecurityPolicy:
+    """Session and brute-force limits (from configuration)."""
+
+    session_ttl: timedelta
+    session_retention: timedelta
+    max_failed_attempts: int
+    attempt_window: timedelta

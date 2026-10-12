@@ -5,24 +5,23 @@ Complies strictly with BR-1 (no direct DB/infrastructure imports).
 @origin [SAD-Propuesto]
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Response, status
 
+from app.config import settings
 from app.modules.auth.application.dtos import (
     LoginCommand,
     RegisterManagerCommand,
     RegisterManagerResponse,
-    TokenResponse,
+    SessionInfo,
 )
-from app.modules.auth.application.use_cases import (
-    LoginUseCase,
-    RegisterManagerUseCase,
-)
+from app.modules.auth.application.session_use_cases import LoginUseCase
+from app.modules.auth.application.use_cases import RegisterManagerUseCase
 from app.orchestration.auth_container import (
     get_login_use_case,
     get_register_manager_use_case,
 )
-from app.orchestration.security import get_current_user
-from app.shared.application.identity import CurrentUser
+from app.orchestration.security import get_current_session
+from app.shared.application.identity import CurrentSession
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -42,28 +41,31 @@ def register(
 
 @router.post(
     "/login",
-    response_model=TokenResponse,
-    summary="Iniciar sesión y obtener token JWT",
+    response_model=SessionInfo,
+    summary="Iniciar sesion: abre una sesion de servidor y la entrega en cookie HttpOnly",
 )
 def login(
     cmd: LoginCommand,
+    response: Response,
     use_case: LoginUseCase = Depends(get_login_use_case),
-) -> TokenResponse:
-    try:
-        return use_case.execute(cmd)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-        ) from e
+) -> SessionInfo:
+    result = use_case.execute(cmd)
+    response.set_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        value=result.token,
+        max_age=settings.session_cookie_max_age_seconds,
+        path="/",
+        httponly=True,
+        secure=settings.SESSION_COOKIE_SECURE,
+        samesite=settings.SESSION_COOKIE_SAMESITE,
+    )
+    return result.session
 
 
 @router.get(
     "/me",
-    response_model=CurrentUser,
-    summary="Obtener perfil del usuario autenticado",
+    response_model=CurrentSession,
+    summary="Perfil y vigencia de la sesion actual",
 )
-def get_me(
-    current_user: CurrentUser = Depends(get_current_user),
-) -> CurrentUser:
-    return current_user
+def get_me(session: CurrentSession = Depends(get_current_session)) -> CurrentSession:
+    return session

@@ -26,12 +26,6 @@ class Settings(BaseSettings):
     # Server where the integration tests may create/drop temporary databases.
     TEST_POSTGRES_URL: str | None = None
 
-    # --- Legacy stateless JWT (superseded by server sessions; removed in HU_DN_01_03) ---
-    JWT_SECRET: SecretStr | None = None
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ISSUER: str = "dashnode"
-    JWT_AUDIENCE: str = "dashnode_app"
-
     # --- Server session (HU_DN_01_03, HU_DN_01_05; RNF-SEG-06, RNF-SEG-09) -------
     SESSION_COOKIE_NAME: str = "dashnode_session"
     SESSION_TTL_HOURS: int = Field(default=8, ge=1, le=24 * 30)
@@ -89,13 +83,6 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
-
-    @property
-    def jwt_secret_value(self) -> str:
-        """Legacy accessor; removed together with the stateless JWT flow."""
-        if self.JWT_SECRET is None or len(self.JWT_SECRET.get_secret_value()) < 32:
-            raise RuntimeError("JWT_SECRET must be configured with at least 32 characters.")
-        return self.JWT_SECRET.get_secret_value()
 
     @property
     def session_ttl_seconds(self) -> int:

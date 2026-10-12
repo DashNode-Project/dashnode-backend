@@ -6,7 +6,11 @@ from sqlalchemy import engine_from_config, pool
 from app.config import settings
 
 # Import all models to register on Base.metadata
-from app.modules.auth.infrastructure.models import UserModel  # noqa: F401
+from app.modules.auth.infrastructure.models import (  # noqa: F401
+    LoginAttemptModel,
+    SessionModel,
+    UserModel,
+)
 from app.modules.notifications.infrastructure.models import (  # noqa: F401
     NotificationModel,
 )

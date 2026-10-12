@@ -4,7 +4,7 @@ In-memory test doubles for the application ports (shared by application tests).
 
 from datetime import UTC, datetime, timedelta
 
-from app.modules.auth.domain.entities import User, UserRole
+from app.modules.auth.domain.entities import LoginAttempt, User, UserRole, UserSession
 from app.modules.auth.domain.errors import EmailAlreadyRegisteredError
 from app.shared.application.ports import UnitOfWork
 
@@ -116,3 +116,56 @@ def make_user(
         created_at=T0,
         updated_at=T0,
     )
+
+
+class FakeSessionRepository:
+    def __init__(self) -> None:
+        self.sessions: dict[str, UserSession] = {}
+
+    def add(self, session: UserSession) -> None:
+        self.sessions[session.id] = session
+
+    def get_by_token_hash(self, token_hash: str) -> UserSession | None:
+        return next((s for s in self.sessions.values() if s.token_hash == token_hash), None)
+
+    def update(self, session: UserSession) -> None:
+        self.sessions[session.id] = session
+
+    def purge_expired_before(self, moment: datetime) -> None:
+        self.sessions = {k: s for k, s in self.sessions.items() if s.expires_at >= moment}
+
+
+class FakeLoginAttemptRepository:
+    def __init__(self) -> None:
+        self.attempts: dict[str, LoginAttempt] = {}
+
+    def add(self, attempt: LoginAttempt) -> None:
+        self.attempts[attempt.id] = attempt
+
+    def count_since(self, email: str, since: datetime) -> int:
+        return sum(
+            1 for a in self.attempts.values() if a.email == email and a.attempted_at >= since
+        )
+
+    def delete(self, attempt_id: str) -> None:
+        self.attempts.pop(attempt_id, None)
+
+    def clear_for(self, email: str) -> None:
+        self.attempts = {k: a for k, a in self.attempts.items() if a.email != email}
+
+    def purge_before(self, moment: datetime) -> None:
+        self.attempts = {k: a for k, a in self.attempts.items() if a.attempted_at >= moment}
+
+
+class FakeSessionTokenService:
+    """Deterministic tokens: token-1, token-2, ...; digest is a visible transformation."""
+
+    def __init__(self) -> None:
+        self._counter = 0
+
+    def new_token(self) -> str:
+        self._counter += 1
+        return f"token-{self._counter}"
+
+    def digest(self, token: str) -> str:
+        return f"digest::{token}"

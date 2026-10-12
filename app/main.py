@@ -15,8 +15,10 @@ from app.modules.auth.api.routes import router as auth_router
 from app.modules.notifications.api.routes import router as notifications_router
 from app.modules.projects.api.routes import router as projects_router
 from app.modules.tasks.api.routes import router as tasks_router
+from app.orchestration.auth_container import build_session_authenticator
 from app.orchestration.error_handling import register_error_handlers
 from app.orchestration.middleware import OriginCheckMiddleware, SecurityHeadersMiddleware
+from app.orchestration.security import register_session_authenticator
 from app.shared.infrastructure.database import get_db_session
 
 app = FastAPI(
@@ -29,6 +31,7 @@ app = FastAPI(
 )
 
 register_error_handlers(app)
+register_session_authenticator(build_session_authenticator)
 
 # Added last = outermost: headers wrap everything, then CORS, then the CSRF origin check.
 app.add_middleware(OriginCheckMiddleware)

@@ -17,3 +17,16 @@ PASSWORD_MISMATCH = "Las contraseñas no coinciden."
 REQUIRED_FIELDS = "Todos los campos obligatorios deben ser diligenciados."
 ROLE_NOT_ALLOWED = "El registro público solo está disponible para el rol Gerente."
 REGISTER_SUCCESS = "Su cuenta de Gerente ha sido registrada correctamente. Puede iniciar sesión."
+
+# --- HU_DN_01_03: login ------------------------------------------------------------
+INVALID_CREDENTIALS = "Credenciales no válidas. Verifique su correo y contraseña."
+LOGIN_ATTEMPTS_EXCEEDED = (
+    "Ha superado el número de intentos permitidos. Intente nuevamente más tarde."
+)
+ACCOUNT_DISABLED = "Su cuenta está desactivada. Contacte al Administrador."
+
+# --- HU_DN_01_04 / HU_DN_01_05: session --------------------------------------------
+LOGOUT_SUCCESS = "Sesión cerrada correctamente."
+SESSION_EXPIRED = "Su sesión ha expirado. Inicie sesión nuevamente."
+# Not worded by the stories: used when no valid session accompanies the request.
+NOT_AUTHENTICATED = "Debe iniciar sesión para continuar."

@@ -15,6 +15,13 @@ class RegistrationValidationError(AppError):
         super().__init__(code, message, ErrorKind.VALIDATION, fields)
 
 
+class LoginValidationError(AppError):
+    """Login payload is blank or the e-mail has an invalid format."""
+
+    def __init__(self, code: str, message: str, fields: dict[str, str]) -> None:
+        super().__init__(code, message, ErrorKind.VALIDATION, fields)
+
+
 class EmailAlreadyRegisteredError(AppError):
     def __init__(self) -> None:
         super().__init__(
@@ -28,3 +35,34 @@ class EmailAlreadyRegisteredError(AppError):
 class RegistrationRoleNotAllowedError(AppError):
     def __init__(self) -> None:
         super().__init__("ROLE_NOT_ALLOWED", messages.ROLE_NOT_ALLOWED, ErrorKind.FORBIDDEN)
+
+
+class InvalidCredentialsError(AppError):
+    """Unknown e-mail or wrong password: deliberately indistinguishable."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "INVALID_CREDENTIALS", messages.INVALID_CREDENTIALS, ErrorKind.UNAUTHENTICATED
+        )
+
+
+class LoginAttemptsExceededError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "LOGIN_ATTEMPTS_EXCEEDED", messages.LOGIN_ATTEMPTS_EXCEEDED, ErrorKind.RATE_LIMITED
+        )
+
+
+class AccountDisabledError(AppError):
+    def __init__(self) -> None:
+        super().__init__("ACCOUNT_DISABLED", messages.ACCOUNT_DISABLED, ErrorKind.FORBIDDEN)
+
+
+class SessionExpiredError(AppError):
+    def __init__(self) -> None:
+        super().__init__("SESSION_EXPIRED", messages.SESSION_EXPIRED, ErrorKind.UNAUTHENTICATED)
+
+
+class NotAuthenticatedError(AppError):
+    def __init__(self) -> None:
+        super().__init__("NOT_AUTHENTICATED", messages.NOT_AUTHENTICATED, ErrorKind.UNAUTHENTICATED)
