@@ -515,3 +515,11 @@
 | HU_DN_01_10 | Implementado | `POST /api/v1/auth/admin/users/{id}/password-reset`, `GET /api/v1/auth/admin/users` |
 
 ---
+
+## Estado de implementación — EP-02 (HU_DN_01_11 … HU_DN_01_16, Sprint 1)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_01_11 | Implementado | `POST /api/v1/auth/admin/users`, activación por correo (`CredentialTokenPurpose.ACTIVATION`), tests `test_user_administration_*` |
+
+---

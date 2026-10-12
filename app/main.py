@@ -19,6 +19,7 @@ from app.orchestration.auth_container import build_session_authenticator
 from app.orchestration.error_handling import register_error_handlers
 from app.orchestration.middleware import OriginCheckMiddleware, SecurityHeadersMiddleware
 from app.orchestration.security import register_session_authenticator
+from app.orchestration.user_administration_routes import router as user_administration_router
 from app.shared.infrastructure.database import get_db_session
 
 app = FastAPI(
@@ -45,6 +46,7 @@ app.add_middleware(
 app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(user_administration_router, prefix="/api/v1")
 app.include_router(projects_router, prefix="/api/v1")
 app.include_router(tasks_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")

@@ -15,7 +15,6 @@ from app.modules.auth.application.password_reset_use_cases import (
     AdminRequestPasswordResetUseCase,
     CompletePasswordResetUseCase,
     CredentialTokenPolicy,
-    ListAdminUsersUseCase,
     RequestPasswordResetUseCase,
 )
 from app.modules.auth.application.session_use_cases import (
@@ -24,6 +23,11 @@ from app.modules.auth.application.session_use_cases import (
     LogoutUseCase,
 )
 from app.modules.auth.application.use_cases import RegisterManagerUseCase
+from app.modules.auth.application.user_administration_use_cases import (
+    CreateUserByAdminUseCase,
+    InviteDeveloperByManagerUseCase,
+    ListAdminUsersUseCase,
+)
 from app.modules.auth.infrastructure.email_sender import (
     LoggingTransactionalEmailSender,
     SmtpTransactionalEmailSender,
@@ -148,6 +152,36 @@ def get_admin_request_password_reset_use_case(
 
 def get_list_admin_users_use_case(db: Session = Depends(get_db)) -> ListAdminUsersUseCase:
     return ListAdminUsersUseCase(user_repo=SqlAlchemyUserRepository(session=db))
+
+
+def get_create_user_by_admin_use_case(
+    db: Session = Depends(get_db),
+) -> CreateUserByAdminUseCase:
+    return CreateUserByAdminUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        token_repo=SqlAlchemyPasswordCredentialTokenRepository(session=db),
+        tokens=session_tokens,
+        mailer=get_transactional_email_sender(),
+        hasher=password_hasher,
+        id_gen=id_generator,
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+        policy=credential_token_policy(),
+    )
+
+
+def get_invite_developer_use_case(db: Session = Depends(get_db)) -> InviteDeveloperByManagerUseCase:
+    return InviteDeveloperByManagerUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        token_repo=SqlAlchemyPasswordCredentialTokenRepository(session=db),
+        tokens=session_tokens,
+        mailer=get_transactional_email_sender(),
+        hasher=password_hasher,
+        id_gen=id_generator,
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+        policy=credential_token_policy(),
+    )
 
 
 def get_logout_use_case(

@@ -83,6 +83,29 @@ class AdminUserSummaryDTO(BaseModel):
     is_active: bool
 
 
+class CreateUserByAdminCommand(BaseModel):
+    name: str = Field(default="", max_length=1000)
+    email: str = Field(default="", max_length=1000)
+    role: str = Field(default="", max_length=50)
+
+
+class InviteDeveloperCommand(BaseModel):
+    name: str = Field(default="", max_length=1000)
+    email: str = Field(default="", max_length=1000)
+    role: str | None = Field(default=None, max_length=50)
+
+
+class UpdateUserByAdminCommand(BaseModel):
+    name: str = Field(default="", max_length=1000)
+    email: str = Field(default="", max_length=1000)
+    role: str = Field(default="", max_length=50)
+
+
+class UpdateUserByAdminResponse(BaseModel):
+    message: str
+    user: UserDTO
+
+
 @dataclass(frozen=True)
 class LoginResult:
     """Internal result: carries the raw token so the API layer can set the cookie."""

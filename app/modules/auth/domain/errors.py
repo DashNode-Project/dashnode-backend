@@ -92,3 +92,17 @@ class AdminResetDisabledTargetError(AppError):
             messages.ADMIN_RESET_DISABLED_TARGET,
             ErrorKind.VALIDATION,
         )
+
+
+class UserAdministrationValidationError(AppError):
+    def __init__(self, code: str, message: str, fields: dict[str, str]) -> None:
+        super().__init__(code, message, ErrorKind.VALIDATION, fields)
+
+
+class ManagerRoleChangeBlockedError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "MANAGER_ROLE_CHANGE_BLOCKED",
+            messages.MANAGER_ROLE_CHANGE_BLOCKED,
+            ErrorKind.VALIDATION,
+        )

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from app.modules.auth.application.dtos import (
-    AdminUserSummaryDTO,
     CompletePasswordResetCommand,
     MessageResponse,
     RequestPasswordResetCommand,
@@ -226,23 +225,3 @@ class AdminRequestPasswordResetUseCase:
         )
         self._mailer.send_password_reset(to_email=target.email, reset_url=reset_url)
         return MessageResponse(message=messages.ADMIN_RESET_SENT)
-
-
-class ListAdminUsersUseCase:
-    def __init__(self, user_repo: UserRepository) -> None:
-        self._users = user_repo
-
-    def execute(self, *, actor_id: str) -> list[AdminUserSummaryDTO]:
-        actor = self._users.get_by_id(actor_id)
-        if actor is None or actor.role.value != "admin":
-            raise AccessDeniedError()
-        return [
-            AdminUserSummaryDTO(
-                id=u.id,
-                name=u.name,
-                email=u.email,
-                role=u.role,
-                is_active=u.is_active,
-            )
-            for u in self._users.list_all()
-        ]

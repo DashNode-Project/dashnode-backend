@@ -95,7 +95,18 @@ class SqlAlchemyUserRepository(UserRepository):
             model.updated_at = user.updated_at
 
     def list_all(self) -> list[User]:
-        stmt = select(UserModel).order_by(UserModel.email)
+        return self.list_filtered()
+
+    def list_filtered(
+        self, *, name_contains: str | None = None, role: str | None = None
+    ) -> list[User]:
+        stmt = select(UserModel)
+        if name_contains:
+            pattern = f"%{name_contains.strip()}%"
+            stmt = stmt.where(UserModel.name.ilike(pattern))
+        if role:
+            stmt = stmt.where(UserModel.role == role)
+        stmt = stmt.order_by(UserModel.name, UserModel.email)
         return [self._to_domain(model) for model in self._session.execute(stmt).scalars()]
 
 
