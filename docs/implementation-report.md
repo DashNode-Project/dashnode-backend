@@ -72,3 +72,26 @@ Re-ejecución de gates y E2E con la pila real (API + Postgres + nginx):
 
 Informe E2E completo: `docs/integration-report.md`.
 
+## EP-02 — HU_DN_01_17 (desactivar usuario)
+
+- Endpoints `POST /auth/admin/users/{id}/deactivate`, validaciones de autodesactivación y Gerente con proyectos.
+- Revocado inmediato vía `SessionRepository.revoke_all_active_for_user`.
+- Tests: `tests/api/test_user_lifecycle_api.py`.
+
+## EP-02 — HU_DN_01_18 (reactivar usuario)
+
+- Endpoint `POST /auth/admin/users/{id}/reactivate`, error `REACTIVATE_NOT_INACTIVE` si ya está activo.
+
+## EP-02 — HU_DN_01_19 (tareas pendientes)
+
+- `GET /auth/admin/users/{id}/pending-assignments` y adaptador `pending_assignments_query`.
+
+## EP-02 — HU_DN_01_21 (perfil y avatar)
+
+- Rutas `profile_routes`, migración `004_user_avatar`, almacenamiento local validado (PNG/JPG/WEBP ≤ 2 MB).
+- Dependencia `python-multipart` para `PATCH` multipart.
+
+## Despliegue Supabase
+
+- Migraciones aplicadas con `DATABASE_URL` + `sslmode=require`; seed vía `python -m app.cli.seed` y variables `SEED_*` (ver `docs/deployment-guide.md`).
+
