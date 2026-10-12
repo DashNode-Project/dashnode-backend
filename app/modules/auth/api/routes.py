@@ -5,71 +5,166 @@ Complies strictly with BR-1 (no direct DB/infrastructure imports).
 @origin [SAD-Propuesto]
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Response, status
 
+from app.config import settings
 from app.modules.auth.application.dtos import (
+    AdminUserSummaryDTO,
+    CompletePasswordResetCommand,
     LoginCommand,
-    RegisterUserCommand,
-    TokenResponse,
-    UserDTO,
+    LogoutResponse,
+    MessageResponse,
+    RegisterManagerCommand,
+    RegisterManagerResponse,
+    RequestPasswordResetCommand,
+    SessionInfo,
 )
-from app.modules.auth.application.use_cases import (
-    LoginUseCase,
-    RegisterUserUseCase,
+from app.modules.auth.application.password_reset_use_cases import (
+    AdminRequestPasswordResetUseCase,
+    CompletePasswordResetUseCase,
+    ListAdminUsersUseCase,
+    RequestPasswordResetUseCase,
 )
+from app.modules.auth.application.session_use_cases import LoginUseCase, LogoutUseCase
+from app.modules.auth.application.use_cases import RegisterManagerUseCase
 from app.orchestration.auth_container import (
+    get_admin_request_password_reset_use_case,
+    get_complete_password_reset_use_case,
+    get_list_admin_users_use_case,
     get_login_use_case,
-    get_register_user_use_case,
+    get_logout_use_case,
+    get_register_manager_use_case,
+    get_request_password_reset_use_case,
 )
-from app.orchestration.security import get_current_user
-from app.shared.application.identity import CurrentUser
+from app.orchestration.security import (
+    get_current_session,
+    get_session_token,
+    require_admin,
+)
+from app.shared.application.identity import CurrentSession, CurrentUser
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post(
     "/register",
-    response_model=UserDTO,
+    response_model=RegisterManagerResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Registrar un nuevo usuario",
+    summary="Registrar una cuenta con rol Gerente (publico)",
 )
 def register(
-    cmd: RegisterUserCommand,
-    use_case: RegisterUserUseCase = Depends(get_register_user_use_case),
-) -> UserDTO:
-    try:
-        return use_case.execute(cmd)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+    cmd: RegisterManagerCommand,
+    use_case: RegisterManagerUseCase = Depends(get_register_manager_use_case),
+) -> RegisterManagerResponse:
+    return use_case.execute(cmd)
 
 
 @router.post(
     "/login",
-    response_model=TokenResponse,
-    summary="Iniciar sesión y obtener token JWT",
+    response_model=SessionInfo,
+    summary="Iniciar sesion: abre una sesion de servidor y la entrega en cookie HttpOnly",
 )
 def login(
     cmd: LoginCommand,
+    response: Response,
     use_case: LoginUseCase = Depends(get_login_use_case),
-) -> TokenResponse:
-    try:
-        return use_case.execute(cmd)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-        ) from e
+) -> SessionInfo:
+    result = use_case.execute(cmd)
+    response.set_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        value=result.token,
+        max_age=settings.session_cookie_max_age_seconds,
+        path="/",
+        httponly=True,
+        secure=settings.SESSION_COOKIE_SECURE,
+        samesite=settings.SESSION_COOKIE_SAMESITE,
+    )
+    return result.session
+
+
+@router.post(
+    "/logout",
+    response_model=LogoutResponse,
+    summary="Cerrar sesion: invalida la sesion en el servidor y elimina la cookie",
+)
+def logout(
+    response: Response,
+    token: str | None = Depends(get_session_token),
+    use_case: LogoutUseCase = Depends(get_logout_use_case),
+) -> LogoutResponse:
+    result = use_case.execute(token)
+    # Only reached when the session was invalidated: a technical failure raises before.
+    response.delete_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=settings.SESSION_COOKIE_SECURE,
+        samesite=settings.SESSION_COOKIE_SAMESITE,
+    )
+    return result
 
 
 @router.get(
-    "/me",
-    response_model=CurrentUser,
-    summary="Obtener perfil del usuario autenticado",
+    "/session",
+    response_model=CurrentSession,
+    summary="Validar la sesion actual (HttpOnly cookie) y obtener usuario y vigencia",
+    responses={
+        401: {"description": "NOT_AUTHENTICATED o SESSION_EXPIRED (la cookie se elimina)"},
+        403: {"description": "ACCOUNT_DISABLED"},
+    },
 )
-def get_me(
-    current_user: CurrentUser = Depends(get_current_user),
-) -> CurrentUser:
-    return current_user
+def get_session(session: CurrentSession = Depends(get_current_session)) -> CurrentSession:
+    """Lets the SPA restore the authenticated state after a page reload (HU_DN_01_05).
+
+    Read-only: it never renews the session, the 8 hours are counted from login.
+    """
+    return session
+
+
+@router.post(
+    "/password-reset/request",
+    response_model=MessageResponse,
+    summary="Solicitar enlace de restablecimiento (respuesta agnostica)",
+)
+def request_password_reset(
+    cmd: RequestPasswordResetCommand,
+    use_case: RequestPasswordResetUseCase = Depends(get_request_password_reset_use_case),
+) -> MessageResponse:
+    return use_case.execute(cmd)
+
+
+@router.post(
+    "/password-reset/confirm",
+    response_model=MessageResponse,
+    summary="Establecer contrasena con enlace de un solo uso",
+)
+def confirm_password_reset(
+    cmd: CompletePasswordResetCommand,
+    use_case: CompletePasswordResetUseCase = Depends(get_complete_password_reset_use_case),
+) -> MessageResponse:
+    return use_case.execute(cmd)
+
+
+@router.get(
+    "/admin/users",
+    response_model=list[AdminUserSummaryDTO],
+    summary="Listar usuarios (solo Administrador)",
+)
+def list_admin_users(
+    current_user: CurrentUser = Depends(require_admin),
+    use_case: ListAdminUsersUseCase = Depends(get_list_admin_users_use_case),
+) -> list[AdminUserSummaryDTO]:
+    return use_case.execute(actor_id=current_user.id)
+
+
+@router.post(
+    "/admin/users/{user_id}/password-reset",
+    response_model=MessageResponse,
+    summary="Enviar restablecimiento al correo del usuario (solo Administrador)",
+)
+def admin_request_password_reset(
+    user_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+    use_case: AdminRequestPasswordResetUseCase = Depends(get_admin_request_password_reset_use_case),
+) -> MessageResponse:
+    return use_case.execute(actor_id=current_user.id, target_user_id=user_id)
