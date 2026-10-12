@@ -18,8 +18,8 @@ from app.modules.tasks.api.routes import router as tasks_router
 from app.orchestration.auth_container import build_session_authenticator
 from app.orchestration.error_handling import register_error_handlers
 from app.orchestration.middleware import OriginCheckMiddleware, SecurityHeadersMiddleware
-from app.orchestration.security import register_session_authenticator
 from app.orchestration.profile_routes import router as profile_router
+from app.orchestration.security import register_session_authenticator
 from app.orchestration.user_administration_routes import router as user_administration_router
 from app.shared.infrastructure.database import get_db_session
 

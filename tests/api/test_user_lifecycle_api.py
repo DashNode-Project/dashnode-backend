@@ -39,9 +39,11 @@ def test_deactivate_user_revokes_session(client: TestClient, db_engine: Engine) 
     session = sessionmaker(bind=db_engine)()
     try:
         rows = session.query(SessionModel).filter(SessionModel.user_id == target_id).all()
-        assert rows and all(r.revoked_at is not None for r in rows)
+        assert rows
+        assert all(r.revoked_at is not None for r in rows)
     finally:
         session.close()
+
 
 def test_admin_cannot_deactivate_self(client: TestClient, db_engine: Engine) -> None:
     admin_id = login_as(client, db_engine, email="admin@empresa.com", role="admin")

@@ -64,4 +64,3 @@ MANAGER_DEACTIVATE_BLOCKED = (
 REACTIVATE_NOT_INACTIVE = "Solo se pueden reactivar usuarios desactivados."
 PROFILE_UPDATED = "Perfil actualizado correctamente."
 AVATAR_INVALID = "El avatar debe ser una imagen PNG, JPG o WEBP de hasta 2 MB."
-

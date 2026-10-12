@@ -5,10 +5,16 @@ User update needs project-ownership checks; wiring lives here so `auth.api.route
 does not transitively import the projects module.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.modules.auth.application.dtos import MessageResponse, UpdateUserByAdminCommand, UpdateUserByAdminResponse
+from app.modules.auth.application.dtos import (
+    MessageResponse,
+    UpdateUserByAdminCommand,
+    UpdateUserByAdminResponse,
+)
 from app.modules.auth.application.user_administration_use_cases import UpdateUserByAdminUseCase
 from app.modules.auth.application.user_lifecycle_use_cases import (
     DeactivateUserByAdminUseCase,
@@ -56,7 +62,7 @@ def update_user_by_admin(
     return use_case.execute(actor_id=current_user.id, user_id=user_id, cmd=cmd)
 
 
-def _lifecycle_deps(db: Session):
+def _lifecycle_deps(db: Session) -> dict[str, Any]:
     return {
         "users": SqlAlchemyUserRepository(session=db),
         "sessions": SqlAlchemySessionRepository(session=db),

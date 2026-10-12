@@ -46,9 +46,8 @@ class DeactivateUserByAdminUseCase:
         if target is None:
             raise AppError("USER_NOT_FOUND", messages.USER_NOT_FOUND, ErrorKind.NOT_FOUND)
 
-        if (
-            target.role == UserRole.MANAGER
-            and self._project_ownership.user_owns_projects(target.id)
+        if target.role == UserRole.MANAGER and self._project_ownership.user_owns_projects(
+            target.id
         ):
             raise ManagerDeactivateBlockedError()
 

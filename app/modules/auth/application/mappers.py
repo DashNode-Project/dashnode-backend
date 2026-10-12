@@ -11,7 +11,7 @@ from app.modules.auth.domain.entities import User
 def avatar_url_for(user: User) -> str | None:
     if not user.avatar_key:
         return None
-    return f"/api/v1/auth/profile/avatar"
+    return "/api/v1/auth/profile/avatar"
 
 
 def to_user_dto(user: User) -> UserDTO:
