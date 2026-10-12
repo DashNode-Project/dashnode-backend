@@ -523,5 +523,6 @@
 | HU_DN_01_11 | Implementado | `POST /api/v1/auth/admin/users`, activación por correo (`CredentialTokenPurpose.ACTIVATION`), tests `test_user_administration_*` |
 | HU_DN_01_12 | Implementado | `POST /api/v1/auth/manager/users/invite`, rol Desarrollador forzado en servidor |
 | HU_DN_01_13 | Implementado | Rechazo 403 `AccessDeniedError` al enviar rol `admin` en creación |
+| HU_DN_01_14 | Implementado | `GET /api/v1/auth/admin/users?name=&role=`, proyección sin hash |
 
 ---
