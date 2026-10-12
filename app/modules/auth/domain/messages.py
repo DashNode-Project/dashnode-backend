@@ -44,3 +44,23 @@ INVALID_OR_EXPIRED_LINK = "El enlace no es válido o ha expirado. Solicite uno n
 # --- HU_DN_01_10: admin-triggered reset --------------------------------------------
 ADMIN_RESET_SENT = "Se ha enviado el enlace de restablecimiento al correo del usuario."
 ADMIN_RESET_DISABLED_TARGET = "No se puede restablecer la contraseña de un usuario desactivado."
+
+# --- EP-02: user provisioning and administration -----------------------------------
+USER_CREATED = "Usuario creado correctamente. Se ha enviado un enlace de activación a su correo."
+INVITE_DEVELOPER_SUCCESS = "Invitación enviada correctamente al Desarrollador."
+USER_UPDATED = "Usuario actualizado correctamente."
+MANAGER_ROLE_CHANGE_BLOCKED = (
+    "No puede cambiar el rol de un Gerente responsable de proyectos. "
+    "Reasigne primero la responsabilidad."
+)
+USER_NOT_FOUND = "Usuario no encontrado."
+USER_DEACTIVATED = "Usuario desactivado correctamente."
+USER_REACTIVATED = "Usuario reactivado correctamente."
+SELF_DEACTIVATE_BLOCKED = "No puede desactivar su propia cuenta de Administrador."
+MANAGER_DEACTIVATE_BLOCKED = (
+    "No puede desactivar a un Gerente responsable de proyectos. "
+    "Reasigne primero la responsabilidad."
+)
+REACTIVATE_NOT_INACTIVE = "Solo se pueden reactivar usuarios desactivados."
+PROFILE_UPDATED = "Perfil actualizado correctamente."
+AVATAR_INVALID = "El avatar debe ser una imagen PNG, JPG o WEBP de hasta 2 MB."

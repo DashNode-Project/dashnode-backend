@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str | None = None
     SMTP_USE_TLS: bool = True
 
+    # --- Profile avatars (HU_DN_01_21) -----------------------------------------------
+    AVATAR_STORAGE_DIR: str = "data/avatars"
+    AVATAR_MAX_BYTES: int = Field(default=2 * 1024 * 1024, ge=1024, le=5 * 1024 * 1024)
+
     # --- Local development seed (read from environment, blocked in production) ---
     SEED_ADMIN_EMAIL: str | None = None
     SEED_ADMIN_PASSWORD: SecretStr | None = None

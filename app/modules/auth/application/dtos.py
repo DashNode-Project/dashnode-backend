@@ -43,6 +43,24 @@ class UserDTO(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+    avatar_url: str | None = None
+
+
+class ProfileDTO(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: UserRole
+    avatar_url: str | None = None
+
+
+class UpdateProfileCommand(BaseModel):
+    name: str = Field(default="", max_length=1000)
+
+
+class ProfileResponse(BaseModel):
+    message: str | None = None
+    profile: ProfileDTO
 
 
 class RegisterManagerResponse(BaseModel):
@@ -81,6 +99,29 @@ class AdminUserSummaryDTO(BaseModel):
     email: str
     role: UserRole
     is_active: bool
+
+
+class CreateUserByAdminCommand(BaseModel):
+    name: str = Field(default="", max_length=1000)
+    email: str = Field(default="", max_length=1000)
+    role: str = Field(default="", max_length=50)
+
+
+class InviteDeveloperCommand(BaseModel):
+    name: str = Field(default="", max_length=1000)
+    email: str = Field(default="", max_length=1000)
+    role: str | None = Field(default=None, max_length=50)
+
+
+class UpdateUserByAdminCommand(BaseModel):
+    name: str = Field(default="", max_length=1000)
+    email: str = Field(default="", max_length=1000)
+    role: str = Field(default="", max_length=50)
+
+
+class UpdateUserByAdminResponse(BaseModel):
+    message: str
+    user: UserDTO
 
 
 @dataclass(frozen=True)

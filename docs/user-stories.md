@@ -515,3 +515,27 @@
 | HU_DN_01_10 | Implementado | `POST /api/v1/auth/admin/users/{id}/password-reset`, `GET /api/v1/auth/admin/users` |
 
 ---
+
+## Estado de implementación — EP-02 (HU_DN_01_11 … HU_DN_01_16, Sprint 1)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_01_11 | Implementado | `POST /api/v1/auth/admin/users`, activación por correo (`CredentialTokenPurpose.ACTIVATION`), tests `test_user_administration_*` |
+| HU_DN_01_12 | Implementado | `POST /api/v1/auth/manager/users/invite`, rol Desarrollador forzado en servidor |
+| HU_DN_01_13 | Implementado | Rechazo 403 `AccessDeniedError` al enviar rol `admin` en creación |
+| HU_DN_01_14 | Implementado | `GET /api/v1/auth/admin/users?name=&role=`, proyección sin hash |
+| HU_DN_01_16 | Implementado | `PATCH /api/v1/auth/admin/users/{id}` vía `user_administration_routes`, guardia Gerente con proyectos |
+
+---
+
+## Estado de implementación — EP-02 (HU_DN_01_17 … HU_DN_01_21, Sprint 1)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_01_17 | Implementado | `POST /api/v1/auth/admin/users/{id}/deactivate`, revocado de sesiones, tests `test_user_lifecycle_api.py` |
+| HU_DN_01_18 | Implementado | `POST /api/v1/auth/admin/users/{id}/reactivate`, mensaje `USER_REACTIVATED` |
+| HU_DN_01_19 | Implementado | `GET /api/v1/auth/admin/users/{id}/pending-assignments`, conteo tareas no completadas |
+| HU_DN_01_20 | Implementado (frontend) | Matriz estática alineada con `can()` / reglas EP-02 |
+| HU_DN_01_21 | Implementado | `GET/PATCH /api/v1/auth/profile`, avatar local 2 MB, migración `004_user_avatar` |
+
+---

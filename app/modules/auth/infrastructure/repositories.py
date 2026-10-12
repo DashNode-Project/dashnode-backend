@@ -47,6 +47,7 @@ class SqlAlchemyUserRepository(UserRepository):
             name=model.name,
             role=UserRole(model.role),
             is_active=model.is_active,
+            avatar_key=model.avatar_key,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -73,6 +74,7 @@ class SqlAlchemyUserRepository(UserRepository):
             name=user.name,
             role=user.role.value,
             is_active=user.is_active,
+            avatar_key=user.avatar_key,
             created_at=user.created_at,
             updated_at=user.updated_at,
         )
@@ -92,10 +94,22 @@ class SqlAlchemyUserRepository(UserRepository):
             model.name = user.name
             model.role = user.role.value
             model.is_active = user.is_active
+            model.avatar_key = user.avatar_key
             model.updated_at = user.updated_at
 
     def list_all(self) -> list[User]:
-        stmt = select(UserModel).order_by(UserModel.email)
+        return self.list_filtered()
+
+    def list_filtered(
+        self, *, name_contains: str | None = None, role: str | None = None
+    ) -> list[User]:
+        stmt = select(UserModel)
+        if name_contains:
+            pattern = f"%{name_contains.strip()}%"
+            stmt = stmt.where(UserModel.name.ilike(pattern))
+        if role:
+            stmt = stmt.where(UserModel.role == role)
+        stmt = stmt.order_by(UserModel.name, UserModel.email)
         return [self._to_domain(model) for model in self._session.execute(stmt).scalars()]
 
 
@@ -142,6 +156,14 @@ class SqlAlchemySessionRepository(SessionRepository):
 
     def purge_expired_before(self, moment: datetime) -> None:
         self._session.execute(delete(SessionModel).where(SessionModel.expires_at < moment))
+
+    def revoke_all_active_for_user(self, user_id: str, when: datetime) -> None:
+        stmt = select(SessionModel).where(
+            SessionModel.user_id == user_id,
+            SessionModel.revoked_at.is_(None),
+        )
+        for model in self._session.execute(stmt).scalars():
+            model.revoked_at = when
 
 
 class SqlAlchemyLoginAttemptRepository(LoginAttemptRepository):

@@ -29,6 +29,10 @@ class UserRepository(Protocol):
 
     def list_all(self) -> list[User]: ...
 
+    def list_filtered(
+        self, *, name_contains: str | None = None, role: str | None = None
+    ) -> list[User]: ...
+
 
 class SessionRepository(Protocol):
     """Port for server-side sessions (looked up by the hash of the opaque token)."""
@@ -40,6 +44,8 @@ class SessionRepository(Protocol):
     def update(self, session: UserSession) -> None: ...
 
     def purge_expired_before(self, moment: datetime) -> None: ...
+
+    def revoke_all_active_for_user(self, user_id: str, when: datetime) -> None: ...
 
 
 class LoginAttemptRepository(Protocol):
@@ -74,7 +80,21 @@ class PasswordCredentialTokenRepository(Protocol):
     def invalidate_active_for_user(self, user_id: str, purpose: CredentialTokenPurpose) -> None: ...
 
 
+class PendingAssignmentsQuery(Protocol):
+    """Count of non-completed tasks assigned to a user (orchestration adapter)."""
+
+    def count_pending_for_user(self, user_id: str) -> int: ...
+
+
+class ProjectOwnershipQuery(Protocol):
+    """Cross-module check: whether a user owns at least one project (orchestration adapter)."""
+
+    def user_owns_projects(self, user_id: str) -> bool: ...
+
+
 class TransactionalEmailSender(Protocol):
     """Sends password/activation links. Must not log message bodies with secrets."""
 
     def send_password_reset(self, *, to_email: str, reset_url: str) -> None: ...
+
+    def send_account_activation(self, *, to_email: str, activation_url: str) -> None: ...

@@ -12,6 +12,7 @@ Rama: `feature/ep-01-auth-sessions` (base `develop`, que parte de `main`). Un co
 | HU_DN_01_04 Logout | Hecho | `feat(HU_DN_01_04)` |
 | HU_DN_01_05 Sesión al recargar | Hecho | `feat(HU_DN_01_05)` |
 | HU_DN_01_06–10 Reset, authz, admin | Hecho | `feat(auth): HU_DN_01_06-10 password reset, authz and admin flows` |
+| EP-02 HU_DN_01_11–16 Usuarios | Hecho | `feat(HU_DN_01_11)` + docs HU_12–16 en `feature/ep-02-users-roles` |
 | HU_DN_01_01 Landing | N/A en backend | Solo frontend |
 
 ## Resultados de validación (local, última ejecución)
@@ -70,4 +71,27 @@ Re-ejecución de gates y E2E con la pila real (API + Postgres + nginx):
 | CORS | Se añadieron orígenes `127.0.0.1:5173` y `127.0.0.1:8080` |
 
 Informe E2E completo: `docs/integration-report.md`.
+
+## EP-02 — HU_DN_01_17 (desactivar usuario)
+
+- Endpoints `POST /auth/admin/users/{id}/deactivate`, validaciones de autodesactivación y Gerente con proyectos.
+- Revocado inmediato vía `SessionRepository.revoke_all_active_for_user`.
+- Tests: `tests/api/test_user_lifecycle_api.py`.
+
+## EP-02 — HU_DN_01_18 (reactivar usuario)
+
+- Endpoint `POST /auth/admin/users/{id}/reactivate`, error `REACTIVATE_NOT_INACTIVE` si ya está activo.
+
+## EP-02 — HU_DN_01_19 (tareas pendientes)
+
+- `GET /auth/admin/users/{id}/pending-assignments` y adaptador `pending_assignments_query`.
+
+## EP-02 — HU_DN_01_21 (perfil y avatar)
+
+- Rutas `profile_routes`, migración `004_user_avatar`, almacenamiento local validado (PNG/JPG/WEBP ≤ 2 MB).
+- Dependencia `python-multipart` para `PATCH` multipart.
+
+## Despliegue Supabase
+
+- Migraciones aplicadas con `DATABASE_URL` + `sslmode=require`; seed vía `python -m app.cli.seed` y variables `SEED_*` (ver `docs/deployment-guide.md`).
 

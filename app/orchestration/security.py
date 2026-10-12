@@ -55,3 +55,11 @@ def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
     if user.role != "admin":
         raise AccessDeniedError()
     return user
+
+
+def require_manager(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    from app.shared.domain.authorization import AccessDeniedError
+
+    if user.role != "manager":
+        raise AccessDeniedError()
+    return user

@@ -5,12 +5,14 @@ Complies strictly with BR-1 (no direct DB/infrastructure imports).
 @origin [SAD-Propuesto]
 """
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.config import settings
 from app.modules.auth.application.dtos import (
     AdminUserSummaryDTO,
     CompletePasswordResetCommand,
+    CreateUserByAdminCommand,
+    InviteDeveloperCommand,
     LoginCommand,
     LogoutResponse,
     MessageResponse,
@@ -22,14 +24,20 @@ from app.modules.auth.application.dtos import (
 from app.modules.auth.application.password_reset_use_cases import (
     AdminRequestPasswordResetUseCase,
     CompletePasswordResetUseCase,
-    ListAdminUsersUseCase,
     RequestPasswordResetUseCase,
 )
 from app.modules.auth.application.session_use_cases import LoginUseCase, LogoutUseCase
 from app.modules.auth.application.use_cases import RegisterManagerUseCase
+from app.modules.auth.application.user_administration_use_cases import (
+    CreateUserByAdminUseCase,
+    InviteDeveloperByManagerUseCase,
+    ListAdminUsersUseCase,
+)
 from app.orchestration.auth_container import (
     get_admin_request_password_reset_use_case,
     get_complete_password_reset_use_case,
+    get_create_user_by_admin_use_case,
+    get_invite_developer_use_case,
     get_list_admin_users_use_case,
     get_login_use_case,
     get_logout_use_case,
@@ -40,6 +48,7 @@ from app.orchestration.security import (
     get_current_session,
     get_session_token,
     require_admin,
+    require_manager,
 )
 from app.shared.application.identity import CurrentSession, CurrentUser
 
@@ -151,10 +160,40 @@ def confirm_password_reset(
     summary="Listar usuarios (solo Administrador)",
 )
 def list_admin_users(
+    name: str | None = Query(default=None, max_length=200),
+    role: str | None = Query(default=None, max_length=50),
     current_user: CurrentUser = Depends(require_admin),
     use_case: ListAdminUsersUseCase = Depends(get_list_admin_users_use_case),
 ) -> list[AdminUserSummaryDTO]:
-    return use_case.execute(actor_id=current_user.id)
+    return use_case.execute(actor_id=current_user.id, name=name, role=role)
+
+
+@router.post(
+    "/admin/users",
+    response_model=MessageResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear usuario Gerente o Desarrollador (solo Administrador)",
+)
+def create_user_by_admin(
+    cmd: CreateUserByAdminCommand,
+    current_user: CurrentUser = Depends(require_admin),
+    use_case: CreateUserByAdminUseCase = Depends(get_create_user_by_admin_use_case),
+) -> MessageResponse:
+    return use_case.execute(actor_id=current_user.id, cmd=cmd)
+
+
+@router.post(
+    "/manager/users/invite",
+    response_model=MessageResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Invitar Desarrollador (solo Gerente)",
+)
+def invite_developer(
+    cmd: InviteDeveloperCommand,
+    current_user: CurrentUser = Depends(require_manager),
+    use_case: InviteDeveloperByManagerUseCase = Depends(get_invite_developer_use_case),
+) -> MessageResponse:
+    return use_case.execute(actor_id=current_user.id, cmd=cmd)
 
 
 @router.post(

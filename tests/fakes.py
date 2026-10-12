@@ -40,7 +40,18 @@ class FakeUserRepository:
         self.users_by_email[user.email] = user
 
     def list_all(self) -> list[User]:
-        return list(self.users_by_id.values())
+        return self.list_filtered()
+
+    def list_filtered(
+        self, *, name_contains: str | None = None, role: str | None = None
+    ) -> list[User]:
+        users = list(self.users_by_id.values())
+        if name_contains:
+            needle = name_contains.lower()
+            users = [u for u in users if needle in u.name.lower()]
+        if role:
+            users = [u for u in users if u.role.value == role]
+        return sorted(users, key=lambda u: (u.name, u.email))
 
 
 class FakeClock:
@@ -144,6 +155,11 @@ class FakeSessionRepository:
     def purge_expired_before(self, moment: datetime) -> None:
         self.sessions = {k: s for k, s in self.sessions.items() if s.expires_at >= moment}
 
+    def revoke_all_active_for_user(self, user_id: str, when: datetime) -> None:
+        for session in self.sessions.values():
+            if session.user_id == user_id and session.revoked_at is None:
+                session.revoke(when)
+
 
 class FakeLoginAttemptRepository:
     def __init__(self) -> None:
@@ -211,3 +227,20 @@ class FakeTransactionalEmailSender:
 
             raise EmailSendFailedError()
         self.sent.append((to_email, reset_url))
+
+    def send_account_activation(self, *, to_email: str, activation_url: str) -> None:
+        if self.fail:
+            from app.modules.auth.domain.errors import EmailSendFailedError
+
+            raise EmailSendFailedError()
+        self.sent.append((to_email, activation_url))
+
+
+class FakeProjectOwnershipQuery:
+    def __init__(self, owns: bool = False) -> None:
+        self.owns = owns
+        self.checked: list[str] = []
+
+    def user_owns_projects(self, user_id: str) -> bool:
+        self.checked.append(user_id)
+        return self.owns
