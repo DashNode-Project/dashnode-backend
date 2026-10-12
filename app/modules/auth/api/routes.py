@@ -33,6 +33,8 @@ from app.modules.auth.application.user_administration_use_cases import (
     InviteDeveloperByManagerUseCase,
     ListAdminUsersUseCase,
 )
+from app.modules.auth.application.session_use_cases import LoginUseCase, LogoutUseCase
+from app.modules.auth.application.use_cases import RegisterManagerUseCase
 from app.orchestration.auth_container import (
     get_admin_request_password_reset_use_case,
     get_complete_password_reset_use_case,
