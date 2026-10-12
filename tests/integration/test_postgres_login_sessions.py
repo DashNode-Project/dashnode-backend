@@ -35,7 +35,7 @@ def test_login_creates_utc_session_and_session_cookie_works(
 ) -> None:
     create_user(pg_clean, email=EMAIL, role="manager")
     assert _login(pg_client) == 200
-    assert pg_client.get("/api/v1/auth/me").status_code == 200
+    assert pg_client.get("/api/v1/auth/session").status_code == 200
     with pg_clean.connect() as conn:
         row = conn.execute(text("SELECT created_at, expires_at FROM sessions")).one()
     assert (row.expires_at - row.created_at).total_seconds() == settings.SESSION_TTL_HOURS * 3600
@@ -71,7 +71,7 @@ def test_deleting_a_user_cascades_to_sessions(pg_client: TestClient, pg_clean: E
     with pg_clean.begin() as conn:
         conn.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
         assert conn.execute(text("SELECT COUNT(*) FROM sessions")).scalar_one() == 0
-    assert pg_client.get("/api/v1/auth/me").status_code == 401
+    assert pg_client.get("/api/v1/auth/session").status_code == 401
 
 
 def test_logout_persists_revocation_and_blocks_replay(
@@ -87,4 +87,4 @@ def test_logout_persists_revocation_and_blocks_replay(
     assert revoked is not None
 
     pg_client.cookies.set(settings.SESSION_COOKIE_NAME, token)
-    assert pg_client.get("/api/v1/auth/me").status_code == 401
+    assert pg_client.get("/api/v1/auth/session").status_code == 401

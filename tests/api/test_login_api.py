@@ -82,12 +82,12 @@ def test_each_login_gets_a_different_token(client: TestClient, db_engine: Engine
 def test_cookie_authenticates_protected_endpoints(client: TestClient, db_engine: Engine) -> None:
     create_user(db_engine, email=EMAIL, role="manager")
     _login(client)
-    assert client.get("/api/v1/auth/me").status_code == 200
+    assert client.get("/api/v1/auth/session").status_code == 200
     assert client.get("/api/v1/projects").status_code == 200
 
 
 def test_protected_endpoints_reject_requests_without_session(client: TestClient) -> None:
-    for path in ("/api/v1/auth/me", "/api/v1/projects", "/api/v1/notifications"):
+    for path in ("/api/v1/auth/session", "/api/v1/projects", "/api/v1/notifications"):
         response = client.get(path)
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "NOT_AUTHENTICATED"
@@ -98,13 +98,13 @@ def test_bearer_header_is_not_a_valid_credential(client: TestClient, db_engine: 
     _login(client)
     token = client.cookies[settings.SESSION_COOKIE_NAME]
     client.cookies.clear()
-    response = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    response = client.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
 def test_forged_cookie_is_rejected_and_cleared(client: TestClient) -> None:
     client.cookies.set(settings.SESSION_COOKIE_NAME, "forged-token-value")
-    response = client.get("/api/v1/auth/me")
+    response = client.get("/api/v1/auth/session")
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "NOT_AUTHENTICATED"
     assert "Max-Age=0" in response.headers["set-cookie"]
@@ -200,9 +200,9 @@ def test_session_expires_exactly_8_hours_after_login(
     _login(client)
 
     fake_clock.advance(hours=7, minutes=59, seconds=59)
-    assert client.get("/api/v1/auth/me").status_code == 200
+    assert client.get("/api/v1/auth/session").status_code == 200
     fake_clock.advance(seconds=1)
-    response = client.get("/api/v1/auth/me")
+    response = client.get("/api/v1/auth/session")
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "SESSION_EXPIRED"
     assert response.json()["error"]["message"] == "Su sesión ha expirado. Inicie sesión nuevamente."

@@ -45,7 +45,7 @@ def test_previous_session_cookie_is_rejected_after_logout(
     client.post(URL)
 
     client.cookies.set(COOKIE, old_token)  # replay the stolen/previous cookie
-    for path in ("/api/v1/auth/me", "/api/v1/projects", "/api/v1/notifications"):
+    for path in ("/api/v1/auth/session", "/api/v1/projects", "/api/v1/notifications"):
         response = client.get(path)
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "NOT_AUTHENTICATED"
@@ -80,7 +80,7 @@ def test_logout_does_not_close_other_sessions_of_the_same_user(
 
     client.post(URL)  # closes the second session only
     client.cookies.set(COOKIE, first_token)
-    assert client.get("/api/v1/auth/me").status_code == 200
+    assert client.get("/api/v1/auth/session").status_code == 200
 
 
 def test_logout_from_a_foreign_origin_is_blocked_and_session_survives(
@@ -89,7 +89,7 @@ def test_logout_from_a_foreign_origin_is_blocked_and_session_survives(
     login_as(client, db_engine, email="ana@empresa.com")
     response = client.post(URL, headers={"Origin": "https://evil.example"})
     assert response.status_code == 403
-    assert client.get("/api/v1/auth/me").status_code == 200
+    assert client.get("/api/v1/auth/session").status_code == 200
 
 
 def test_technical_failure_returns_generic_message_and_keeps_the_cookie(

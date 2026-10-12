@@ -12,7 +12,7 @@ from tests.support import login_as
 def test_notifications_crud_flow(client: TestClient, db_engine: Engine) -> None:
     user_id = login_as(client, db_engine, email="notifuser@dashnode.io")
 
-    me_resp = client.get("/api/v1/auth/me")
+    me_resp = client.get("/api/v1/auth/session")
     assert me_resp.json()["user"]["id"] == user_id
 
     # Send notification

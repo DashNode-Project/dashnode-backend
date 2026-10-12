@@ -87,9 +87,17 @@ def logout(
 
 
 @router.get(
-    "/me",
+    "/session",
     response_model=CurrentSession,
-    summary="Perfil y vigencia de la sesion actual",
+    summary="Validar la sesion actual (HttpOnly cookie) y obtener usuario y vigencia",
+    responses={
+        401: {"description": "NOT_AUTHENTICATED o SESSION_EXPIRED (la cookie se elimina)"},
+        403: {"description": "ACCOUNT_DISABLED"},
+    },
 )
-def get_me(session: CurrentSession = Depends(get_current_session)) -> CurrentSession:
+def get_session(session: CurrentSession = Depends(get_current_session)) -> CurrentSession:
+    """Lets the SPA restore the authenticated state after a page reload (HU_DN_01_05).
+
+    Read-only: it never renews the session, the 8 hours are counted from login.
+    """
     return session
