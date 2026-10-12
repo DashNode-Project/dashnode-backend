@@ -59,6 +59,13 @@ def seed(db: Session | None = None) -> int:
     plan = [
         (settings.SEED_ADMIN_EMAIL, settings.SEED_ADMIN_PASSWORD, "Administrador", "admin", True),
         (
+            settings.SEED_MANAGER_EMAIL,
+            settings.SEED_MANAGER_PASSWORD,
+            "Gerente",
+            "manager",
+            True,
+        ),
+        (
             settings.SEED_DEVELOPER_EMAIL,
             settings.SEED_DEVELOPER_PASSWORD,
             "Desarrollador",

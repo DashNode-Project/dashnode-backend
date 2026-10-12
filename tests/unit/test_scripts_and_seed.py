@@ -83,13 +83,13 @@ def test_scanner_allows_env_example() -> None:
 def test_generate_env_replaces_every_placeholder_with_distinct_random_values() -> None:
     content, generated = gen.build_env()
     assert not re.search(r"^[A-Z_]+=.*CHANGE_ME", content, re.MULTILINE)
-    assert len(generated) == 4
+    assert len(generated) == 5
     db_passwords = set(re.findall(r"^POSTGRES_PASSWORD=(.+)$", content, re.MULTILINE))
     assert len(db_passwords) == 1
     db_password = db_passwords.pop()
     assert f":{db_password}@" in content  # same value embedded in DATABASE_URL
     seeds = re.findall(r"^SEED_\w+_PASSWORD=(.+)$", content, re.MULTILINE)
-    assert len(set(seeds)) == 3
+    assert len(set(seeds)) == 4
     for password in seeds:
         assert 8 <= len(password) <= 64
         assert re.search(r"[A-Za-z]", password)
@@ -106,6 +106,8 @@ def seed_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     values = {
         "SEED_ADMIN_EMAIL": "admin@example.test",
         "SEED_ADMIN_PASSWORD": SecretStr("Admin1234"),
+        "SEED_MANAGER_EMAIL": "mgr@example.test",
+        "SEED_MANAGER_PASSWORD": SecretStr("Mgr123456"),
         "SEED_DEVELOPER_EMAIL": "dev@example.test",
         "SEED_DEVELOPER_PASSWORD": SecretStr("Devel1234"),
         "SEED_DISABLED_EMAIL": "off@example.test",
@@ -121,7 +123,12 @@ def test_seed_creates_users_hashes_passwords_and_is_idempotent(db_session: Sessi
     assert seed_module.seed(db_session) == 0
 
     users = {user.email: user for user in db_session.query(UserModel).all()}
-    assert set(users) == {"admin@example.test", "dev@example.test", "off@example.test"}
+    assert set(users) == {
+        "admin@example.test",
+        "mgr@example.test",
+        "dev@example.test",
+        "off@example.test",
+    }
     assert users["off@example.test"].is_active is False
     assert users["admin@example.test"].role == "admin"
     hasher = Argon2PasswordHasher(time_cost=1, memory_cost_kib=8, parallelism=1)

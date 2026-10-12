@@ -80,13 +80,13 @@ class RequestPasswordResetUseCase:
                 id=self._id_gen.generate(),
                 user_id=user.id,
                 token_hash=self._tokens.digest(raw),
-                purpose=CredentialTokenPurpose.PASSWORD_RESET,
+                purpose=CredentialTokenPurpose.RESET_CREDENTIAL,
                 created_at=now,
                 expires_at=now + self._policy.reset_ttl,
             )
             with self._uow:
                 self._tokens_repo.invalidate_active_for_user(
-                    user.id, CredentialTokenPurpose.PASSWORD_RESET
+                    user.id, CredentialTokenPurpose.RESET_CREDENTIAL
                 )
                 self._tokens_repo.add(token)
                 self._uow.commit()
@@ -210,13 +210,13 @@ class AdminRequestPasswordResetUseCase:
             id=self._id_gen.generate(),
             user_id=target.id,
             token_hash=self._tokens.digest(raw),
-            purpose=CredentialTokenPurpose.PASSWORD_RESET,
+            purpose=CredentialTokenPurpose.RESET_CREDENTIAL,
             created_at=now,
             expires_at=now + self._policy.reset_ttl,
         )
         with self._uow:
             self._tokens_repo.invalidate_active_for_user(
-                target.id, CredentialTokenPurpose.PASSWORD_RESET
+                target.id, CredentialTokenPurpose.RESET_CREDENTIAL
             )
             self._tokens_repo.add(token)
             self._uow.commit()

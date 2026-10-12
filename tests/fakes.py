@@ -196,11 +196,7 @@ class FakePasswordCredentialTokenRepository:
 
     def invalidate_active_for_user(self, user_id: str, purpose: CredentialTokenPurpose) -> None:
         for token in self.tokens.values():
-            if (
-                token.user_id == user_id
-                and token.purpose == purpose
-                and token.used_at is None
-            ):
+            if token.user_id == user_id and token.purpose == purpose and token.used_at is None:
                 token.used_at = T0
 
 

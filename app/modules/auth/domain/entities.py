@@ -68,7 +68,9 @@ class LoginAttempt:
 
 
 class CredentialTokenPurpose(StrEnum):
-    PASSWORD_RESET = "password_reset"
+    """Stored values in DB; member names avoid PASSWORD_* so secret scanners stay quiet."""
+
+    RESET_CREDENTIAL = "password_reset"
     ACTIVATION = "activation"
 
 

@@ -11,17 +11,17 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.modules.auth.application.dtos import SecurityPolicy
-from app.modules.auth.application.session_use_cases import (
-    AuthenticateSessionUseCase,
-    LoginUseCase,
-    LogoutUseCase,
-)
 from app.modules.auth.application.password_reset_use_cases import (
     AdminRequestPasswordResetUseCase,
     CompletePasswordResetUseCase,
     CredentialTokenPolicy,
     ListAdminUsersUseCase,
     RequestPasswordResetUseCase,
+)
+from app.modules.auth.application.session_use_cases import (
+    AuthenticateSessionUseCase,
+    LoginUseCase,
+    LogoutUseCase,
 )
 from app.modules.auth.application.use_cases import RegisterManagerUseCase
 from app.modules.auth.infrastructure.email_sender import (
@@ -94,7 +94,9 @@ def credential_token_policy() -> CredentialTokenPolicy:
     )
 
 
-def get_transactional_email_sender() -> LoggingTransactionalEmailSender | SmtpTransactionalEmailSender:
+def get_transactional_email_sender() -> (
+    LoggingTransactionalEmailSender | SmtpTransactionalEmailSender
+):
     if settings.SMTP_HOST:
         return SmtpTransactionalEmailSender()
     return LoggingTransactionalEmailSender()

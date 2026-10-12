@@ -4,7 +4,10 @@ from datetime import timedelta
 
 import pytest
 
-from app.modules.auth.application.dtos import CompletePasswordResetCommand, RequestPasswordResetCommand
+from app.modules.auth.application.dtos import (
+    CompletePasswordResetCommand,
+    RequestPasswordResetCommand,
+)
 from app.modules.auth.application.password_reset_use_cases import (
     AdminRequestPasswordResetUseCase,
     CompletePasswordResetUseCase,
@@ -12,7 +15,11 @@ from app.modules.auth.application.password_reset_use_cases import (
     RequestPasswordResetUseCase,
 )
 from app.modules.auth.domain import messages
-from app.modules.auth.domain.entities import CredentialTokenPurpose, PasswordCredentialToken, UserRole
+from app.modules.auth.domain.entities import (
+    CredentialTokenPurpose,
+    PasswordCredentialToken,
+    UserRole,
+)
 from app.modules.auth.domain.errors import (
     AdminResetDisabledTargetError,
     EmailSendFailedError,
@@ -20,6 +27,7 @@ from app.modules.auth.domain.errors import (
     PasswordResetValidationError,
 )
 from tests.fakes import (
+    T0,
     FakeClock,
     FakeIdGenerator,
     FakePasswordCredentialTokenRepository,
@@ -28,7 +36,6 @@ from tests.fakes import (
     FakeTransactionalEmailSender,
     FakeUnitOfWork,
     FakeUserRepository,
-    T0,
     make_user,
 )
 
@@ -59,9 +66,9 @@ def _request_uc(
 
 def test_request_password_reset_agnostic_success_when_email_unknown() -> None:
     mailer = FakeTransactionalEmailSender()
-    result = _request_uc(FakeUserRepository(), FakePasswordCredentialTokenRepository(), mailer).execute(
-        RequestPasswordResetCommand(email="unknown@example.com")
-    )
+    result = _request_uc(
+        FakeUserRepository(), FakePasswordCredentialTokenRepository(), mailer
+    ).execute(RequestPasswordResetCommand(email="unknown@example.com"))
     assert result.message == messages.PASSWORD_RESET_REQUEST_SUCCESS
     assert mailer.sent == []
 
@@ -81,7 +88,9 @@ def test_request_password_reset_sends_mail_for_active_user() -> None:
 def test_request_password_reset_invalid_email_format() -> None:
     with pytest.raises(PasswordResetValidationError) as exc:
         _request_uc(
-            FakeUserRepository(), FakePasswordCredentialTokenRepository(), FakeTransactionalEmailSender()
+            FakeUserRepository(),
+            FakePasswordCredentialTokenRepository(),
+            FakeTransactionalEmailSender(),
         ).execute(RequestPasswordResetCommand(email="not-an-email"))
     assert exc.value.fields["email"] == messages.EMAIL_INVALID
 
@@ -107,7 +116,7 @@ def test_complete_password_reset_success() -> None:
             id="tok-1",
             user_id=user.id,
             token_hash=token_svc.digest(raw),
-            purpose=CredentialTokenPurpose.PASSWORD_RESET,
+            purpose=CredentialTokenPurpose.RESET_CREDENTIAL,
             created_at=T0,
             expires_at=T0 + timedelta(hours=1),
         )
@@ -122,13 +131,15 @@ def test_complete_password_reset_success() -> None:
         uow=FakeUnitOfWork(),
     )
     result = uc.execute(
-        CompletePasswordResetCommand(
-            token=raw, password=PASSWORD, confirm_password=PASSWORD
-        )
+        CompletePasswordResetCommand(token=raw, password=PASSWORD, confirm_password=PASSWORD)
     )
     assert result.message == messages.PASSWORD_SET_SUCCESS
-    assert users.get_by_id(user.id).hashed_password == hasher.hash(PASSWORD)
-    assert tokens.get_by_token_hash(token_svc.digest(raw)).is_used()
+    updated = users.get_by_id(user.id)
+    assert updated is not None
+    assert updated.hashed_password == hasher.hash(PASSWORD)
+    stored = tokens.get_by_token_hash(token_svc.digest(raw))
+    assert stored is not None
+    assert stored.is_used()
 
 
 def test_complete_password_reset_rejects_reuse() -> None:
@@ -141,7 +152,7 @@ def test_complete_password_reset_rejects_reuse() -> None:
         id="tok-1",
         user_id=user.id,
         token_hash=token_svc.digest(raw),
-        purpose=CredentialTokenPurpose.PASSWORD_RESET,
+        purpose=CredentialTokenPurpose.RESET_CREDENTIAL,
         created_at=T0,
         expires_at=T0 + timedelta(hours=1),
         used_at=T0,
@@ -158,9 +169,7 @@ def test_complete_password_reset_rejects_reuse() -> None:
     )
     with pytest.raises(InvalidCredentialTokenError):
         uc.execute(
-            CompletePasswordResetCommand(
-                token=raw, password=PASSWORD, confirm_password=PASSWORD
-            )
+            CompletePasswordResetCommand(token=raw, password=PASSWORD, confirm_password=PASSWORD)
         )
 
 

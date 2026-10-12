@@ -36,8 +36,12 @@ from app.orchestration.auth_container import (
     get_register_manager_use_case,
     get_request_password_reset_use_case,
 )
-from app.orchestration.security import get_current_session, get_current_user, get_session_token, require_admin
-from app.shared.application.identity import CurrentSession
+from app.orchestration.security import (
+    get_current_session,
+    get_session_token,
+    require_admin,
+)
+from app.shared.application.identity import CurrentSession, CurrentUser
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -147,7 +151,7 @@ def confirm_password_reset(
     summary="Listar usuarios (solo Administrador)",
 )
 def list_admin_users(
-    current_user=Depends(require_admin),
+    current_user: CurrentUser = Depends(require_admin),
     use_case: ListAdminUsersUseCase = Depends(get_list_admin_users_use_case),
 ) -> list[AdminUserSummaryDTO]:
     return use_case.execute(actor_id=current_user.id)
@@ -160,9 +164,7 @@ def list_admin_users(
 )
 def admin_request_password_reset(
     user_id: str,
-    current_user=Depends(require_admin),
-    use_case: AdminRequestPasswordResetUseCase = Depends(
-        get_admin_request_password_reset_use_case
-    ),
+    current_user: CurrentUser = Depends(require_admin),
+    use_case: AdminRequestPasswordResetUseCase = Depends(get_admin_request_password_reset_use_case),
 ) -> MessageResponse:
     return use_case.execute(actor_id=current_user.id, target_user_id=user_id)

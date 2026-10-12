@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     # --- Local development seed (read from environment, blocked in production) ---
     SEED_ADMIN_EMAIL: str | None = None
     SEED_ADMIN_PASSWORD: SecretStr | None = None
+    SEED_MANAGER_EMAIL: str | None = None
+    SEED_MANAGER_PASSWORD: SecretStr | None = None
     SEED_DEVELOPER_EMAIL: str | None = None
     SEED_DEVELOPER_PASSWORD: SecretStr | None = None
     SEED_DISABLED_EMAIL: str | None = None

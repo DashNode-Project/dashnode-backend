@@ -44,4 +44,6 @@ class LoggingTransactionalEmailSender(TransactionalEmailSender):
     """Development fallback when SMTP is not configured: simulates successful delivery."""
 
     def send_password_reset(self, *, to_email: str, reset_url: str) -> None:
-        logger.info("Password reset requested for %s (link omitted from logs)", to_email.split("@")[0])
+        logger.info(
+            "Password reset requested for %s (link omitted from logs)", to_email.split("@")[0]
+        )

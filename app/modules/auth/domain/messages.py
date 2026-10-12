@@ -43,6 +43,4 @@ INVALID_OR_EXPIRED_LINK = "El enlace no es válido o ha expirado. Solicite uno n
 
 # --- HU_DN_01_10: admin-triggered reset --------------------------------------------
 ADMIN_RESET_SENT = "Se ha enviado el enlace de restablecimiento al correo del usuario."
-ADMIN_RESET_DISABLED_TARGET = (
-    "No se puede restablecer la contraseña de un usuario desactivado."
-)
+ADMIN_RESET_DISABLED_TARGET = "No se puede restablecer la contraseña de un usuario desactivado."
