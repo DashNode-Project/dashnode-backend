@@ -8,6 +8,7 @@ Use cases around server-side sessions: login (HU_DN_01_03) and session validatio
 from app.modules.auth.application.dtos import (
     LoginCommand,
     LoginResult,
+    LogoutResponse,
     SecurityPolicy,
     SessionInfo,
 )
@@ -165,3 +166,33 @@ class AuthenticateSessionUseCase:
         if not user.can_authenticate():
             raise AccountDisabledError
         return SessionInfo(user=to_user_dto(user), expires_at=session.expires_at)
+
+
+class LogoutUseCase:
+    """Invalidate the server-side session behind the cookie (HU_DN_01_04).
+
+    Idempotent: an unknown, expired or already revoked session still ends with the
+    client being logged out, so the UI can always clear its state and go to login.
+    """
+
+    def __init__(
+        self,
+        session_repo: SessionRepository,
+        tokens: SessionTokenService,
+        clock: Clock,
+        uow: UnitOfWork,
+    ) -> None:
+        self._sessions = session_repo
+        self._tokens = tokens
+        self._clock = clock
+        self._uow = uow
+
+    def execute(self, token: str | None) -> LogoutResponse:
+        if token:
+            session = self._sessions.get_by_token_hash(self._tokens.digest(token))
+            if session is not None and not session.is_revoked():
+                session.revoke(self._clock.now())
+                with self._uow:
+                    self._sessions.update(session)
+                    self._uow.commit()
+        return LogoutResponse(message=messages.LOGOUT_SUCCESS)

@@ -72,3 +72,19 @@ def test_deleting_a_user_cascades_to_sessions(pg_client: TestClient, pg_clean: E
         conn.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
         assert conn.execute(text("SELECT COUNT(*) FROM sessions")).scalar_one() == 0
     assert pg_client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_logout_persists_revocation_and_blocks_replay(
+    pg_client: TestClient, pg_clean: Engine
+) -> None:
+    create_user(pg_clean, email=EMAIL)
+    assert _login(pg_client) == 200
+    token = pg_client.cookies[settings.SESSION_COOKIE_NAME]
+
+    assert pg_client.post("/api/v1/auth/logout").status_code == 200
+    with pg_clean.connect() as conn:
+        revoked = conn.execute(text("SELECT revoked_at FROM sessions")).scalar_one()
+    assert revoked is not None
+
+    pg_client.cookies.set(settings.SESSION_COOKIE_NAME, token)
+    assert pg_client.get("/api/v1/auth/me").status_code == 401

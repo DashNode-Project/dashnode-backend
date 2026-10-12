@@ -14,6 +14,7 @@ from app.modules.auth.application.dtos import SecurityPolicy
 from app.modules.auth.application.session_use_cases import (
     AuthenticateSessionUseCase,
     LoginUseCase,
+    LogoutUseCase,
 )
 from app.modules.auth.application.use_cases import RegisterManagerUseCase
 from app.modules.auth.infrastructure.repositories import (
@@ -70,6 +71,17 @@ def get_login_use_case(
         clock=clock,
         uow=SqlAlchemyUnitOfWork(session=db),
         policy=security_policy(),
+    )
+
+
+def get_logout_use_case(
+    db: Session = Depends(get_db),
+) -> LogoutUseCase:
+    return LogoutUseCase(
+        session_repo=SqlAlchemySessionRepository(session=db),
+        tokens=session_tokens,
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
     )
 
 
