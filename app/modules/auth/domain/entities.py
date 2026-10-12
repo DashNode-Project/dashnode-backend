@@ -65,3 +65,31 @@ class LoginAttempt:
     id: str
     email: str
     attempted_at: datetime
+
+
+class CredentialTokenPurpose(StrEnum):
+    PASSWORD_RESET = "password_reset"
+    ACTIVATION = "activation"
+
+
+@dataclass
+class PasswordCredentialToken:
+    """Single-use link to set a password (reset or activation). Only the digest is stored."""
+
+    id: str
+    user_id: str
+    token_hash: str
+    purpose: CredentialTokenPurpose
+    created_at: datetime
+    expires_at: datetime
+    used_at: datetime | None = None
+
+    def is_expired(self, now: datetime) -> bool:
+        return now >= self.expires_at
+
+    def is_used(self) -> bool:
+        return self.used_at is not None
+
+    def mark_used(self, when: datetime) -> None:
+        if self.used_at is None:
+            self.used_at = when

@@ -8,6 +8,7 @@ from app.config import settings
 # Import all models to register on Base.metadata
 from app.modules.auth.infrastructure.models import (  # noqa: F401
     LoginAttemptModel,
+    PasswordCredentialTokenModel,
     SessionModel,
     UserModel,
 )

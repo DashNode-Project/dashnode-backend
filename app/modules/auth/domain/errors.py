@@ -66,3 +66,36 @@ class SessionExpiredError(AppError):
 class NotAuthenticatedError(AppError):
     def __init__(self) -> None:
         super().__init__("NOT_AUTHENTICATED", messages.NOT_AUTHENTICATED, ErrorKind.UNAUTHENTICATED)
+
+
+class PasswordResetValidationError(AppError):
+    def __init__(self, code: str, message: str, fields: dict[str, str]) -> None:
+        super().__init__(code, message, ErrorKind.VALIDATION, fields)
+
+
+class EmailSendFailedError(AppError):
+    def __init__(self) -> None:
+        super().__init__("EMAIL_SEND_FAILED", messages.EMAIL_SEND_FAILED, ErrorKind.VALIDATION)
+
+
+class InvalidCredentialTokenError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "INVALID_OR_EXPIRED_LINK", messages.INVALID_OR_EXPIRED_LINK, ErrorKind.VALIDATION
+        )
+
+
+class AdminResetDisabledTargetError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "ADMIN_RESET_DISABLED_TARGET",
+            messages.ADMIN_RESET_DISABLED_TARGET,
+            ErrorKind.VALIDATION,
+        )
+
+
+class AdminOnlyError(AppError):
+    def __init__(self) -> None:
+        from app.shared.domain.messages import ACCESS_DENIED
+
+        super().__init__("ACCESS_DENIED", ACCESS_DENIED, ErrorKind.FORBIDDEN)

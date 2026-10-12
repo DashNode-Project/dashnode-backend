@@ -9,20 +9,34 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.config import settings
 from app.modules.auth.application.dtos import (
+    AdminUserSummaryDTO,
+    CompletePasswordResetCommand,
     LoginCommand,
     LogoutResponse,
+    MessageResponse,
     RegisterManagerCommand,
     RegisterManagerResponse,
+    RequestPasswordResetCommand,
     SessionInfo,
+)
+from app.modules.auth.application.password_reset_use_cases import (
+    AdminRequestPasswordResetUseCase,
+    CompletePasswordResetUseCase,
+    ListAdminUsersUseCase,
+    RequestPasswordResetUseCase,
 )
 from app.modules.auth.application.session_use_cases import LoginUseCase, LogoutUseCase
 from app.modules.auth.application.use_cases import RegisterManagerUseCase
 from app.orchestration.auth_container import (
+    get_admin_request_password_reset_use_case,
+    get_complete_password_reset_use_case,
+    get_list_admin_users_use_case,
     get_login_use_case,
     get_logout_use_case,
     get_register_manager_use_case,
+    get_request_password_reset_use_case,
 )
-from app.orchestration.security import get_current_session, get_session_token
+from app.orchestration.security import get_current_session, get_current_user, get_session_token, require_admin
 from app.shared.application.identity import CurrentSession
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -101,3 +115,54 @@ def get_session(session: CurrentSession = Depends(get_current_session)) -> Curre
     Read-only: it never renews the session, the 8 hours are counted from login.
     """
     return session
+
+
+@router.post(
+    "/password-reset/request",
+    response_model=MessageResponse,
+    summary="Solicitar enlace de restablecimiento (respuesta agnostica)",
+)
+def request_password_reset(
+    cmd: RequestPasswordResetCommand,
+    use_case: RequestPasswordResetUseCase = Depends(get_request_password_reset_use_case),
+) -> MessageResponse:
+    return use_case.execute(cmd)
+
+
+@router.post(
+    "/password-reset/confirm",
+    response_model=MessageResponse,
+    summary="Establecer contrasena con enlace de un solo uso",
+)
+def confirm_password_reset(
+    cmd: CompletePasswordResetCommand,
+    use_case: CompletePasswordResetUseCase = Depends(get_complete_password_reset_use_case),
+) -> MessageResponse:
+    return use_case.execute(cmd)
+
+
+@router.get(
+    "/admin/users",
+    response_model=list[AdminUserSummaryDTO],
+    summary="Listar usuarios (solo Administrador)",
+)
+def list_admin_users(
+    current_user=Depends(require_admin),
+    use_case: ListAdminUsersUseCase = Depends(get_list_admin_users_use_case),
+) -> list[AdminUserSummaryDTO]:
+    return use_case.execute(actor_id=current_user.id)
+
+
+@router.post(
+    "/admin/users/{user_id}/password-reset",
+    response_model=MessageResponse,
+    summary="Enviar restablecimiento al correo del usuario (solo Administrador)",
+)
+def admin_request_password_reset(
+    user_id: str,
+    current_user=Depends(require_admin),
+    use_case: AdminRequestPasswordResetUseCase = Depends(
+        get_admin_request_password_reset_use_case
+    ),
+) -> MessageResponse:
+    return use_case.execute(actor_id=current_user.id, target_user_id=user_id)

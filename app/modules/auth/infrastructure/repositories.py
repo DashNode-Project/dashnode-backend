@@ -10,10 +10,27 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.modules.auth.domain.entities import LoginAttempt, User, UserRole, UserSession
+from app.modules.auth.domain.entities import (
+    CredentialTokenPurpose,
+    LoginAttempt,
+    PasswordCredentialToken,
+    User,
+    UserRole,
+    UserSession,
+)
 from app.modules.auth.domain.errors import EmailAlreadyRegisteredError
-from app.modules.auth.domain.ports import LoginAttemptRepository, SessionRepository, UserRepository
-from app.modules.auth.infrastructure.models import LoginAttemptModel, SessionModel, UserModel
+from app.modules.auth.domain.ports import (
+    LoginAttemptRepository,
+    PasswordCredentialTokenRepository,
+    SessionRepository,
+    UserRepository,
+)
+from app.modules.auth.infrastructure.models import (
+    LoginAttemptModel,
+    PasswordCredentialTokenModel,
+    SessionModel,
+    UserModel,
+)
 
 
 class SqlAlchemyUserRepository(UserRepository):
@@ -76,6 +93,10 @@ class SqlAlchemyUserRepository(UserRepository):
             model.role = user.role.value
             model.is_active = user.is_active
             model.updated_at = user.updated_at
+
+    def list_all(self) -> list[User]:
+        stmt = select(UserModel).order_by(UserModel.email)
+        return [self._to_domain(model) for model in self._session.execute(stmt).scalars()]
 
 
 class SqlAlchemySessionRepository(SessionRepository):
@@ -153,3 +174,55 @@ class SqlAlchemyLoginAttemptRepository(LoginAttemptRepository):
         self._session.execute(
             delete(LoginAttemptModel).where(LoginAttemptModel.attempted_at < moment)
         )
+
+
+class SqlAlchemyPasswordCredentialTokenRepository(PasswordCredentialTokenRepository):
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    @staticmethod
+    def _to_domain(model: PasswordCredentialTokenModel) -> PasswordCredentialToken:
+        return PasswordCredentialToken(
+            id=model.id,
+            user_id=model.user_id,
+            token_hash=model.token_hash,
+            purpose=CredentialTokenPurpose(model.purpose),
+            created_at=model.created_at,
+            expires_at=model.expires_at,
+            used_at=model.used_at,
+        )
+
+    def add(self, token: PasswordCredentialToken) -> None:
+        self._session.add(
+            PasswordCredentialTokenModel(
+                id=token.id,
+                user_id=token.user_id,
+                token_hash=token.token_hash,
+                purpose=token.purpose.value,
+                created_at=token.created_at,
+                expires_at=token.expires_at,
+                used_at=token.used_at,
+            )
+        )
+        self._session.flush()
+
+    def get_by_token_hash(self, token_hash: str) -> PasswordCredentialToken | None:
+        stmt = select(PasswordCredentialTokenModel).where(
+            PasswordCredentialTokenModel.token_hash == token_hash
+        )
+        model = self._session.execute(stmt).scalar_one_or_none()
+        return None if model is None else self._to_domain(model)
+
+    def update(self, token: PasswordCredentialToken) -> None:
+        model = self._session.get(PasswordCredentialTokenModel, token.id)
+        if model is not None:
+            model.used_at = token.used_at
+
+    def invalidate_active_for_user(self, user_id: str, purpose: CredentialTokenPurpose) -> None:
+        stmt = select(PasswordCredentialTokenModel).where(
+            PasswordCredentialTokenModel.user_id == user_id,
+            PasswordCredentialTokenModel.purpose == purpose.value,
+            PasswordCredentialTokenModel.used_at.is_(None),
+        )
+        for model in self._session.execute(stmt).scalars():
+            model.used_at = model.expires_at

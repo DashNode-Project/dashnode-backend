@@ -51,7 +51,8 @@ class Settings(BaseSettings):
 
     # --- Mail (prepared for the password-recovery story; unused in this epic) ----
     FRONTEND_BASE_URL: str = "http://localhost:8080"
-    PASSWORD_RESET_TTL_MINUTES: int = Field(default=30, ge=5, le=1440)
+    PASSWORD_RESET_TTL_MINUTES: int = Field(default=60, ge=5, le=1440)
+    PASSWORD_ACTIVATION_TTL_HOURS: int = Field(default=24, ge=1, le=168)
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587
     SMTP_USERNAME: str | None = None

@@ -43,6 +43,20 @@ class SessionModel(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
 
+class PasswordCredentialTokenModel(Base):
+    __tablename__ = "password_credential_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime, index=True, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
 class LoginAttemptModel(Base):
     """Login attempt ledger keyed by e-mail (no FK: unknown e-mails are tracked too)."""
 

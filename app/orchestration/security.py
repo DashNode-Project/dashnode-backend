@@ -47,3 +47,11 @@ def get_current_session(
 def get_current_user(session: CurrentSession = Depends(get_current_session)) -> CurrentUser:
     """FastAPI dependency used by every protected endpoint."""
     return session.user
+
+
+def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    from app.modules.auth.domain.errors import AdminOnlyError
+
+    if user.role != "admin":
+        raise AdminOnlyError()
+    return user

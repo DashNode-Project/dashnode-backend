@@ -61,6 +61,28 @@ class LogoutResponse(BaseModel):
     message: str
 
 
+class MessageResponse(BaseModel):
+    message: str
+
+
+class RequestPasswordResetCommand(BaseModel):
+    email: str = Field(default="", max_length=1000)
+
+
+class CompletePasswordResetCommand(BaseModel):
+    token: str = Field(default="", max_length=512)
+    password: str = Field(default="", max_length=1000)
+    confirm_password: str = Field(default="", max_length=1000)
+
+
+class AdminUserSummaryDTO(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: UserRole
+    is_active: bool
+
+
 @dataclass(frozen=True)
 class LoginResult:
     """Internal result: carries the raw token so the API layer can set the cookie."""

@@ -4,7 +4,14 @@ In-memory test doubles for the application ports (shared by application tests).
 
 from datetime import UTC, datetime, timedelta
 
-from app.modules.auth.domain.entities import LoginAttempt, User, UserRole, UserSession
+from app.modules.auth.domain.entities import (
+    CredentialTokenPurpose,
+    LoginAttempt,
+    PasswordCredentialToken,
+    User,
+    UserRole,
+    UserSession,
+)
 from app.modules.auth.domain.errors import EmailAlreadyRegisteredError
 from app.shared.application.ports import UnitOfWork
 
@@ -31,6 +38,9 @@ class FakeUserRepository:
     def update(self, user: User) -> None:
         self.users_by_id[user.id] = user
         self.users_by_email[user.email] = user
+
+    def list_all(self) -> list[User]:
+        return list(self.users_by_id.values())
 
 
 class FakeClock:
@@ -169,3 +179,39 @@ class FakeSessionTokenService:
 
     def digest(self, token: str) -> str:
         return f"digest::{token}"
+
+
+class FakePasswordCredentialTokenRepository:
+    def __init__(self) -> None:
+        self.tokens: dict[str, PasswordCredentialToken] = {}
+
+    def add(self, token: PasswordCredentialToken) -> None:
+        self.tokens[token.id] = token
+
+    def get_by_token_hash(self, token_hash: str) -> PasswordCredentialToken | None:
+        return next((t for t in self.tokens.values() if t.token_hash == token_hash), None)
+
+    def update(self, token: PasswordCredentialToken) -> None:
+        self.tokens[token.id] = token
+
+    def invalidate_active_for_user(self, user_id: str, purpose: CredentialTokenPurpose) -> None:
+        for token in self.tokens.values():
+            if (
+                token.user_id == user_id
+                and token.purpose == purpose
+                and token.used_at is None
+            ):
+                token.used_at = T0
+
+
+class FakeTransactionalEmailSender:
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+        self.sent: list[tuple[str, str]] = []
+
+    def send_password_reset(self, *, to_email: str, reset_url: str) -> None:
+        if self.fail:
+            from app.modules.auth.domain.errors import EmailSendFailedError
+
+            raise EmailSendFailedError()
+        self.sent.append((to_email, reset_url))

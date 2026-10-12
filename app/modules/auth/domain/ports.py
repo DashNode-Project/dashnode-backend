@@ -7,7 +7,13 @@ Repository and service ports for the Auth module domain.
 from datetime import datetime
 from typing import Protocol
 
-from app.modules.auth.domain.entities import LoginAttempt, User, UserSession
+from app.modules.auth.domain.entities import (
+    CredentialTokenPurpose,
+    LoginAttempt,
+    PasswordCredentialToken,
+    User,
+    UserSession,
+)
 
 
 class UserRepository(Protocol):
@@ -20,6 +26,8 @@ class UserRepository(Protocol):
     def save(self, user: User) -> None: ...
 
     def update(self, user: User) -> None: ...
+
+    def list_all(self) -> list[User]: ...
 
 
 class SessionRepository(Protocol):
@@ -54,3 +62,19 @@ class SessionTokenService(Protocol):
     def new_token(self) -> str: ...
 
     def digest(self, token: str) -> str: ...
+
+
+class PasswordCredentialTokenRepository(Protocol):
+    def add(self, token: PasswordCredentialToken) -> None: ...
+
+    def get_by_token_hash(self, token_hash: str) -> PasswordCredentialToken | None: ...
+
+    def update(self, token: PasswordCredentialToken) -> None: ...
+
+    def invalidate_active_for_user(self, user_id: str, purpose: CredentialTokenPurpose) -> None: ...
+
+
+class TransactionalEmailSender(Protocol):
+    """Sends password/activation links. Must not log message bodies with secrets."""
+
+    def send_password_reset(self, *, to_email: str, reset_url: str) -> None: ...

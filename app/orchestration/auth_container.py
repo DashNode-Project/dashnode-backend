@@ -16,9 +16,21 @@ from app.modules.auth.application.session_use_cases import (
     LoginUseCase,
     LogoutUseCase,
 )
+from app.modules.auth.application.password_reset_use_cases import (
+    AdminRequestPasswordResetUseCase,
+    CompletePasswordResetUseCase,
+    CredentialTokenPolicy,
+    ListAdminUsersUseCase,
+    RequestPasswordResetUseCase,
+)
 from app.modules.auth.application.use_cases import RegisterManagerUseCase
+from app.modules.auth.infrastructure.email_sender import (
+    LoggingTransactionalEmailSender,
+    SmtpTransactionalEmailSender,
+)
 from app.modules.auth.infrastructure.repositories import (
     SqlAlchemyLoginAttemptRepository,
+    SqlAlchemyPasswordCredentialTokenRepository,
     SqlAlchemySessionRepository,
     SqlAlchemyUserRepository,
 )
@@ -72,6 +84,68 @@ def get_login_use_case(
         uow=SqlAlchemyUnitOfWork(session=db),
         policy=security_policy(),
     )
+
+
+def credential_token_policy() -> CredentialTokenPolicy:
+    return CredentialTokenPolicy(
+        reset_ttl=timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES),
+        activation_ttl=timedelta(hours=settings.PASSWORD_ACTIVATION_TTL_HOURS),
+        frontend_base_url=settings.FRONTEND_BASE_URL,
+    )
+
+
+def get_transactional_email_sender() -> LoggingTransactionalEmailSender | SmtpTransactionalEmailSender:
+    if settings.SMTP_HOST:
+        return SmtpTransactionalEmailSender()
+    return LoggingTransactionalEmailSender()
+
+
+def get_request_password_reset_use_case(
+    db: Session = Depends(get_db),
+) -> RequestPasswordResetUseCase:
+    return RequestPasswordResetUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        token_repo=SqlAlchemyPasswordCredentialTokenRepository(session=db),
+        tokens=session_tokens,
+        mailer=get_transactional_email_sender(),
+        id_gen=id_generator,
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+        policy=credential_token_policy(),
+    )
+
+
+def get_complete_password_reset_use_case(
+    db: Session = Depends(get_db),
+) -> CompletePasswordResetUseCase:
+    return CompletePasswordResetUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        token_repo=SqlAlchemyPasswordCredentialTokenRepository(session=db),
+        tokens=session_tokens,
+        hasher=password_hasher,
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+    )
+
+
+def get_admin_request_password_reset_use_case(
+    db: Session = Depends(get_db),
+) -> AdminRequestPasswordResetUseCase:
+    return AdminRequestPasswordResetUseCase(
+        actor_repo=SqlAlchemyUserRepository(session=db),
+        user_repo=SqlAlchemyUserRepository(session=db),
+        token_repo=SqlAlchemyPasswordCredentialTokenRepository(session=db),
+        tokens=session_tokens,
+        mailer=get_transactional_email_sender(),
+        id_gen=id_generator,
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+        policy=credential_token_policy(),
+    )
+
+
+def get_list_admin_users_use_case(db: Session = Depends(get_db)) -> ListAdminUsersUseCase:
+    return ListAdminUsersUseCase(user_repo=SqlAlchemyUserRepository(session=db))
 
 
 def get_logout_use_case(

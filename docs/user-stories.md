@@ -503,3 +503,15 @@
 * *Cubre criterios*: 3, 4, 5, 6
 
 ---
+
+## Estado de implementación — HU_DN_01_06 … HU_DN_01_10 (Sprint 1)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_01_06 | Implementado | `POST /api/v1/auth/password-reset/request`, tests `test_password_reset_*` |
+| HU_DN_01_07 | Implementado | `POST /api/v1/auth/password-reset/confirm`, migración `003_password_credential_tokens` |
+| HU_DN_01_08 | Implementado (servidor) | Endpoints protegidos con `get_current_user` / 401; cliente: guard `returnTo` |
+| HU_DN_01_09 | Implementado | `AccessDeniedError` → HTTP 403 mensaje literal en proyectos y admin |
+| HU_DN_01_10 | Implementado | `POST /api/v1/auth/admin/users/{id}/password-reset`, `GET /api/v1/auth/admin/users` |
+
+---
