@@ -84,53 +84,44 @@ make hooks-install
 
 ## Puesta en Marcha (Local)
 
-### 1. Requisitos Previos
-- Python 3.12+
-- PostgreSQL (opcional para desarrollo local; se puede usar SQLite o Docker Compose)
-- Git
+### 1. Requisitos
+- Python 3.12+ y Docker (para PostgreSQL local; las pruebas de API usan SQLite en memoria).
 
-### 2. Configuración del Entorno
+### 2. Configuración (secretos nunca en el repositorio)
 ```bash
-# Clonar el repositorio
-git clone https://github.com/DashNode-Project/dashnode-backend.git
-cd dashnode-backend
-
-# Crear y activar entorno virtual
 python -m venv .venv
-source .venv/bin/activate   # En Linux / Mac
-.venv\Scripts\activate      # En Windows
-
-# Instalar dependencias con extras de desarrollo
+.venv\Scripts\activate              # Windows  (Linux/Mac: source .venv/bin/activate)
 pip install -e ".[dev]"
 
-# Copiar variables de entorno
-cp .env.example .env
+python scripts/generate_env.py      # crea .env (ignorado por git) con contraseñas aleatorias
 ```
+`.env.example` documenta cada variable. `.env` nunca se versiona; `scripts/scan_secrets.py` (hook
+`pre-commit` y CI) bloquea cualquier secreto o archivo `.env` en un commit.
 
-### 3. Migraciones de Base de Datos y Seed
+### 3. Base de datos, migraciones y datos locales
 ```bash
-# Ejecutar migraciones con Alembic
+docker compose up -d db             # PostgreSQL 16 en 127.0.0.1:${POSTGRES_HOST_PORT:-5434}
 alembic upgrade head
-
-# Poblar la base de datos con datos iniciales (Seed)
-python -m app.cli.seed
+python -m app.cli.seed              # admin / desarrollador / cuenta desactivada (credenciales en .env)
 ```
 
-### 4. Ejecutar el Servidor de Desarrollo
+### 4. Servidor de desarrollo
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload
 ```
+- Swagger UI: http://localhost:8000/docs · Liveness: `/health` · Readiness (BD): `/health/ready`
+- API de autenticación documentada en [docs/api-auth.md](docs/api-auth.md).
 
-Acceso a la documentación interactiva:
-- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-- **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
-
----
-
-## Ejecución con Docker Compose
-
-Para levantar la aplicación junto con PostgreSQL y PgAdmin:
+### 5. Todo en contenedores (API + PostgreSQL)
 ```bash
-docker compose up --build -d
+docker compose up --build -d        # el entrypoint aplica las migraciones al arrancar
+docker compose exec api python -m app.cli.seed
 ```
+La red `dashnode-net` permite que el contenedor del frontend alcance la API como `dashnode-api:8000`.
+
+### 6. Pruebas
+```bash
+pytest                              # unit + application + api (SQLite) + integration (PostgreSQL si TEST_POSTGRES_URL)
+make check                          # secretos + ruff + mypy + import-linter + pytest con cobertura >= 80 %
+```
+Las pruebas de integración crean y eliminan bases temporales en el servidor de `TEST_POSTGRES_URL`.
