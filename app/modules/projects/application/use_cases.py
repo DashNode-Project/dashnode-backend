@@ -86,7 +86,9 @@ class AddProjectMemberUseCase:
 
         # SAD RN-PRY-01: Only project owner or lead can manage membership
         if project.owner_id != actor_id and not self._repo.is_member(project_id, actor_id):
-            raise ValueError("No tienes permisos para agregar miembros a este proyecto.")
+            from app.shared.domain.authorization import AccessDeniedError
+
+            raise AccessDeniedError()
 
         if self._repo.is_member(project_id, cmd.user_id):
             raise ValueError("El usuario ya es miembro de este proyecto.")
@@ -144,7 +146,9 @@ class GetProjectUseCase:
             raise ValueError("Proyecto no encontrado.")
 
         if project.owner_id != user_id and not self._repo.is_member(project_id, user_id):
-            raise ValueError("No tienes acceso a este proyecto.")
+            from app.shared.domain.authorization import AccessDeniedError
+
+            raise AccessDeniedError()
 
         return ProjectDTO(
             id=project.id,

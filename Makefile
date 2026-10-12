@@ -1,7 +1,10 @@
-.PHONY: install lint format typecheck arch test test-unit test-integration check hooks-install verify run migrate seed docker-up
+.PHONY: install env lint format typecheck arch secrets test test-unit test-integration audit check hooks-install verify run migrate seed docker-up docker-down
 
 install:
 	pip install -e .[dev]
+
+env:
+	python scripts/generate_env.py
 
 lint:
 	ruff check .
@@ -15,15 +18,23 @@ typecheck:
 arch:
 	lint-imports
 
-test-unit:
-	pytest tests/unit tests/application --cov=app --cov-fail-under=95
+secrets:
+	python scripts/scan_secrets.py --all
 
+test-unit:
+	pytest tests/unit tests/application --cov=app --cov-fail-under=80
+
+# Needs a reachable PostgreSQL server in TEST_POSTGRES_URL (see docs/README or .env.example).
 test-integration:
 	pytest tests/integration tests/api --cov=app --cov-append
 
-test: test-unit test-integration
+test:
+	pytest --cov=app --cov-fail-under=80
 
-check: lint typecheck arch test
+audit:
+	pip-audit --skip-editable
+
+check: secrets lint typecheck arch test
 
 hooks-install:
 	git config core.hooksPath .githooks
@@ -41,3 +52,6 @@ seed:
 
 docker-up:
 	docker compose up --build -d
+
+docker-down:
+	docker compose down

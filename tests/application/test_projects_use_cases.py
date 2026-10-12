@@ -153,7 +153,9 @@ def test_add_project_member_unauthorized() -> None:
     use_case = AddProjectMemberUseCase(project_repo=repo, clock=clock, uow=uow)
     cmd = AddMemberCommand(user_id="dev-1", role=ProjectRole.MEMBER)
 
-    with pytest.raises(ValueError, match="No tienes permisos"):
+    from app.shared.domain.authorization import AccessDeniedError
+
+    with pytest.raises(AccessDeniedError):
         use_case.execute(project_id="proj-1", cmd=cmd, actor_id="stranger-id")
 
 
@@ -181,5 +183,7 @@ def test_list_and_get_projects() -> None:
     assert p.id == "proj-1"
 
     # Unauthorized get
-    with pytest.raises(ValueError, match="No tienes acceso"):
+    from app.shared.domain.authorization import AccessDeniedError
+
+    with pytest.raises(AccessDeniedError):
         get_uc.execute("proj-1", "other-user")
