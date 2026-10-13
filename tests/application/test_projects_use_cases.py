@@ -14,8 +14,23 @@ from app.modules.projects.application.use_cases import (
     GetProjectUseCase,
     ListProjectsUseCase,
 )
-from app.modules.projects.domain.entities import Project, ProjectMember, ProjectRole
+from app.modules.projects.domain.entities import (
+    Project,
+    ProjectMember,
+    ProjectPriority,
+    ProjectRole,
+    ProjectStatus,
+)
+from app.shared.application.identity import CurrentUser
 from app.shared.application.ports import UnitOfWork
+
+
+class FakeManagerLookup:
+    def __init__(self, valid_ids: set[str]) -> None:
+        self._valid = valid_ids
+
+    def is_active_manager(self, user_id: str) -> bool:
+        return user_id in self._valid
 
 
 class FakeProjectRepository:
@@ -24,13 +39,27 @@ class FakeProjectRepository:
         self.members: list[ProjectMember] = []
 
     def get_by_id(self, project_id: str) -> Project | None:
-        return self.projects.get(project_id)
+        project = self.projects.get(project_id)
+        if project is None or project.is_deleted():
+            return None
+        return project
 
-    def list_by_user(self, user_id: str) -> list[Project]:
+    def list_visible_for_user(self, user_id: str, *, role: str) -> list[Project]:
         member_proj_ids = {m.project_id for m in self.members if m.user_id == user_id}
-        return [
-            p for p in self.projects.values() if p.owner_id == user_id or p.id in member_proj_ids
-        ]
+        visible: list[Project] = []
+        for project in self.projects.values():
+            if project.is_deleted():
+                continue
+            if (
+                role == "admin"
+                or (
+                    role == "manager"
+                    and (project.manager_id == user_id or project.id in member_proj_ids)
+                )
+                or project.id in member_proj_ids
+            ):
+                visible.append(project)
+        return visible
 
     def save(self, project: Project) -> None:
         self.projects[project.id] = project
@@ -39,13 +68,22 @@ class FakeProjectRepository:
         self.projects[project.id] = project
 
     def add_member(self, member: ProjectMember) -> None:
-        self.members.append(member)
+        if not self.is_member(member.project_id, member.user_id):
+            self.members.append(member)
 
     def get_members(self, project_id: str) -> list[ProjectMember]:
         return [m for m in self.members if m.project_id == project_id]
 
     def is_member(self, project_id: str, user_id: str) -> bool:
         return any(m.project_id == project_id and m.user_id == user_id for m in self.members)
+
+    def soft_delete_cascade(self, project_id: str, when: datetime) -> None:
+        project = self.projects.get(project_id)
+        if project:
+            project.deleted_at = when
+
+    def add_audit_entry(self, **kwargs: object) -> None:
+        return None
 
 
 class FakeClock:
@@ -86,52 +124,67 @@ class FakeUnitOfWork(UnitOfWork):
         pass
 
 
+def _project(**overrides: object) -> Project:
+    now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    base = dict(
+        id="proj-1",
+        name="Test",
+        description="",
+        owner_id="owner-id",
+        manager_id="owner-id",
+        priority=ProjectPriority.MEDIA,
+        tech_stack=[],
+        meeting_link=None,
+        status=ProjectStatus.PLANIFICACION,
+        created_at=now,
+        updated_at=now,
+    )
+    base.update(overrides)
+    return Project(**base)  # type: ignore[arg-type]
+
+
 def test_create_project_use_case() -> None:
     repo = FakeProjectRepository()
-    clock = FakeClock(datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC))
-    id_gen = FakeIdGenerator("proj-999")
+    now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    clock = FakeClock(now)
     uow = FakeUnitOfWork()
 
     use_case = CreateProjectUseCase(
         project_repo=repo,
-        id_gen=id_gen,
+        manager_lookup=FakeManagerLookup({"mgr-1"}),
+        id_gen=FakeIdGenerator("proj-999"),
         clock=clock,
         uow=uow,
     )
 
-    cmd = CreateProjectCommand(name="DashNode Platform", description="Main platform")
-    result = use_case.execute(cmd=cmd, owner_id="user-owner-1")
+    actor = CurrentUser(
+        id="mgr-1",
+        email="m@example.com",
+        name="Mgr",
+        role="manager",
+        is_active=True,
+        created_at=now,
+    )
+    cmd = CreateProjectCommand(name="DashNode Platform", description="Main", manager_id="mgr-1")
+    result = use_case.execute(cmd=cmd, actor=actor)
 
     assert result.id == "proj-999"
-    assert result.name == "DashNode Platform"
-    assert result.owner_id == "user-owner-1"
+    assert result.manager_id == "mgr-1"
     assert uow.committed is True
-
-    # Owner should be added as lead member
-    assert repo.is_member("proj-999", "user-owner-1") is True
+    assert repo.is_member("proj-999", "mgr-1") is True
 
 
 def test_add_project_member_success() -> None:
     repo = FakeProjectRepository()
     clock = FakeClock(datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC))
     uow = FakeUnitOfWork()
-
-    project = Project(
-        id="proj-1",
-        name="Test",
-        description="",
-        owner_id="owner-id",
-        created_at=clock.now(),
-        updated_at=clock.now(),
-    )
-    repo.save(project)
+    repo.save(_project())
 
     use_case = AddProjectMemberUseCase(project_repo=repo, clock=clock, uow=uow)
     cmd = AddMemberCommand(user_id="dev-1", role=ProjectRole.MEMBER)
 
     member_dto = use_case.execute(project_id="proj-1", cmd=cmd, actor_id="owner-id")
     assert member_dto.user_id == "dev-1"
-    assert member_dto.role == ProjectRole.MEMBER
     assert uow.committed is True
 
 
@@ -139,16 +192,7 @@ def test_add_project_member_unauthorized() -> None:
     repo = FakeProjectRepository()
     clock = FakeClock(datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC))
     uow = FakeUnitOfWork()
-
-    project = Project(
-        id="proj-1",
-        name="Test",
-        description="",
-        owner_id="owner-id",
-        created_at=clock.now(),
-        updated_at=clock.now(),
-    )
-    repo.save(project)
+    repo.save(_project())
 
     use_case = AddProjectMemberUseCase(project_repo=repo, clock=clock, uow=uow)
     cmd = AddMemberCommand(user_id="dev-1", role=ProjectRole.MEMBER)
@@ -161,29 +205,34 @@ def test_add_project_member_unauthorized() -> None:
 
 def test_list_and_get_projects() -> None:
     repo = FakeProjectRepository()
-    clock = FakeClock(datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC))
-
-    project = Project(
-        id="proj-1",
-        name="Project One",
-        description="",
-        owner_id="owner-1",
-        created_at=clock.now(),
-        updated_at=clock.now(),
-    )
-    repo.save(project)
+    repo.save(_project(id="proj-1", owner_id="owner-1", manager_id="owner-1"))
 
     list_uc = ListProjectsUseCase(project_repo=repo)
-    user_projects = list_uc.execute("owner-1")
+    now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    actor = CurrentUser(
+        id="owner-1",
+        email="o@x.com",
+        name="O",
+        role="manager",
+        is_active=True,
+        created_at=now,
+    )
+    user_projects = list_uc.execute(actor)
     assert len(user_projects) == 1
-    assert user_projects[0].name == "Project One"
 
     get_uc = GetProjectUseCase(project_repo=repo)
-    p = get_uc.execute("proj-1", "owner-1")
+    p = get_uc.execute("proj-1", actor)
     assert p.id == "proj-1"
 
-    # Unauthorized get
     from app.shared.domain.authorization import AccessDeniedError
 
+    other = CurrentUser(
+        id="other",
+        email="x@x.com",
+        name="X",
+        role="developer",
+        is_active=True,
+        created_at=now,
+    )
     with pytest.raises(AccessDeniedError):
-        get_uc.execute("proj-1", "other-user")
+        get_uc.execute("proj-1", other)

@@ -53,6 +53,9 @@ class FakeUserRepository:
             users = [u for u in users if u.role.value == role]
         return sorted(users, key=lambda u: (u.name, u.email))
 
+    def list_active_managers(self) -> list[User]:
+        return [u for u in self.users_by_id.values() if u.role.value == "manager" and u.is_active]
+
 
 class FakeClock:
     def __init__(self, fixed_now: datetime = T0) -> None:
