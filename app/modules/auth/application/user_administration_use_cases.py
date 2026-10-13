@@ -342,3 +342,26 @@ class UpdateUserByAdminUseCase:
             message=messages.USER_UPDATED,
             user=to_user_dto(target),
         )
+
+
+class ListActiveManagersUseCase:
+    """EP-03: active managers for project assignment dropdowns (admin/manager)."""
+
+    def __init__(self, user_repo: UserRepository) -> None:
+        self._users = user_repo
+
+    def execute(self, *, actor_id: str) -> list[AdminUserSummaryDTO]:
+        actor = self._users.get_by_id(actor_id)
+        if actor is None or actor.role not in (UserRole.ADMIN, UserRole.MANAGER):
+            raise AccessDeniedError()
+
+        return [
+            AdminUserSummaryDTO(
+                id=user.id,
+                name=user.name,
+                email=user.email,
+                role=user.role.value,
+                is_active=user.is_active,
+            )
+            for user in self._users.list_active_managers()
+        ]

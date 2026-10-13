@@ -39,3 +39,21 @@ tests/
 ## Archivos retirados
 
 `app/modules/auth/infrastructure/token_service.py` y la dependencia `pyjwt` (reemplazados por sesiones de servidor).
+
+## EP-03 — Proyectos (HU_DN_02_22 … HU_DN_02_26)
+
+```
+app/modules/projects/
+  domain/          entities (prioridad, estado), messages (literales HU), rules, ports (+ ManagerLookup)
+  application/     use_cases (crear, editar, estado, gerente, soft delete), access.py, mappers.py, dtos.py
+  infrastructure/  models (projects + deleted_at), repositories (cascada lógica tareas)
+  api/routes.py    stub documental; HTTP real en orchestration
+app/orchestration/
+  project_routes.py           POST/PATCH/DELETE /api/v1/projects…
+  project_manager_lookup.py   puerto ManagerLookup → repositorio auth (sin importar módulo auth desde projects)
+  projects_container.py       fábricas de casos de uso
+migrations/versions/005_project_ep03_fields.py
+tests/api/test_projects_ep03_api.py
+```
+
+`GET /api/v1/auth/managers` lista gerentes activos para formularios (auth module).

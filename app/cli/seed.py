@@ -105,12 +105,18 @@ def seed(db: Session | None = None) -> int:
         if session.query(ProjectModel).filter_by(owner_id=admin_id).first() is None:
             id_gen = UuidGenerator()
             proj_id = id_gen.generate()
+            manager_id = ids.get("managerTrue", admin_id)
             session.add(
                 ProjectModel(
                     id=proj_id,
                     name="DashNode Initial Project",
                     description="Initial seed project for DashNode platform",
                     owner_id=admin_id,
+                    manager_id=manager_id,
+                    priority="media",
+                    tech_stack="[]",
+                    meeting_link=None,
+                    status="planificacion",
                     created_at=now,
                     updated_at=now,
                 )

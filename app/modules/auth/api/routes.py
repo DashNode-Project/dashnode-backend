@@ -31,6 +31,7 @@ from app.modules.auth.application.use_cases import RegisterManagerUseCase
 from app.modules.auth.application.user_administration_use_cases import (
     CreateUserByAdminUseCase,
     InviteDeveloperByManagerUseCase,
+    ListActiveManagersUseCase,
     ListAdminUsersUseCase,
 )
 from app.orchestration.auth_container import (
@@ -38,6 +39,7 @@ from app.orchestration.auth_container import (
     get_complete_password_reset_use_case,
     get_create_user_by_admin_use_case,
     get_invite_developer_use_case,
+    get_list_active_managers_use_case,
     get_list_admin_users_use_case,
     get_login_use_case,
     get_logout_use_case,
@@ -48,6 +50,7 @@ from app.orchestration.security import (
     get_current_session,
     get_session_token,
     require_admin,
+    require_admin_or_manager,
     require_manager,
 )
 from app.shared.application.identity import CurrentSession, CurrentUser
@@ -166,6 +169,18 @@ def list_admin_users(
     use_case: ListAdminUsersUseCase = Depends(get_list_admin_users_use_case),
 ) -> list[AdminUserSummaryDTO]:
     return use_case.execute(actor_id=current_user.id, name=name, role=role)
+
+
+@router.get(
+    "/managers",
+    response_model=list[AdminUserSummaryDTO],
+    summary="Listar gerentes activos (Administrador o Gerente)",
+)
+def list_active_managers(
+    current_user: CurrentUser = Depends(require_admin_or_manager),
+    use_case: ListActiveManagersUseCase = Depends(get_list_active_managers_use_case),
+) -> list[AdminUserSummaryDTO]:
+    return use_case.execute(actor_id=current_user.id)
 
 
 @router.post(

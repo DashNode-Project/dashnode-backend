@@ -95,3 +95,15 @@ Informe E2E completo: `docs/integration-report.md`.
 
 - Migraciones aplicadas con `DATABASE_URL` + `sslmode=require`; seed vía `python -m app.cli.seed` y variables `SEED_*` (ver `docs/deployment-guide.md`).
 
+## EP-03 — Proyectos (rama `feature/ep-03-projects-pro`)
+
+| HU | Backend | Tests |
+|---|---|---|
+| HU_DN_02_22 | `CreateProjectUseCase`, estado inicial `planificacion`, RN-AUT-03 | `test_hu_22_*` |
+| HU_DN_02_23 | `UpdateProjectUseCase`, admin o gerente responsable | `test_hu_23_*` |
+| HU_DN_02_24 | `UpdateProjectStatusUseCase`, valores SRS | `test_hu_24_*` |
+| HU_DN_02_25 | `AssignProjectManagerUseCase`, gerente activo | `test_hu_25_*` |
+| HU_DN_02_26 | `DeleteProjectUseCase`, soft delete + `audit_logs` | `test_hu_26_*` |
+
+Validación local: `pytest` 256 passed, cobertura ~89 %, `ruff check` limpio, import-linter BR-4 cumplido (`project_routes` en orchestration).
+

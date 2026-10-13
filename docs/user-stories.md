@@ -539,3 +539,17 @@
 | HU_DN_01_21 | Implementado | `GET/PATCH /api/v1/auth/profile`, avatar local 2 MB, migración `004_user_avatar` |
 
 ---
+
+## Estado de implementación — EP-03 (HU_DN_02_22 … HU_DN_02_26, Sprint 2)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_02_22 | Implementado | `POST /api/v1/projects`, `GET /api/v1/auth/managers`, migración `005_project_ep03_fields`, tests `test_hu_22_*` en `test_projects_ep03_api.py` |
+| HU_DN_02_23 | Implementado | `PATCH /api/v1/projects/{id}`, autorización admin o gerente responsable, tests `test_hu_23_*` |
+| HU_DN_02_24 | Implementado | `PATCH /api/v1/projects/{id}/status`, estados SRS, tests `test_hu_24_*` |
+| HU_DN_02_25 | Implementado | `POST /api/v1/projects/{id}/manager`, validación rol Gerente activo, tests `test_hu_25_*` |
+| HU_DN_02_26 | Implementado | `DELETE /api/v1/projects/{id}` (soft delete en cascada + `audit_logs`), solo admin, tests `test_hu_26_*` |
+
+Mensajes literales en `app/modules/projects/domain/messages.py`. Rutas HTTP en `app/orchestration/project_routes.py` (BR-4).
+
+---

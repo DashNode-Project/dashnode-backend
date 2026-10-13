@@ -13,6 +13,11 @@ class SqlAlchemyProjectOwnershipQuery(ProjectOwnershipQuery):
 
     def user_owns_projects(self, user_id: str) -> bool:
         stmt = (
-            select(func.count()).select_from(ProjectModel).where(ProjectModel.owner_id == user_id)
+            select(func.count())
+            .select_from(ProjectModel)
+            .where(
+                ProjectModel.manager_id == user_id,
+                ProjectModel.deleted_at.is_(None),
+            )
         )
         return int(self._session.execute(stmt).scalar_one()) > 0
