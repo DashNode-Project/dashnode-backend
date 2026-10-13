@@ -1,0 +1,31 @@
+"""Literal user-facing messages for EP-04 and EP-05."""
+
+AVAILABILITY_SAVED = "Disponibilidad guardada correctamente."
+NO_CHANGES_TO_SAVE = "No hay cambios por guardar."
+TECHNICAL_FAILURE = "No fue posible completar la operación. Intente nuevamente."
+LOAD_FAILURE = "No fue posible cargar la información. Intente nuevamente."
+ACCESS_DENIED = "Acceso denegado. No tiene permisos para realizar esta acción."
+
+INVALID_TIME_INTERVAL = "El intervalo horario no es válido."
+SELECT_AT_LEAST_ONE_DAY = "Seleccione al menos un día."
+SELECT_AT_LEAST_ONE_PARTICIPANT = "Seleccione al menos un participante."
+DURATION_WHOLE_HOURS = "La duración debe ser en horas completas."
+DURATION_EXCEEDS_INTERVAL = "La duración no cabe en el intervalo seleccionado."
+NO_AVAILABLE_SLOTS = "No hay horarios disponibles para los criterios seleccionados."
+
+MEETING_CREATED = "Reunión agendada correctamente."
+MEETING_SCHEDULED = "Reunión programada correctamente."
+MEETING_TITLE_REQUIRED = "El título de la reunión es obligatorio."
+MEETING_TYPE_REQUIRED = "Seleccione el tipo de reunión."
+PROJECT_REQUIRED = "Debe seleccionar un proyecto."
+PARTICIPANTS_MUST_BE_PROJECT_MEMBERS = (
+    "Todos los participantes deben ser miembros del proyecto seleccionado."
+)
+INVALID_MEETING_LINK = "El enlace de la reunión no tiene un formato de URL válido."
+PARTICIPANT_MEETING_CONFLICT = "Uno o más participantes ya tienen una reunión en ese horario."
+NO_MEETINGS_TO_SHOW = "No hay reuniones para mostrar."
+MEETING_CANCELLED = "Reunión cancelada correctamente."
+MEETING_RESPONSE_RECORDED = "Respuesta registrada correctamente."
+MEETING_SUMMARY_SAVED = "Resumen guardado correctamente."
+MEETING_NOT_FOUND = "Reunión no encontrada."
+SUMMARY_TOO_LONG = "El resumen no puede superar 2000 caracteres."

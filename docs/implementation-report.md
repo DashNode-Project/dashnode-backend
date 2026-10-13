@@ -107,3 +107,92 @@ Informe E2E completo: `docs/integration-report.md`.
 
 Validación local: `pytest` 256 passed, cobertura ~89 %, `ruff check` limpio, import-linter BR-4 cumplido (`project_routes` en orchestration).
 
+## EP-04 / EP-05 — Disponibilidad y Reuniones (ramas `feature/ep-04-availability-dis`, `feature/ep-05-meetings-age`)
+
+| HU | Backend | Tests |
+|---|---|---|
+| HU_DN_02_32 | `SaveUserAvailabilityUseCase`, `GetUserAvailabilityUseCase`, `SqlAlchemyAvailabilityRepository`, migración `006_availability_and_meetings.py` | `test_save_user_availability_success_and_no_changes`, `test_availability_mine_save_and_retrieve_and_no_changes` |
+| HU_DN_02_33 | Reutilización/herencia con fallback a última disponibilidad guardada (`is_inherited: true`) | `test_get_user_availability_inheritance` |
+| HU_DN_02_34 | `GetTeamAvailabilityUseCase`, `TeamMembersLookup` (BR-4), control de acceso solo admin/manager | `test_get_team_availability_permissions`, `test_availability_team_permissions` |
+| HU_DN_03_35 | Reglas de validación de criterios en dominio: intervalo 24h, días obligatorios, participantes obligatorios, duración en horas completas | `test_validate_meeting_search_criteria` |
+| HU_DN_03_36 | `SearchMeetingSlotsUseCase` (cálculo de intersección y exclusión de reuniones agendadas), `CreateMeetingUseCase`, `MeetingModel`, `MeetingParticipantModel` | `test_search_meeting_slots_and_create_meeting`, `test_search_meeting_slots_no_slots_found` |
+
+Validación local:
+- `pytest -m "not integration"`: 277 pruebas pasadas, 0 fallos.
+- Cobertura: 89 % total en `app/` (umbral mínimo 80 %).
+- Calidad de código: `ruff check .` limpio, `ruff format --check .` limpio.
+- Verificación estática de tipos: `mypy .` limpio (0 errores en 170 archivos).
+- Arquitectura modular: `lint-imports` limpio (3 contratos cumplidos: BR-1, BR-2, BR-4).
+
+---
+
+## EP-05 — Agendamiento y Reuniones (HU_DN_03_37 … HU_DN_03_41)
+
+### Análisis del Orquestador (Modo Lote / Épica)
+- **Fecha:** 2026-10-13
+- **Clasificación del lote:** FULL_STACK
+- **Complejidad:** MODERATE / COMPLEX (Score: 82/100)
+- **Políticas cargadas:** `policies.xml`, `adaptive-policies.xml`, `project-modes.xml`, `engineering-standards.xml` (seguridad, mensajes_literales, contrato_de_error, quality_gates, estrategia_de_pruebas, accesibilidad).
+- **Project Mode:** EXTEND_EXISTING en ambos repositorios.
+- **Ramas:** `feature/ep-05-meetings-age` (tanto backend como frontend).
+- **Prohibición de push:** No publicar ramas hasta verificación integral completa.
+
+#### Grafo de dependencias y flujo:
+1. `HU_DN_03_37`: Selección de horario disponible resultante de búsqueda (HU_DN_03_36) y apertura modal de confirmación en solo lectura (fecha, hora, duración, participantes).
+2. `HU_DN_03_38`: Programación de reunión desde ventana de confirmación (título ≤ 100 caracteres obligatorio, tipo obligatorio entre Daily/Planning/Review/Retro/General, proyecto asociado obligatorio con validación de membresía de todos los participantes y prellenado de enlace sugerido, enlace opcional con formato URL válido, rechazo de solapamiento concurrente para cualquier participante, persistencia, notificación a participantes y redirección a reuniones).
+3. `HU_DN_03_39`: Listado de reuniones (Próximas y Pasadas) con alcance por rol (Admin: todas; Gerente: propias y de sus proyectos; Desarrollador: solo participante), orden cronológico (próximas asc; pasadas sep), datos completos y estados.
+4. `HU_DN_03_40`: Vista calendario interactiva con conmutador Lista/Calendario con el mismo conjunto de reuniones, título y tipo distinguibles.
+5. `HU_DN_03_41`: Detalle de reunión desde lista o calendario, participantes y sus respuestas (pendiente, aceptada, rechazada), resumen y acta, acciones según rol ('Enviar a Google Calendar', 'Aceptar / Rechazar', 'Cancelar reunión', 'Registrar resumen y acta'), control de acceso por rol (Desarrollador denegado si no participa).
+
+#### Contrato Compartido:
+- **API Endpoints:**
+  - `POST /api/v1/availability/meetings`: Creación de reunión con campos `title`, `type`, `project_id`, `date`, `start_time`, `end_time`, `duration`, `link`, `participant_ids`.
+  - `GET /api/v1/availability/meetings`: Listado de reuniones filtradas por alcance de rol y parámetros opcionales.
+  - `GET /api/v1/availability/meetings/{id}`: Detalle completo de reunión con creador, participantes y respuestas.
+  - `POST /api/v1/availability/meetings/{id}/cancel`: Cancelación de reunión por creador.
+  - `POST /api/v1/availability/meetings/{id}/respond`: Registro de respuesta de participante ('aceptada' | 'rechazada').
+  - `POST /api/v1/availability/meetings/{id}/summary`: Registro de resumen (≤ 2000 chars) y URL de acta.
+- **Mensajes Literales Verbatim:**
+  - Título vacío: `'El título de la reunión es obligatorio.'`
+  - Tipo vacío: `'Seleccione el tipo de reunión.'`
+  - Enlace inválido: `'El enlace de la reunión no tiene un formato de URL válido.'`
+  - Proyecto vacío: `'Debe seleccionar un proyecto.'`
+  - Miembros no pertenecientes al proyecto: `'Todos los participantes deben ser miembros del proyecto seleccionado.'`
+  - Solapamiento concurrente: `'Uno o más participantes ya tienen una reunión en ese horario.'`
+  - Éxito al programar: `'Reunión programada correctamente.'`
+  - Éxito sin datos: `'No hay reuniones para mostrar.'`
+  - Fallo técnico genérico: `'No fue posible completar la operación. Intente nuevamente.'`
+  - Fallo de carga: `'No fue posible cargar la información. Intente nuevamente.'`
+  - Acceso denegado: `'Acceso denegado. No tiene permisos para realizar esta acción.'`### Implementación Backend (EP-05)
+
+#### Componentes Desarrollados:
+1. **Entidades y Dominio (`app/modules/availability/domain/`):**
+   - Mensajes literales verbatim en `messages.py`: `MEETING_TITLE_REQUIRED`, `MEETING_TYPE_REQUIRED`, `PROJECT_REQUIRED`, `PARTICIPANTS_MUST_BE_PROJECT_MEMBERS`, `INVALID_MEETING_LINK`, `PARTICIPANT_MEETING_CONFLICT`, `NO_MEETINGS_TO_SHOW`, `MEETING_CANCELLED`, `MEETING_RESPONSE_REGISTERED`, `MEETING_SUMMARY_REGISTERED`.
+   - `Meeting` entity extendida con `type`, `summary`, `minutes_url`, validaciones de tipo de reunión (`VALID_MEETING_TYPES`) y respuestas (`VALID_PARTICIPANT_RESPONSES`).
+   - Puertos de dominio en `ports.py`: `ProjectLookup`, `NotificationSender`, `UserLookup`, y extensiones a `AvailabilityRepository`.
+   - Reglas de negocio: detección de solapamiento concurrente en `check_concurrent_meeting`, y alcance de consulta por rol.
+
+2. **Infraestructura y Persistencia (`app/modules/availability/infrastructure/`):**
+   - Migración Alembic `007_meeting_fields_and_responses.py` añadiendo columnas `type`, `summary`, `minutes_url` a `meetings` y `response` a `meeting_participants`.
+   - Modelos SQLAlchemy y repositorio `SqlAlchemyAvailabilityRepository` implementando consultas de rol, actualización de respuestas de participantes, y verificación de concurrencia.
+   - Adaptadores en `app/orchestration/meeting_adapters.py` para cumplir aislamiento modular (BR-4) y estándares de reloj/id (TID251 / HC-09).
+
+3. **Casos de Uso y API (`app/modules/availability/application/` y `app/orchestration/`):**
+   - `CreateMeetingUseCase`: validaciones de título, tipo, proyecto, membresía de participantes, URL de enlace, detección de concurrencia (HTTP 409 `PARTICIPANT_MEETING_CONFLICT`), persistencia atómica con `UnitOfWork` y despacho de notificaciones a participantes.
+   - `ListMeetingsUseCase`: filtrado según rol (Admin: todas; Manager: propias y de proyectos gestionados; Developer: solo participante) y parámetros de fecha y estado (`proximas` / `pasadas`).
+   - `GetMeetingDetailUseCase`: detalle enriquecido con participantes y sus respuestas; control estricto de acceso (403 para desarrolladores no participantes).
+   - `CancelMeetingUseCase`: cancelación exclusiva por creador o admin.
+   - `RespondMeetingUseCase`: registro de respuesta `aceptada` o `rechazada` por el participante.
+   - `UpdateMeetingSummaryUseCase`: registro de resumen (máx 2000 caracteres) y URL de acta por creador/admin, marcando estado como `completed`.
+   - `availability_routes.py`: rutas REST completas con serialización Pydantic.
+
+#### Verificación de Quality Gates Backend:
+- `pytest`: 296 pruebas ejecutadas y aprobadas (100% de éxito).
+- Pruebas dedicadas EP-05: `tests/api/test_meetings_ep05_api.py` (9 pruebas cubriendo todas las HUs y casos extremos).
+- `ruff check .`: 0 errores.
+- `ruff format --check .`: 191 archivos formateados correctamente.
+- `mypy app/`: 0 errores en 122 archivos.
+- `lint-imports`: 3 contratos cumplidos (BR-1, BR-2, BR-4 intactos).
+- `scan_secrets.py`: 0 secretos detectados (205 archivos limpios).
+- `alembic upgrade head`: Migración 007 aplicada exitosamente.
+
