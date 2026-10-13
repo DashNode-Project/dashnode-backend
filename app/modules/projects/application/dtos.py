@@ -8,7 +8,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.projects.domain.entities import ProjectPriority, ProjectRole, ProjectStatus
+from app.modules.projects.domain.entities import ProjectPriority, ProjectStatus
 
 
 class CreateProjectCommand(BaseModel):

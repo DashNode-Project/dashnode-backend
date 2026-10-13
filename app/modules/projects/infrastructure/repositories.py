@@ -5,6 +5,7 @@ SQLAlchemy repository implementation for Projects.
 """
 
 import json
+from datetime import datetime
 
 from sqlalchemy import delete, or_, select, text, update
 from sqlalchemy.orm import Session
@@ -167,17 +168,14 @@ class SqlAlchemyProjectRepository(ProjectRepository):
             )
         )
 
-    def clear_assignee_tasks(self, project_id: str, user_id: str) -> None:
-        from datetime import UTC, datetime
-
-        now = datetime.now(tz=UTC)
+    def clear_assignee_tasks(self, project_id: str, user_id: str, *, when: datetime) -> None:
         self._session.execute(
             text(
                 "UPDATE tasks SET assignee_id = NULL, updated_at = :now "
                 "WHERE project_id = :project_id AND assignee_id = :user_id "
                 "AND deleted_at IS NULL AND status != 'completed'"
             ),
-            {"now": now, "project_id": project_id, "user_id": user_id},
+            {"now": when, "project_id": project_id, "user_id": user_id},
         )
 
     def get_health_snapshot(self, project_id: str) -> ProjectHealthSnapshot:

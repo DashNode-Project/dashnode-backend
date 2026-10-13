@@ -124,9 +124,7 @@ class SqlAlchemyUserRepository(UserRepository):
         stmt = select(UserModel).where(UserModel.is_active.is_(True))
         if name_contains:
             pattern = f"%{name_contains.strip()}%"
-            stmt = stmt.where(
-                UserModel.name.ilike(pattern) | UserModel.email.ilike(pattern)
-            )
+            stmt = stmt.where(UserModel.name.ilike(pattern) | UserModel.email.ilike(pattern))
         stmt = stmt.order_by(UserModel.name, UserModel.email)
         return [self._to_domain(model) for model in self._session.execute(stmt).scalars()]
 

@@ -20,7 +20,6 @@ from app.modules.projects.application.dtos import (
     UpdateProjectCommand,
     UpdateProjectStatusCommand,
 )
-from app.modules.projects.domain.health import compute_health_indicators
 from app.modules.projects.application.mappers import project_to_dto
 from app.modules.projects.domain import messages
 from app.modules.projects.domain.entities import (
@@ -30,6 +29,7 @@ from app.modules.projects.domain.entities import (
     ProjectRole,
     ProjectStatus,
 )
+from app.modules.projects.domain.health import compute_health_indicators
 from app.modules.projects.domain.ports import ActiveUserLookup, ManagerLookup, ProjectRepository
 from app.modules.projects.domain.rules import (
     parse_status,
@@ -320,7 +320,9 @@ class AddProjectMemberUseCase:
         self._clock = clock
         self._uow = uow
 
-    def execute(self, project_id: str, cmd: AddMemberCommand, actor: CurrentUser) -> MessageResponse:
+    def execute(
+        self, project_id: str, cmd: AddMemberCommand, actor: CurrentUser
+    ) -> MessageResponse:
         project = self._repo.get_by_id(project_id)
         if project is None:
             raise AppError("PROJECT_NOT_FOUND", messages.PROJECT_NOT_FOUND, ErrorKind.NOT_FOUND)
@@ -359,9 +361,11 @@ class RemoveProjectMemberUseCase:
     def __init__(
         self,
         project_repo: ProjectRepository,
+        clock: Clock,
         uow: UnitOfWork,
     ) -> None:
         self._repo = project_repo
+        self._clock = clock
         self._uow = uow
 
     def execute(self, project_id: str, member_user_id: str, actor: CurrentUser) -> MessageResponse:
@@ -378,8 +382,9 @@ class RemoveProjectMemberUseCase:
         if not self._repo.is_member(project_id, member_user_id):
             raise AppError("PROJECT_MEMBER", messages.PROJECT_NOT_FOUND, ErrorKind.NOT_FOUND)
 
+        now = self._clock.now()
         with self._uow:
-            self._repo.clear_assignee_tasks(project_id, member_user_id)
+            self._repo.clear_assignee_tasks(project_id, member_user_id, when=now)
             self._repo.remove_member(project_id, member_user_id)
             self._uow.commit()
 

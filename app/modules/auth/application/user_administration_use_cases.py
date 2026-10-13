@@ -373,9 +373,7 @@ class ListActiveUsersUseCase:
     def __init__(self, user_repo: UserRepository) -> None:
         self._users = user_repo
 
-    def execute(
-        self, *, actor_id: str, query: str | None = None
-    ) -> list[AdminUserSummaryDTO]:
+    def execute(self, *, actor_id: str, query: str | None = None) -> list[AdminUserSummaryDTO]:
         actor = self._users.get_by_id(actor_id)
         if actor is None or actor.role not in (UserRole.ADMIN, UserRole.MANAGER):
             raise AccessDeniedError()

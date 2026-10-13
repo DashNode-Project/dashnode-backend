@@ -16,16 +16,15 @@ from app.modules.projects.application.use_cases import (
     ListProjectsUseCase,
     RemoveProjectMemberUseCase,
 )
-from app.modules.projects.domain.health import ProjectHealthSnapshot, compute_health_indicators
-from app.modules.projects.domain.messages import MEMBER_ADDED
-from app.modules.projects.domain.ports import MemberProfile
 from app.modules.projects.domain.entities import (
     Project,
     ProjectMember,
     ProjectPriority,
-    ProjectRole,
     ProjectStatus,
 )
+from app.modules.projects.domain.health import ProjectHealthSnapshot, compute_health_indicators
+from app.modules.projects.domain.messages import MEMBER_ADDED
+from app.modules.projects.domain.ports import MemberProfile
 from app.shared.application.identity import CurrentUser
 from app.shared.application.ports import UnitOfWork
 
@@ -92,12 +91,10 @@ class FakeProjectRepository:
 
     def remove_member(self, project_id: str, user_id: str) -> None:
         self.members = [
-            m
-            for m in self.members
-            if not (m.project_id == project_id and m.user_id == user_id)
+            m for m in self.members if not (m.project_id == project_id and m.user_id == user_id)
         ]
 
-    def clear_assignee_tasks(self, project_id: str, user_id: str) -> None:
+    def clear_assignee_tasks(self, project_id: str, user_id: str, *, when: datetime) -> None:
         return None
 
     def get_health_snapshot(self, project_id: str) -> ProjectHealthSnapshot:
@@ -259,9 +256,7 @@ def test_add_project_member_unauthorized() -> None:
     clock = FakeClock(datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC))
     uow = FakeUnitOfWork()
     repo.save(_project())
-    users = FakeActiveUserLookup(
-        {"dev-1": MemberProfile("dev-1", "Dev", "dev@t.com", "developer")}
-    )
+    users = FakeActiveUserLookup({"dev-1": MemberProfile("dev-1", "Dev", "dev@t.com", "developer")})
     use_case = AddProjectMemberUseCase(project_repo=repo, users=users, clock=clock, uow=uow)
     cmd = AddMemberCommand(user_id="dev-1")
     now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
@@ -293,7 +288,9 @@ def test_remove_project_member_blocks_manager() -> None:
         is_active=True,
         created_at=now,
     )
-    use_case = RemoveProjectMemberUseCase(project_repo=repo, uow=uow)
+    use_case = RemoveProjectMemberUseCase(
+        project_repo=repo, clock=FakeClock(datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)), uow=uow
+    )
     from app.shared.domain.errors import AppError
 
     with pytest.raises(AppError):

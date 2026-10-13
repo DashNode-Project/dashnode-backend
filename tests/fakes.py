@@ -60,11 +60,7 @@ class FakeUserRepository:
         users = [u for u in self.users_by_id.values() if u.is_active]
         if name_contains:
             needle = name_contains.lower()
-            users = [
-                u
-                for u in users
-                if needle in u.name.lower() or needle in u.email.lower()
-            ]
+            users = [u for u in users if needle in u.name.lower() or needle in u.email.lower()]
         return sorted(users, key=lambda u: (u.name, u.email))
 
 

@@ -81,6 +81,7 @@ def get_remove_project_member_use_case(
 ) -> RemoveProjectMemberUseCase:
     return RemoveProjectMemberUseCase(
         project_repo=SqlAlchemyProjectRepository(session=db),
+        clock=clock,
         uow=SqlAlchemyUnitOfWork(session=db),
     )
 
