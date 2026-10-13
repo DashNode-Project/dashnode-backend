@@ -15,10 +15,12 @@ from app.modules.projects.application.dtos import (
     CreateProjectCommand,
     MessageResponse,
     ProjectDTO,
+    ProjectHealthDTO,
     ProjectMemberDTO,
     UpdateProjectCommand,
     UpdateProjectStatusCommand,
 )
+from app.modules.projects.domain.health import compute_health_indicators
 from app.modules.projects.application.mappers import project_to_dto
 from app.modules.projects.domain import messages
 from app.modules.projects.domain.entities import (
@@ -28,7 +30,7 @@ from app.modules.projects.domain.entities import (
     ProjectRole,
     ProjectStatus,
 )
-from app.modules.projects.domain.ports import ManagerLookup, ProjectRepository
+from app.modules.projects.domain.ports import ActiveUserLookup, ManagerLookup, ProjectRepository
 from app.modules.projects.domain.rules import (
     parse_status,
     validate_manager_id,
@@ -304,34 +306,43 @@ class DeleteProjectUseCase:
 
 
 class AddProjectMemberUseCase:
-    """Adds a new member to an existing project."""
+    """HU_DN_02_27: add active user as project member (managing manager or admin)."""
 
     def __init__(
         self,
         project_repo: ProjectRepository,
+        users: ActiveUserLookup,
         clock: Clock,
         uow: UnitOfWork,
     ) -> None:
         self._repo = project_repo
+        self._users = users
         self._clock = clock
         self._uow = uow
 
-    def execute(self, project_id: str, cmd: AddMemberCommand, actor_id: str) -> ProjectMemberDTO:
+    def execute(self, project_id: str, cmd: AddMemberCommand, actor: CurrentUser) -> MessageResponse:
         project = self._repo.get_by_id(project_id)
         if project is None:
-            raise ValueError("Proyecto no encontrado.")
+            raise AppError("PROJECT_NOT_FOUND", messages.PROJECT_NOT_FOUND, ErrorKind.NOT_FOUND)
 
-        if project.owner_id != actor_id and not self._repo.is_member(project_id, actor_id):
+        if not can_manage_project(actor, project):
             raise AccessDeniedError()
 
-        if self._repo.is_member(project_id, cmd.user_id):
-            raise ValueError("El usuario ya es miembro de este proyecto.")
+        user_id = cmd.user_id.strip()
+        if not user_id:
+            raise _validation_error({"user_id": messages.MEMBER_USER_REQUIRED})
+
+        if not self._users.is_active_user(user_id):
+            raise _validation_error({"user_id": messages.MEMBER_USER_REQUIRED})
+
+        if self._repo.is_member(project_id, user_id):
+            raise _validation_error({"user_id": messages.MEMBER_ALREADY_EXISTS})
 
         now = self._clock.now()
         member = ProjectMember(
             project_id=project_id,
-            user_id=cmd.user_id,
-            role=cmd.role,
+            user_id=user_id,
+            role=ProjectRole.MEMBER,
             joined_at=now,
         )
 
@@ -339,30 +350,125 @@ class AddProjectMemberUseCase:
             self._repo.add_member(member)
             self._uow.commit()
 
-        return ProjectMemberDTO(
-            project_id=member.project_id,
-            user_id=member.user_id,
-            role=member.role,
-            joined_at=member.joined_at,
-        )
+        return MessageResponse(message=messages.MEMBER_ADDED)
 
 
-class ListProjectsUseCase:
-    """Lists projects visible to the authenticated user."""
+class RemoveProjectMemberUseCase:
+    """HU_DN_02_28: remove member; manager responsible cannot be removed."""
+
+    def __init__(
+        self,
+        project_repo: ProjectRepository,
+        uow: UnitOfWork,
+    ) -> None:
+        self._repo = project_repo
+        self._uow = uow
+
+    def execute(self, project_id: str, member_user_id: str, actor: CurrentUser) -> MessageResponse:
+        project = self._repo.get_by_id(project_id)
+        if project is None:
+            raise AppError("PROJECT_NOT_FOUND", messages.PROJECT_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if not can_manage_project(actor, project):
+            raise AccessDeniedError()
+
+        if member_user_id == project.manager_id:
+            raise _validation_error({"user_id": messages.MEMBER_REMOVE_MANAGER_FORBIDDEN})
+
+        if not self._repo.is_member(project_id, member_user_id):
+            raise AppError("PROJECT_MEMBER", messages.PROJECT_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        with self._uow:
+            self._repo.clear_assignee_tasks(project_id, member_user_id)
+            self._repo.remove_member(project_id, member_user_id)
+            self._uow.commit()
+
+        return MessageResponse(message=messages.MEMBER_REMOVED)
+
+
+class ListProjectMembersUseCase:
+    """Lists members with profile data for project summary."""
+
+    def __init__(
+        self,
+        project_repo: ProjectRepository,
+        users: ActiveUserLookup,
+    ) -> None:
+        self._repo = project_repo
+        self._users = users
+
+    def execute(self, project_id: str, actor: CurrentUser) -> list[ProjectMemberDTO]:
+        project = self._repo.get_by_id(project_id)
+        if project is None:
+            raise AppError("PROJECT_NOT_FOUND", messages.PROJECT_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if not can_view_project(actor, project, self._repo):
+            raise AccessDeniedError()
+
+        rows: list[ProjectMemberDTO] = []
+        for member in self._repo.get_members(project_id):
+            profile = self._users.get_member_profile(member.user_id)
+            if profile is None:
+                continue
+            rows.append(
+                ProjectMemberDTO(
+                    user_id=member.user_id,
+                    name=profile.name,
+                    email=profile.email,
+                    role=profile.role,
+                    joined_at=member.joined_at,
+                )
+            )
+        return rows
+
+
+class GetProjectHealthUseCase:
+    """HU_DN_02_31: progress, velocity and open issues for summary tab."""
 
     def __init__(self, project_repo: ProjectRepository) -> None:
         self._repo = project_repo
 
+    def execute(self, project_id: str, actor: CurrentUser) -> ProjectHealthDTO:
+        project = self._repo.get_by_id(project_id)
+        if project is None:
+            raise AppError("PROJECT_NOT_FOUND", messages.PROJECT_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if not can_view_project(actor, project, self._repo):
+            raise AccessDeniedError()
+
+        snapshot = self._repo.get_health_snapshot(project_id)
+        indicators = compute_health_indicators(snapshot)
+        return ProjectHealthDTO(
+            progress_percent=indicators.progress_percent,
+            velocity=indicators.velocity,
+            open_issues=indicators.open_issues,
+        )
+
+
+class ListProjectsUseCase:
+    """HU_DN_02_29: list projects scoped by role and membership."""
+
+    def __init__(self, project_repo: ProjectRepository, users: ActiveUserLookup) -> None:
+        self._repo = project_repo
+        self._users = users
+
     def execute(self, user: CurrentUser) -> list[ProjectDTO]:
         projects = self._repo.list_visible_for_user(user.id, role=user.role)
-        return [project_to_dto(p) for p in projects]
+        return [
+            project_to_dto(
+                p,
+                manager_name=self._users.display_name(p.manager_id) or "",
+            )
+            for p in projects
+        ]
 
 
 class GetProjectUseCase:
     """Retrieves project details for authorized users."""
 
-    def __init__(self, project_repo: ProjectRepository) -> None:
+    def __init__(self, project_repo: ProjectRepository, users: ActiveUserLookup) -> None:
         self._repo = project_repo
+        self._users = users
 
     def execute(self, project_id: str, user: CurrentUser) -> ProjectDTO:
         project = self._repo.get_by_id(project_id)
@@ -372,4 +478,7 @@ class GetProjectUseCase:
         if not can_view_project(user, project, self._repo):
             raise AccessDeniedError()
 
-        return project_to_dto(project)
+        return project_to_dto(
+            project,
+            manager_name=self._users.display_name(project.manager_id) or "",
+        )

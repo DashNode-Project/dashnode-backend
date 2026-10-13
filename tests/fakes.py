@@ -56,6 +56,17 @@ class FakeUserRepository:
     def list_active_managers(self) -> list[User]:
         return [u for u in self.users_by_id.values() if u.role.value == "manager" and u.is_active]
 
+    def list_active_users(self, *, name_contains: str | None = None) -> list[User]:
+        users = [u for u in self.users_by_id.values() if u.is_active]
+        if name_contains:
+            needle = name_contains.lower()
+            users = [
+                u
+                for u in users
+                if needle in u.name.lower() or needle in u.email.lower()
+            ]
+        return sorted(users, key=lambda u: (u.name, u.email))
+
 
 class FakeClock:
     def __init__(self, fixed_now: datetime = T0) -> None:

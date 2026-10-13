@@ -6,7 +6,7 @@ API tests for Projects routes.
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from tests.support import login_as
+from tests.support import create_user, login_as
 
 
 def test_projects_crud_flow(client: TestClient, db_engine: Engine) -> None:
@@ -37,14 +37,13 @@ def test_projects_crud_flow(client: TestClient, db_engine: Engine) -> None:
     assert get_resp.status_code == 200
     assert get_resp.json()["id"] == proj_id
 
+    dev_id = create_user(db_engine, email="dev-flow@dashnode.io", role="developer")
     add_resp = client.post(
         f"/api/v1/projects/{proj_id}/members",
-        json={"user_id": "dev-user-id", "role": "member"},
+        json={"user_id": dev_id},
     )
-    assert add_resp.status_code == 201
-    member_data = add_resp.json()
-    assert member_data["project_id"] == proj_id
-    assert member_data["user_id"] == "dev-user-id"
+    assert add_resp.status_code == 201, add_resp.text
+    assert add_resp.json()["message"] == "Miembro agregado correctamente."
 
 
 def test_projects_require_authentication(client: TestClient) -> None:

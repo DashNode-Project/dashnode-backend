@@ -32,6 +32,7 @@ from app.modules.auth.application.user_administration_use_cases import (
     CreateUserByAdminUseCase,
     InviteDeveloperByManagerUseCase,
     ListActiveManagersUseCase,
+    ListActiveUsersUseCase,
     ListAdminUsersUseCase,
 )
 from app.orchestration.auth_container import (
@@ -40,6 +41,7 @@ from app.orchestration.auth_container import (
     get_create_user_by_admin_use_case,
     get_invite_developer_use_case,
     get_list_active_managers_use_case,
+    get_list_active_users_use_case,
     get_list_admin_users_use_case,
     get_login_use_case,
     get_logout_use_case,
@@ -181,6 +183,19 @@ def list_active_managers(
     use_case: ListActiveManagersUseCase = Depends(get_list_active_managers_use_case),
 ) -> list[AdminUserSummaryDTO]:
     return use_case.execute(actor_id=current_user.id)
+
+
+@router.get(
+    "/active-users",
+    response_model=list[AdminUserSummaryDTO],
+    summary="Listar usuarios activos (Administrador o Gerente)",
+)
+def list_active_users(
+    q: str | None = Query(default=None, max_length=200),
+    current_user: CurrentUser = Depends(require_admin_or_manager),
+    use_case: ListActiveUsersUseCase = Depends(get_list_active_users_use_case),
+) -> list[AdminUserSummaryDTO]:
+    return use_case.execute(actor_id=current_user.id, query=q)
 
 
 @router.post(

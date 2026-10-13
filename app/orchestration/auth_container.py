@@ -27,6 +27,7 @@ from app.modules.auth.application.user_administration_use_cases import (
     CreateUserByAdminUseCase,
     InviteDeveloperByManagerUseCase,
     ListActiveManagersUseCase,
+    ListActiveUsersUseCase,
     ListAdminUsersUseCase,
 )
 from app.modules.auth.infrastructure.email_sender import (
@@ -159,6 +160,12 @@ def get_list_active_managers_use_case(
     db: Session = Depends(get_db),
 ) -> ListActiveManagersUseCase:
     return ListActiveManagersUseCase(user_repo=SqlAlchemyUserRepository(session=db))
+
+
+def get_list_active_users_use_case(
+    db: Session = Depends(get_db),
+) -> ListActiveUsersUseCase:
+    return ListActiveUsersUseCase(user_repo=SqlAlchemyUserRepository(session=db))
 
 
 def get_create_user_by_admin_use_case(

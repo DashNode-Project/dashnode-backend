@@ -37,17 +37,23 @@ class AssignProjectManagerCommand(BaseModel):
 
 
 class AddMemberCommand(BaseModel):
-    user_id: str
-    role: ProjectRole = ProjectRole.MEMBER
+    user_id: str = Field(min_length=1, max_length=36)
 
 
 class ProjectMemberDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    project_id: str
     user_id: str
-    role: ProjectRole
+    name: str
+    email: str
+    role: str
     joined_at: datetime
+
+
+class ProjectHealthDTO(BaseModel):
+    progress_percent: float
+    velocity: float
+    open_issues: int
 
 
 class ProjectDTO(BaseModel):
@@ -58,6 +64,7 @@ class ProjectDTO(BaseModel):
     description: str
     owner_id: str
     manager_id: str
+    manager_name: str = ""
     priority: ProjectPriority
     tech_stack: list[str]
     meeting_link: str | None

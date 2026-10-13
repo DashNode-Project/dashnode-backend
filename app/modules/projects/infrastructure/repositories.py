@@ -6,7 +6,7 @@ SQLAlchemy repository implementation for Projects.
 
 import json
 
-from sqlalchemy import or_, select, text, update
+from sqlalchemy import delete, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.modules.projects.domain.entities import (
@@ -16,6 +16,7 @@ from app.modules.projects.domain.entities import (
     ProjectRole,
     ProjectStatus,
 )
+from app.modules.projects.domain.health import ProjectHealthSnapshot
 from app.modules.projects.domain.ports import ProjectRepository
 from app.modules.projects.infrastructure.models import (
     AuditLogModel,
@@ -157,6 +158,35 @@ class SqlAlchemyProjectRepository(ProjectRepository):
             ProjectMemberModel.user_id == user_id,
         )
         return self._session.execute(stmt).scalar_one_or_none() is not None
+
+    def remove_member(self, project_id: str, user_id: str) -> None:
+        self._session.execute(
+            delete(ProjectMemberModel).where(
+                ProjectMemberModel.project_id == project_id,
+                ProjectMemberModel.user_id == user_id,
+            )
+        )
+
+    def clear_assignee_tasks(self, project_id: str, user_id: str) -> None:
+        from datetime import UTC, datetime
+
+        now = datetime.now(tz=UTC)
+        self._session.execute(
+            text(
+                "UPDATE tasks SET assignee_id = NULL, updated_at = :now "
+                "WHERE project_id = :project_id AND assignee_id = :user_id "
+                "AND deleted_at IS NULL AND status != 'completed'"
+            ),
+            {"now": now, "project_id": project_id, "user_id": user_id},
+        )
+
+    def get_health_snapshot(self, project_id: str) -> ProjectHealthSnapshot:
+        return ProjectHealthSnapshot(
+            completed_story_points=0,
+            total_story_points=0,
+            velocity_points_per_sprint=0.0,
+            open_issues=0,
+        )
 
     def soft_delete_cascade(self, project_id: str, when: object) -> None:
         from datetime import datetime

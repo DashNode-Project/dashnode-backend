@@ -10,6 +10,7 @@ from app.modules.projects.application.dtos import (
     CreateProjectCommand,
     MessageResponse,
     ProjectDTO,
+    ProjectHealthDTO,
     ProjectMemberDTO,
     UpdateProjectCommand,
     UpdateProjectStatusCommand,
@@ -19,8 +20,11 @@ from app.modules.projects.application.use_cases import (
     AssignProjectManagerUseCase,
     CreateProjectUseCase,
     DeleteProjectUseCase,
+    GetProjectHealthUseCase,
     GetProjectUseCase,
+    ListProjectMembersUseCase,
     ListProjectsUseCase,
+    RemoveProjectMemberUseCase,
     UpdateProjectStatusUseCase,
     UpdateProjectUseCase,
 )
@@ -30,14 +34,16 @@ from app.orchestration.project_manager_lookup import SqlAlchemyManagerLookup
 from app.orchestration.projects_container import (
     get_add_project_member_use_case,
     get_delete_project_use_case,
+    get_list_project_members_use_case,
     get_list_projects_use_case,
+    get_project_health_use_case,
     get_project_use_case,
+    get_remove_project_member_use_case,
     get_update_project_status_use_case,
     get_update_project_use_case,
 )
 from app.orchestration.security import get_current_user, require_admin, require_admin_or_manager
 from app.shared.application.identity import CurrentUser
-from app.shared.domain.errors import AppError, ErrorKind
 from app.shared.infrastructure.clock import SystemClock
 from app.shared.infrastructure.database import SqlAlchemyUnitOfWork, get_db_session
 from app.shared.infrastructure.id_generator import UuidGenerator
@@ -170,9 +176,35 @@ def delete_project(
     return use_case.execute(project_id=project_id, actor=current_user)
 
 
+@router.get(
+    "/{project_id}/members",
+    response_model=list[ProjectMemberDTO],
+    summary="Listar miembros del proyecto",
+)
+def list_project_members(
+    project_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    use_case: ListProjectMembersUseCase = Depends(get_list_project_members_use_case),
+) -> list[ProjectMemberDTO]:
+    return use_case.execute(project_id=project_id, actor=current_user)
+
+
+@router.get(
+    "/{project_id}/health",
+    response_model=ProjectHealthDTO,
+    summary="Indicadores de salud del proyecto",
+)
+def get_project_health(
+    project_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    use_case: GetProjectHealthUseCase = Depends(get_project_health_use_case),
+) -> ProjectHealthDTO:
+    return use_case.execute(project_id=project_id, actor=current_user)
+
+
 @router.post(
     "/{project_id}/members",
-    response_model=ProjectMemberDTO,
+    response_model=MessageResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Agregar un miembro al proyecto",
 )
@@ -181,8 +213,19 @@ def add_member(
     cmd: AddMemberCommand,
     current_user: CurrentUser = Depends(get_current_user),
     use_case: AddProjectMemberUseCase = Depends(get_add_project_member_use_case),
-) -> ProjectMemberDTO:
-    try:
-        return use_case.execute(project_id=project_id, cmd=cmd, actor_id=current_user.id)
-    except ValueError as e:
-        raise AppError("PROJECT_MEMBER", str(e), ErrorKind.VALIDATION) from e
+) -> MessageResponse:
+    return use_case.execute(project_id=project_id, cmd=cmd, actor=current_user)
+
+
+@router.delete(
+    "/{project_id}/members/{user_id}",
+    response_model=MessageResponse,
+    summary="Retirar miembro del proyecto",
+)
+def remove_member(
+    project_id: str,
+    user_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    use_case: RemoveProjectMemberUseCase = Depends(get_remove_project_member_use_case),
+) -> MessageResponse:
+    return use_case.execute(project_id=project_id, member_user_id=user_id, actor=current_user)
