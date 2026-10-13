@@ -4,12 +4,24 @@ SQLAlchemy repository implementation for Projects.
 @origin [SAD-Propuesto]
 """
 
-from sqlalchemy import or_, select
+import json
+
+from sqlalchemy import or_, select, text, update
 from sqlalchemy.orm import Session
 
-from app.modules.projects.domain.entities import Project, ProjectMember, ProjectRole
+from app.modules.projects.domain.entities import (
+    Project,
+    ProjectMember,
+    ProjectPriority,
+    ProjectRole,
+    ProjectStatus,
+)
 from app.modules.projects.domain.ports import ProjectRepository
-from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
+from app.modules.projects.infrastructure.models import (
+    AuditLogModel,
+    ProjectMemberModel,
+    ProjectModel,
+)
 
 
 class SqlAlchemyProjectRepository(ProjectRepository):
@@ -19,13 +31,26 @@ class SqlAlchemyProjectRepository(ProjectRepository):
         self._session = session
 
     def _to_domain(self, model: ProjectModel) -> Project:
+        stack_raw = model.tech_stack or "[]"
+        try:
+            stack = json.loads(stack_raw)
+            tech_stack = stack if isinstance(stack, list) else []
+        except json.JSONDecodeError:
+            tech_stack = []
+        tech_stack = [str(item) for item in tech_stack]
         return Project(
             id=model.id,
             name=model.name,
             description=model.description,
             owner_id=model.owner_id,
+            manager_id=model.manager_id,
+            priority=ProjectPriority(model.priority),
+            tech_stack=tech_stack,
+            meeting_link=model.meeting_link,
+            status=ProjectStatus(model.status),
             created_at=model.created_at,
             updated_at=model.updated_at,
+            deleted_at=model.deleted_at,
         )
 
     def _member_to_domain(self, model: ProjectMemberModel) -> ProjectMember:
@@ -37,26 +62,46 @@ class SqlAlchemyProjectRepository(ProjectRepository):
         )
 
     def get_by_id(self, project_id: str) -> Project | None:
-        stmt = select(ProjectModel).where(ProjectModel.id == project_id)
+        stmt = select(ProjectModel).where(
+            ProjectModel.id == project_id,
+            ProjectModel.deleted_at.is_(None),
+        )
         result = self._session.execute(stmt).scalar_one_or_none()
         if result is None:
             return None
         return self._to_domain(result)
 
-    def list_by_user(self, user_id: str) -> list[Project]:
+    def list_visible_for_user(self, user_id: str, *, role: str) -> list[Project]:
         member_subquery = select(ProjectMemberModel.project_id).where(
             ProjectMemberModel.user_id == user_id
         )
-        stmt = (
-            select(ProjectModel)
-            .where(
-                or_(
-                    ProjectModel.owner_id == user_id,
+        if role == "admin":
+            stmt = (
+                select(ProjectModel)
+                .where(ProjectModel.deleted_at.is_(None))
+                .order_by(ProjectModel.created_at.desc())
+            )
+        elif role == "manager":
+            stmt = (
+                select(ProjectModel)
+                .where(
+                    ProjectModel.deleted_at.is_(None),
+                    or_(
+                        ProjectModel.manager_id == user_id,
+                        ProjectModel.id.in_(member_subquery),
+                    ),
+                )
+                .order_by(ProjectModel.created_at.desc())
+            )
+        else:
+            stmt = (
+                select(ProjectModel)
+                .where(
+                    ProjectModel.deleted_at.is_(None),
                     ProjectModel.id.in_(member_subquery),
                 )
+                .order_by(ProjectModel.created_at.desc())
             )
-            .order_by(ProjectModel.created_at.desc())
-        )
         results = self._session.execute(stmt).scalars().all()
         return [self._to_domain(p) for p in results]
 
@@ -66,6 +111,12 @@ class SqlAlchemyProjectRepository(ProjectRepository):
             name=project.name,
             description=project.description,
             owner_id=project.owner_id,
+            manager_id=project.manager_id,
+            priority=project.priority.value,
+            tech_stack=json.dumps(project.tech_stack),
+            meeting_link=project.meeting_link,
+            status=project.status.value,
+            deleted_at=project.deleted_at,
             created_at=project.created_at,
             updated_at=project.updated_at,
         )
@@ -77,10 +128,16 @@ class SqlAlchemyProjectRepository(ProjectRepository):
         if model is not None:
             model.name = project.name
             model.description = project.description
-            model.owner_id = project.owner_id
+            model.manager_id = project.manager_id
+            model.priority = project.priority.value
+            model.tech_stack = json.dumps(project.tech_stack)
+            model.meeting_link = project.meeting_link
+            model.status = project.status.value
             model.updated_at = project.updated_at
 
     def add_member(self, member: ProjectMember) -> None:
+        if self.is_member(member.project_id, member.user_id):
+            return
         model = ProjectMemberModel(
             project_id=member.project_id,
             user_id=member.user_id,
@@ -100,3 +157,44 @@ class SqlAlchemyProjectRepository(ProjectRepository):
             ProjectMemberModel.user_id == user_id,
         )
         return self._session.execute(stmt).scalar_one_or_none() is not None
+
+    def soft_delete_cascade(self, project_id: str, when: object) -> None:
+        from datetime import datetime
+
+        assert isinstance(when, datetime)
+        self._session.execute(
+            update(ProjectModel)
+            .where(ProjectModel.id == project_id)
+            .values(deleted_at=when, updated_at=when)
+        )
+        self._session.execute(
+            text(
+                "UPDATE tasks SET deleted_at = :when, updated_at = :when "
+                "WHERE project_id = :project_id AND deleted_at IS NULL"
+            ),
+            {"when": when, "project_id": project_id},
+        )
+
+    def add_audit_entry(
+        self,
+        *,
+        entry_id: str,
+        user_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        when: object,
+    ) -> None:
+        from datetime import datetime
+
+        assert isinstance(when, datetime)
+        self._session.add(
+            AuditLogModel(
+                id=entry_id,
+                user_id=user_id,
+                action=action,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                created_at=when,
+            )
+        )
