@@ -549,6 +549,11 @@
 | HU_DN_02_24 | Implementado | `PATCH /api/v1/projects/{id}/status`, estados SRS, tests `test_hu_24_*` |
 | HU_DN_02_25 | Implementado | `POST /api/v1/projects/{id}/manager`, validación rol Gerente activo, tests `test_hu_25_*` |
 | HU_DN_02_26 | Implementado | `DELETE /api/v1/projects/{id}` (soft delete en cascada + `audit_logs`), solo admin, tests `test_hu_26_*` |
+| HU_DN_02_27 | Implementado | `POST /api/v1/projects/{id}/members`, `GET /auth/active-users`, tests `test_hu_27_*` |
+| HU_DN_02_28 | Implementado | `DELETE /api/v1/projects/{id}/members/{user_id}`, tests `test_hu_28_*` |
+| HU_DN_02_29 | Implementado | `GET /api/v1/projects` con alcance por rol + `manager_name`, mensaje vacío en frontend |
+| HU_DN_02_30 | Implementado | Espacio de trabajo con pestañas (`ProjectWorkspaceLayout`), módulos futuros vía toast |
+| HU_DN_02_31 | Implementado | `GET /api/v1/projects/{id}/health`, tarjetas Progreso/Velocidad/Issues en Resumen |
 
 Mensajes literales en `app/modules/projects/domain/messages.py`. Rutas HTTP en `app/orchestration/project_routes.py` (BR-4).
 
