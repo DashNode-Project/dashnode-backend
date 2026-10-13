@@ -703,7 +703,7 @@ Mensajes literales en `app/modules/availability/domain/messages.py`. Migración 
 7. Fallo técnico: ante un error no anticipado (caída del servicio o tiempo de espera agotado) se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
 
 **Fecha recepción:** 2026-10-13  
-**Estado:** IN_PROGRESS
+**Estado:** COMPLETED
 
 ---
 
@@ -723,7 +723,7 @@ Mensajes literales en `app/modules/availability/domain/messages.py`. Migración 
 7. Fallo técnico: ante un error no anticipado (caída del servicio o tiempo de espera agotado) se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
 
 **Fecha recepción:** 2026-10-13  
-**Estado:** IN_PROGRESS
+**Estado:** COMPLETED
 
 ---
 
@@ -743,7 +743,7 @@ Mensajes literales en `app/modules/availability/domain/messages.py`. Migración 
 6. Fallo técnico: ante un error no anticipado (caída del servicio o tiempo de espera agotado) se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
 
 **Fecha recepción:** 2026-10-13  
-**Estado:** IN_PROGRESS
+**Estado:** COMPLETED
 
 ---
 
@@ -764,4 +764,4 @@ Mensajes literales en `app/modules/availability/domain/messages.py`. Migración 
 6. Fallo técnico: ante un error no anticipado (caída del servicio o tiempo de espera agotado) se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
 
 **Fecha recepción:** 2026-10-13  
-**Estado:** IN_PROGRESS
+**Estado:** COMPLETED
