@@ -59,6 +59,9 @@ def _meeting_to_entity(model: MeetingModel, participant_ids: list[str]) -> Meeti
         participant_ids=participant_ids,
         created_at=model.created_at,
         updated_at=model.updated_at,
+        type=model.type or "General",
+        summary=model.summary,
+        minutes_url=model.minutes_url,
     )
 
 
@@ -164,6 +167,7 @@ class SqlAlchemyAvailabilityRepository(AvailabilityRepository):
             id=meeting.id,
             project_id=meeting.project_id,
             title=meeting.title,
+            type=meeting.type,
             description=meeting.description,
             date=meeting.date,
             start_time=meeting.start_time,
@@ -171,10 +175,140 @@ class SqlAlchemyAvailabilityRepository(AvailabilityRepository):
             duration=meeting.duration,
             link=meeting.link,
             status=meeting.status,
+            summary=meeting.summary,
+            minutes_url=meeting.minutes_url,
             creator_id=meeting.creator_id,
             created_at=meeting.created_at,
             updated_at=meeting.updated_at,
         )
         self._session.add(meeting_model)
         for uid in meeting.participant_ids:
-            self._session.add(MeetingParticipantModel(meeting_id=meeting.id, user_id=uid))
+            self._session.add(
+                MeetingParticipantModel(meeting_id=meeting.id, user_id=uid, response="pendiente")
+            )
+
+    def get_meeting_by_id(self, meeting_id: str) -> Meeting | None:
+        model = self._session.scalar(select(MeetingModel).where(MeetingModel.id == meeting_id))
+        if model is None:
+            return None
+        p_ids = self._session.scalars(
+            select(MeetingParticipantModel.user_id).where(
+                MeetingParticipantModel.meeting_id == model.id
+            )
+        ).all()
+        return _meeting_to_entity(model, list(p_ids))
+
+    def list_all_meetings(self) -> list[Meeting]:
+        models = self._session.scalars(
+            select(MeetingModel).order_by(MeetingModel.date.asc(), MeetingModel.start_time.asc())
+        ).all()
+        result: list[Meeting] = []
+        for m in models:
+            p_ids = self._session.scalars(
+                select(MeetingParticipantModel.user_id).where(
+                    MeetingParticipantModel.meeting_id == m.id
+                )
+            ).all()
+            result.append(_meeting_to_entity(m, list(p_ids)))
+        return result
+
+    def get_meetings_by_projects(self, project_ids: list[str]) -> list[Meeting]:
+        if not project_ids:
+            return []
+        models = self._session.scalars(
+            select(MeetingModel)
+            .where(MeetingModel.project_id.in_(project_ids))
+            .order_by(MeetingModel.date.asc(), MeetingModel.start_time.asc())
+        ).all()
+        result: list[Meeting] = []
+        for m in models:
+            p_ids = self._session.scalars(
+                select(MeetingParticipantModel.user_id).where(
+                    MeetingParticipantModel.meeting_id == m.id
+                )
+            ).all()
+            result.append(_meeting_to_entity(m, list(p_ids)))
+        return result
+
+    def get_meetings_by_creator(self, creator_id: str) -> list[Meeting]:
+        models = self._session.scalars(
+            select(MeetingModel)
+            .where(MeetingModel.creator_id == creator_id)
+            .order_by(MeetingModel.date.asc(), MeetingModel.start_time.asc())
+        ).all()
+        result: list[Meeting] = []
+        for m in models:
+            p_ids = self._session.scalars(
+                select(MeetingParticipantModel.user_id).where(
+                    MeetingParticipantModel.meeting_id == m.id
+                )
+            ).all()
+            result.append(_meeting_to_entity(m, list(p_ids)))
+        return result
+
+    def update_meeting(self, meeting: Meeting) -> None:
+        model = self._session.scalar(select(MeetingModel).where(MeetingModel.id == meeting.id))
+        if model is not None:
+            model.title = meeting.title
+            model.type = meeting.type
+            model.description = meeting.description
+            model.date = meeting.date
+            model.start_time = meeting.start_time
+            model.end_time = meeting.end_time
+            model.duration = meeting.duration
+            model.link = meeting.link
+            model.status = meeting.status
+            model.summary = meeting.summary
+            model.minutes_url = meeting.minutes_url
+            model.updated_at = meeting.updated_at
+
+    def get_participant_responses(self, meeting_id: str) -> dict[str, str]:
+        records = self._session.execute(
+            select(MeetingParticipantModel.user_id, MeetingParticipantModel.response).where(
+                MeetingParticipantModel.meeting_id == meeting_id
+            )
+        ).all()
+        return {r[0]: r[1] for r in records}
+
+    def update_participant_response(self, meeting_id: str, user_id: str, response: str) -> None:
+        participant = self._session.scalar(
+            select(MeetingParticipantModel).where(
+                MeetingParticipantModel.meeting_id == meeting_id,
+                MeetingParticipantModel.user_id == user_id,
+            )
+        )
+        if participant is not None:
+            participant.response = response
+
+    def check_concurrent_meeting(
+        self,
+        participant_ids: list[str],
+        date: str,
+        start_time: str,
+        end_time: str,
+        exclude_meeting_id: str | None = None,
+    ) -> bool:
+        if not participant_ids:
+            return False
+        # Overlapping condition: meeting.start_time < end_time AND meeting.end_time > start_time
+        query = (
+            select(MeetingModel.id)
+            .outerjoin(
+                MeetingParticipantModel,
+                MeetingModel.id == MeetingParticipantModel.meeting_id,
+            )
+            .where(
+                MeetingModel.date == date,
+                MeetingModel.status != "cancelled",
+                MeetingModel.start_time < end_time,
+                MeetingModel.end_time > start_time,
+                or_(
+                    MeetingParticipantModel.user_id.in_(participant_ids),
+                    MeetingModel.creator_id.in_(participant_ids),
+                ),
+            )
+        )
+        if exclude_meeting_id:
+            query = query.where(MeetingModel.id != exclude_meeting_id)
+        existing = self._session.scalar(query.limit(1))
+        return existing is not None

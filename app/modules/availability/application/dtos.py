@@ -60,29 +60,61 @@ class SearchMeetingSlotsResponse(BaseModel):
 
 class CreateMeetingCommand(BaseModel):
     project_id: str | None = None
-    title: str = Field(min_length=1, max_length=200)
+    title: str = Field(default="")
+    type: str = Field(default="")
     description: str = Field(default="", max_length=1000)
     date: str = Field(description="Fecha en formato YYYY-MM-DD")
     start_time: str = Field(description="Hora de inicio (HH:MM)")
     end_time: str = Field(description="Hora de fin (HH:MM)")
     duration: int = Field(ge=1, description="Duración en minutos")
     link: str | None = None
-    participant_ids: list[str] = Field(min_length=1)
+    participant_ids: list[str] = Field(default_factory=list)
+
+
+class ParticipantDTO(BaseModel):
+    user_id: str
+    name: str = ""
+    email: str = ""
+    role: str = ""
+    response: str = "pendiente"  # 'pendiente', 'aceptada', 'rechazada'
 
 
 class MeetingDTO(BaseModel):
     id: str
-    project_id: str | None
+    project_id: str | None = None
+    project_name: str | None = None
     title: str
-    description: str
+    type: str = "General"
+    description: str = ""
     date: str
     start_time: str
     end_time: str
     duration: int
-    link: str | None
-    status: str
+    link: str | None = None
+    status: str = "scheduled"  # 'scheduled', 'completed', 'cancelled'
     creator_id: str
-    participant_ids: list[str]
+    creator_name: str | None = None
+    participant_ids: list[str] = Field(default_factory=list)
+    participants: list[ParticipantDTO] = Field(default_factory=list)
+    summary: str | None = None
+    minutes_url: str | None = None
+
+
+class RespondMeetingCommand(BaseModel):
+    response: str = Field(description="Respuesta a la reunión ('aceptada' | 'rechazada')")
+
+
+class UpdateMeetingSummaryCommand(BaseModel):
+    summary: str | None = Field(default=None, max_length=2000)
+    minutes_url: str | None = Field(default=None)
+
+
+class ProjectManagedDTO(BaseModel):
+    id: str
+    name: str
+    manager_id: str | None = None
+    meeting_link: str | None = None
+    member_ids: list[str] = Field(default_factory=list)
 
 
 class MessageResponse(BaseModel):

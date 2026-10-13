@@ -107,6 +107,54 @@ class FakeAvailabilityRepository:
     def save_meeting(self, meeting: Meeting) -> None:
         self.meetings.append(meeting)
 
+    def get_meeting_by_id(self, meeting_id: str) -> Meeting | None:
+        for m in self.meetings:
+            if m.id == meeting_id:
+                return m
+        return None
+
+    def list_all_meetings(self) -> list[Meeting]:
+        return list(self.meetings)
+
+    def get_meetings_by_projects(self, project_ids: list[str]) -> list[Meeting]:
+        return [m for m in self.meetings if m.project_id in project_ids]
+
+    def get_meetings_by_creator(self, creator_id: str) -> list[Meeting]:
+        return [m for m in self.meetings if m.creator_id == creator_id]
+
+    def update_meeting(self, meeting: Meeting) -> None:
+        for idx, m in enumerate(self.meetings):
+            if m.id == meeting.id:
+                self.meetings[idx] = meeting
+                return
+
+    def get_participant_responses(self, meeting_id: str) -> dict[str, str]:
+        return {}
+
+    def update_participant_response(self, meeting_id: str, user_id: str, response: str) -> None:
+        pass
+
+    def check_concurrent_meeting(
+        self,
+        participant_ids: list[str],
+        date: str,
+        start_time: str,
+        end_time: str,
+        exclude_meeting_id: str | None = None,
+    ) -> bool:
+        for m in self.meetings:
+            if exclude_meeting_id and m.id == exclude_meeting_id:
+                continue
+            if m.date != date or m.status == "cancelled":
+                continue
+            if (
+                any(pid in m.participant_ids for pid in participant_ids)
+                and m.start_time < end_time
+                and m.end_time > start_time
+            ):
+                return True
+        return False
+
 
 class FakeTeamMembersLookup(TeamMembersLookup):
     def __init__(self, visible: list[UserBasicInfo]) -> None:

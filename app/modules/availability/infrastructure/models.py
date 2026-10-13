@@ -41,6 +41,7 @@ class MeetingModel(Base):
         String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
+    type: Mapped[str] = mapped_column(String(50), default="General", nullable=False)
     description: Mapped[str] = mapped_column(String(1000), default="", nullable=False)
     date: Mapped[str] = mapped_column(String(10), nullable=False)
     start_time: Mapped[str] = mapped_column(String(5), nullable=False)
@@ -48,6 +49,8 @@ class MeetingModel(Base):
     duration: Mapped[int] = mapped_column(Integer, nullable=False)
     link: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="scheduled", nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    minutes_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     creator_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
@@ -66,3 +69,4 @@ class MeetingParticipantModel(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True
     )
+    response: Mapped[str] = mapped_column(String(20), default="pendiente", nullable=False)

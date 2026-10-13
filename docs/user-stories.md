@@ -576,4 +576,110 @@ Mensajes literales en `app/modules/projects/domain/messages.py`. Rutas HTTP en `
 | HU_DN_03_35 | Implementado | Validación estricta de criterios de búsqueda: intervalo 24h inicio < fin, días >= 1, participantes >= 1, duración en horas completas >= 1h que quepa en el intervalo. Mensajes de validación de dominio literales. Tests: `test_search_meeting_slots_validation` en dominio y API. |
 | HU_DN_03_36 | Implementado | `POST /api/v1/availability/search-slots`, intersección de disponibilidad común para participantes en los días e intervalo solicitados, exclusión de franjas con reuniones ya programadas, respuesta rápida, error `NO_AVAILABLE_SLOTS`. Creación de reunión vía `POST /api/v1/availability/meetings`. Tests: `test_search_meeting_slots_and_create_meeting`, `test_search_meeting_slots_no_slots_found`. |
 
-Mensajes literales en `app/modules/availability/domain/messages.py`. Migración `006_availability_and_meetings.py`. Rutas HTTP en `app/orchestration/availability_routes.py` (BR-4).
+Mensajes literales en `app/modules/availability/domain/messages.py`. Migración `006_availability_and_meetings.py`. Rutas HTTP en `app/orchestration/availability_routes.py` (BR-4).
+
+---
+
+## HU_DN_03_37 — Seleccionar horario disponible para abrir la ventana de confirmación
+**Como** Gerente  
+**Quiero** Seleccionar un horario disponible para abrir la ventana de confirmación  
+**Para** fijar la reunión directamente, sin pedir a los participantes que elijan
+
+### Criterios de aceptación
+1. Dónde: lista de horarios resultante de HU_DN_03_36.
+2. Campos: control:
+   2.1 Cada horario disponible es un elemento seleccionable.
+3. Validación: solo se pueden seleccionar horarios de la lista de resultados.
+4. Restricción: los participantes no tienen ninguna acción para elegir horario (RN-AGE-01).
+5. Éxito: al seleccionar un horario se abre la ventana de confirmación con fecha, hora, duración y participantes en solo lectura.
+6. Fallo técnico: ante un error no anticipado (caída del servicio o tiempo de espera agotado) se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-13  
+**Estado:** COMPLETED
+
+---
+
+## HU_DN_03_38 — Programar una reunión desde la ventana de confirmación
+**Como** Gerente  
+**Quiero** Programar una reunión desde la ventana de confirmación  
+**Para** dejar registrada la reunión y avisar a los participantes
+
+### Criterios de aceptación
+1. Dónde: ventana de confirmación abierta desde HU_DN_03_37.
+2. Campos: la ventana contiene:
+   2.1 Título: texto, obligatorio, longitud máxima 100 caracteres. Si está vacío: 'El título de la reunión es obligatorio.'
+   2.2 Tipo: lista desplegable obligatoria con Daily, Planning, Review, Retro y General. Si falta: 'Seleccione el tipo de reunión.'
+   2.3 Ubicación o enlace: texto opcional, prellenado y editable con el enlace predeterminado del proyecto cuando existe. Si tiene formato de URL inválido: 'El enlace de la reunión no tiene un formato de URL válido.'
+   2.4 Proyecto asociado: lista desplegable obligatoria con los proyectos que el usuario gestiona (Administrador: todos), que prellena el enlace predeterminado del proyecto; todos los participantes deben ser miembros del proyecto. Si falta: 'Debe seleccionar un proyecto.'; si algún participante no es miembro: 'Todos los participantes deben ser miembros del proyecto seleccionado.'
+   2.5 Fecha, hora, duración y participantes: solo lectura.
+   2.6 Botón 'Confirmar reunión' y botón 'Cancelar'.
+3. Validación: título, tipo y proyecto son obligatorios; se puede confirmar sin enlace.
+4. Restricción: el enlace es opcional y el predeterminado del proyecto es solo una sugerencia (RN-AGE-03); no se modifica ningún calendario externo (RN-AGE-04). Una reunión concurrente de un mismo participante se rechaza con 'Uno o más participantes ya tienen una reunión en ese horario.'
+5. Éxito: 'Reunión programada correctamente.'; se redirige al apartado de reuniones donde aparece, y cada participante recibe una notificación.
+6. Fallo técnico: ante un error no anticipado (caída del servicio o tiempo de espera agotado) se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-13  
+**Estado:** COMPLETED
+
+---
+
+## HU_DN_03_39 — Consultar la lista de reuniones próximas y pasadas
+**Como** Gerente o Desarrollador participante  
+**Quiero** Consultar la lista de reuniones próximas y pasadas  
+**Para** conocer mis compromisos y revisar las reuniones ya realizadas
+
+### Criterios de aceptación
+1. Dónde: apartado 'Reuniones', vista 'Lista'.
+2. Campos: la lista muestra:
+   2.1 Filtro con las opciones 'Próximas' y 'Pasadas'.
+   2.2 Por reunión: título, tipo, fecha y hora, duración y estado.
+   2.3 Orden: las próximas por fecha ascendente; las pasadas, separadas.
+3. Validación: el alcance depende del rol: el Administrador ve todas; el Gerente, las propias y las de sus proyectos; el Desarrollador, solo aquellas en las que participa.
+4. Restricción: «próxima» significa fecha y hora futuras (S-06); una reunión cancelada deja de contarse como próxima.
+5. Éxito: se muestran las reuniones del alcance del usuario; si no hay: 'No hay reuniones para mostrar.'
+6. Fallo técnico: si la información no puede cargarse se muestra 'No fue posible cargar la información. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-13  
+**Estado:** COMPLETED
+
+---
+
+## HU_DN_03_40 — Visualizar las reuniones en una vista de calendario
+**Como** Gerente o Desarrollador participante  
+**Quiero** Visualizar las reuniones en una vista de calendario  
+**Para** ver mis reuniones distribuidas en el tiempo y alternar con la lista
+
+### Criterios de aceptación
+1. Dónde: apartado 'Reuniones', conmutador 'Lista / Calendario'.
+2. Campos: controles:
+   2.1 Conmutador entre las vistas 'Lista' y 'Calendario'.
+   2.2 En el calendario cada reunión muestra título y tipo en texto distinguible.
+3. Validación: ambas vistas muestran exactamente el mismo conjunto de reuniones del usuario.
+4. Restricción: se respeta el mismo alcance por rol de la lista de reuniones.
+5. Éxito: al alternar la vista se muestra el calendario con las reuniones del usuario.
+6. Fallo técnico: si la información no puede cargarse se muestra 'No fue posible cargar la información. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-13  
+**Estado:** COMPLETED
+
+---
+
+## HU_DN_03_41 — Consultar el detalle de una reunión
+**Como** Gerente o Desarrollador participante  
+**Quiero** Consultar el detalle de una reunión  
+**Para** conocer sus datos completos y acceder a las acciones disponibles
+
+### Criterios de aceptación
+1. Dónde: al seleccionar una reunión en la lista o el calendario.
+2. Campos: el detalle muestra:
+   2.1 Título, tipo, proyecto, fecha y hora, duración, ubicación o enlace y estado.
+   2.2 Creador y participantes con su respuesta (pendiente, aceptada o rechazada).
+   2.3 Resumen y URL del acta cuando existan.
+   2.4 Acciones según el rol: 'Enviar a Google Calendar', 'Aceptar / Rechazar', 'Cancelar reunión' (solo creador) y 'Registrar resumen y acta'.
+3. Validación: el tipo de reunión se muestra con texto distinguible.
+4. Restricción: un Desarrollador solo accede al detalle de reuniones en las que participa; en otro caso recibe acceso denegado.
+5. Éxito: se muestra el detalle completo de la reunión.
+6. Fallo técnico: si la información no puede cargarse se muestra 'No fue posible cargar la información. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-13  
+**Estado:** COMPLETED

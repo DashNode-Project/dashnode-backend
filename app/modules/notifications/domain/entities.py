@@ -13,6 +13,7 @@ class NotificationType(StrEnum):
     TASK_ASSIGNED = "task_assigned"
     TASK_STATUS_CHANGED = "task_status_changed"
     PROJECT_MEMBER_ADDED = "project_member_added"
+    MEETING_SCHEDULED = "meeting_scheduled"
 
 
 @dataclass

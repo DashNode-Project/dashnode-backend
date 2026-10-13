@@ -80,7 +80,7 @@ def test_availability_team_permissions(client: TestClient, db_engine: Engine) ->
 
 def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: Engine) -> None:
     # Create manager and log in
-    login_as(client, db_engine, email="mgr2@dashnode.local", role="manager")
+    mgr_id = login_as(client, db_engine, email="mgr2@dashnode.local", role="manager")
 
     # Set availability for u1 as logged-in user u1
     client.cookies.clear()
@@ -110,6 +110,23 @@ def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: 
         "/api/v1/auth/login", json={"email": "mgr2@dashnode.local", "password": DEFAULT_PASSWORD}
     )
     assert res_mgr_log.status_code == 200
+
+    # Create project managed by mgr2 with members u1 and u2
+    res_proj = client.post(
+        "/api/v1/projects",
+        json={
+            "name": "Proyecto Sync",
+            "description": "Sync project",
+            "priority": "media",
+            "tech_stack": ["Python"],
+            "meeting_link": "https://meet.google.com/abc-defg-hij",
+            "manager_id": mgr_id,
+        },
+    )
+    assert res_proj.status_code == 201
+    proj_id = res_proj.json()["id"]
+    client.post(f"/api/v1/projects/{proj_id}/members", json={"user_id": u1})
+    client.post(f"/api/v1/projects/{proj_id}/members", json={"user_id": u2})
 
     # Search invalid interval
     res_inv = client.post(
@@ -149,6 +166,8 @@ def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: 
         "/api/v1/availability/meetings",
         json={
             "title": "Planning Scrum",
+            "type": "Planning",
+            "project_id": proj_id,
             "description": "Sprint sync",
             "date": "2026-10-12",
             "start_time": "10:00",

@@ -149,3 +149,43 @@ Frontend: `/proyectos` (listado + crear), `/proyectos/:id` (resumen, editar, est
 
 Frontend: `/disponibilidad` (pestañas «Mi disponibilidad», «Equipo», «Agendar reunión»). Integración estricta con la plantilla visual Figma en `demo/`. Notificaciones toast con mensajes literales de los criterios de aceptación.
 
+---
+
+## EP-05 — Agendamiento y Reuniones (HU_DN_03_37 … HU_DN_03_41)
+
+**Ramas:** `feature/ep-05-meetings-age` (backend + frontend).  
+**Rutas SPA:** `/disponibilidad` (agendamiento interactivo) y `/reuniones` (gestión integral y calendario) en `SideNav`.
+
+### Contrato de integración API (EP-05)
+
+| Método | Ruta | Roles | Descripción / Mensaje de éxito |
+|---|---|---|---|
+| POST | `/api/v1/availability/meetings` | Admin, Gerente | Programa reunión con campos `title`, `type`, `project_id`, `date`, `start_time`, `end_time`, `duration`, `link`, `participant_ids`. Valida membresía de proyecto, solapamiento concurrente y emite notificaciones atómicas. Éxito: «Reunión programada correctamente.». |
+| GET | `/api/v1/availability/meetings` | Autenticado | Lista reuniones con alcance por rol (Admin: todas; Gerente: propias y de sus proyectos; Desarrollador: participante). Soporta `filter_type=proximas|pasadas` y filtros de fecha. Éxito: lista de reuniones o «No hay reuniones para mostrar.». |
+| GET | `/api/v1/availability/meetings/{id}` | Autenticado (Involucrado) | Detalle completo de reunión con creador, participantes y estado de respuesta (`pendiente`, `aceptada`, `rechazada`), acuerdos y acta. Desarrollador ajeno: 403 «Acceso denegado. No participa en esta reunión.». |
+| POST | `/api/v1/availability/meetings/{id}/cancel` | Creador, Admin | Cancela reunión programada. Actualiza estado a `cancelled` y notifica participantes. Éxito: «Reunión cancelada correctamente.». |
+| POST | `/api/v1/availability/meetings/{id}/respond` | Participante | Registra respuesta (`aceptada` o `rechazada`) del usuario convocado. Éxito: «Respuesta registrada correctamente.». |
+| POST | `/api/v1/availability/meetings/{id}/summary` | Creador, Admin | Registra o actualiza resumen de acuerdos (≤ 2000 caracteres) y URL de acta. Éxito: «Resumen y acta registrados correctamente.». |
+| GET | `/api/v1/availability/projects` | Admin, Gerente | Lista proyectos gestionados con enlace de videoconferencia predeterminado para prellenado automático. |
+
+### Resultados de Calidad y Verificación
+
+| Capa | Control | Resultado | Estado |
+|---|---|---|---|
+| Backend | `pytest` | 296 tests pasados (100 % pass rate) | APROBADO |
+| Backend | `ruff check .` & `ruff format --check` | 0 advertencias, 0 errores | APROBADO |
+| Backend | `mypy app/` | 0 errores en 122 archivos fuente | APROBADO |
+| Backend | `lint-imports` | 3 contratos de arquitectura limpios | APROBADO |
+| Backend | `scan_secrets.py` | 0 secretos detectados | APROBADO |
+| Frontend | `tsc --noEmit` (`npm run typecheck`) | 0 errores de tipos | APROBADO |
+| Frontend | `eslint .` (`npm run lint`) | 0 errores, 0 advertencias | APROBADO |
+| Frontend | `prettier --check .` | 100 % código formateado | APROBADO |
+| Frontend | `vitest run --coverage` | 261 tests pasados (35 suites) — Stmts 87.22 %, Branch 75.55 %, Funcs 83.51 %, Lines 90.11 % | APROBADO |
+| Frontend | `scan-secrets.mjs` | 0 secretos en 142 archivos | APROBADO |
+| Frontend | `vite build` (`npm run build`) | Bundle de producción generado limpiamente | APROBADO |
+
+- **Acceptance Score Final:** 100 %
+- **Directorio `demo/`:** Preservado íntegramente sin modificaciones.
+- **Git Push:** Prohibido por regla de usuario; todo el código verificado localmente.
+
+

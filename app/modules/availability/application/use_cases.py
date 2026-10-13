@@ -1,12 +1,14 @@
 """Application use cases for Availability and Meetings."""
 
 from datetime import timedelta
+from urllib.parse import urlparse
 
 from app.modules.availability.application.dtos import (
     CreateMeetingCommand,
     DayAvailableSlotsDTO,
     MeetingDTO,
     MessageResponse,
+    ParticipantDTO,
     SaveAvailabilityCommand,
     SearchMeetingSlotsCommand,
     SearchMeetingSlotsResponse,
@@ -16,8 +18,19 @@ from app.modules.availability.application.dtos import (
     UserAvailabilityResponse,
 )
 from app.modules.availability.domain import messages
-from app.modules.availability.domain.entities import Meeting, TimeSlot, UserAvailability
-from app.modules.availability.domain.ports import AvailabilityRepository, TeamMembersLookup
+from app.modules.availability.domain.entities import (
+    VALID_MEETING_TYPES,
+    Meeting,
+    TimeSlot,
+    UserAvailability,
+)
+from app.modules.availability.domain.ports import (
+    AvailabilityRepository,
+    NotificationSender,
+    ProjectLookup,
+    TeamMembersLookup,
+    UserLookup,
+)
 from app.modules.availability.domain.rules import (
     DAYS_OF_WEEK,
     are_slots_equal,
@@ -314,6 +327,66 @@ class SearchMeetingSlotsUseCase:
         return SearchMeetingSlotsResponse(results=results)
 
 
+def _is_valid_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+    except Exception:
+        return False
+
+
+def _build_meeting_dto(
+    meeting: Meeting,
+    repo: AvailabilityRepository,
+    project_lookup: ProjectLookup | None,
+    user_lookup: UserLookup | None,
+) -> MeetingDTO:
+    project_name: str | None = None
+    if meeting.project_id and project_lookup:
+        p = project_lookup.get_project(meeting.project_id)
+        if p:
+            project_name = p.name
+
+    creator_name: str | None = None
+    all_needed_uids = list({meeting.creator_id, *meeting.participant_ids})
+    user_infos = user_lookup.get_users_info(all_needed_uids) if user_lookup else {}
+    if meeting.creator_id in user_infos:
+        creator_name = user_infos[meeting.creator_id].name
+
+    responses = repo.get_participant_responses(meeting.id)
+    participants_dto = [
+        ParticipantDTO(
+            user_id=uid,
+            name=user_infos[uid].name if uid in user_infos else uid,
+            email=user_infos[uid].email if uid in user_infos else "",
+            role=user_infos[uid].role if uid in user_infos else "",
+            response=responses.get(uid, "pendiente"),
+        )
+        for uid in meeting.participant_ids
+    ]
+
+    return MeetingDTO(
+        id=meeting.id,
+        project_id=meeting.project_id,
+        project_name=project_name,
+        title=meeting.title,
+        type=meeting.type,
+        description=meeting.description,
+        date=meeting.date,
+        start_time=meeting.start_time,
+        end_time=meeting.end_time,
+        duration=meeting.duration,
+        link=meeting.link,
+        status=meeting.status,
+        creator_id=meeting.creator_id,
+        creator_name=creator_name,
+        participant_ids=meeting.participant_ids,
+        participants=participants_dto,
+        summary=meeting.summary,
+        minutes_url=meeting.minutes_url,
+    )
+
+
 class CreateMeetingUseCase:
     """Creates and schedules a meeting for participants."""
 
@@ -323,15 +396,85 @@ class CreateMeetingUseCase:
         id_gen: IdGenerator,
         clock: Clock,
         uow: UnitOfWork,
+        project_lookup: ProjectLookup | None = None,
+        notification_sender: NotificationSender | None = None,
+        user_lookup: UserLookup | None = None,
     ) -> None:
         self._repo = repo
         self._id_gen = id_gen
         self._clock = clock
         self._uow = uow
+        self._project_lookup = project_lookup
+        self._notification_sender = notification_sender
+        self._user_lookup = user_lookup
 
     def execute(self, actor: CurrentUser, cmd: CreateMeetingCommand) -> MeetingDTO:
         if actor.role not in ("admin", "manager"):
             raise AccessDeniedError()
+
+        # Title validation: obligatorio, max 100 caracteres
+        if not cmd.title or not cmd.title.strip():
+            raise AppError("TITLE_REQUIRED", messages.MEETING_TITLE_REQUIRED, ErrorKind.VALIDATION)
+        if len(cmd.title.strip()) > 100:
+            raise AppError(
+                "TITLE_TOO_LONG",
+                "El título no puede superar los 100 caracteres.",
+                ErrorKind.VALIDATION,
+            )
+
+        # Type validation: obligatorio entre Daily, Planning, Review, Retro y General
+        m_type = cmd.type.strip() if cmd.type else ""
+        if self._project_lookup is not None:
+            if not m_type or m_type not in VALID_MEETING_TYPES:
+                raise AppError(
+                    "TYPE_REQUIRED", messages.MEETING_TYPE_REQUIRED, ErrorKind.VALIDATION
+                )
+        else:
+            if not m_type:
+                m_type = "General"
+            elif m_type not in VALID_MEETING_TYPES:
+                raise AppError(
+                    "TYPE_REQUIRED", messages.MEETING_TYPE_REQUIRED, ErrorKind.VALIDATION
+                )
+
+        # Project validation: obligatorio si project_lookup está configurado
+        if self._project_lookup is not None:
+            if not cmd.project_id or not cmd.project_id.strip():
+                raise AppError("PROJECT_REQUIRED", messages.PROJECT_REQUIRED, ErrorKind.VALIDATION)
+            proj = self._project_lookup.get_project(cmd.project_id)
+            if proj is None:
+                raise AppError("PROJECT_REQUIRED", messages.PROJECT_REQUIRED, ErrorKind.VALIDATION)
+
+            # Si es gerente, debe gestionar el proyecto
+            if actor.role == "manager" and proj.manager_id != actor.id:
+                raise AccessDeniedError()
+
+            # Todos los participantes deben ser miembros del proyecto seleccionado
+            for pid in cmd.participant_ids:
+                if pid not in proj.member_ids and pid != proj.manager_id:
+                    raise AppError(
+                        "PARTICIPANTS_NOT_MEMBERS",
+                        messages.PARTICIPANTS_MUST_BE_PROJECT_MEMBERS,
+                        ErrorKind.VALIDATION,
+                    )
+
+        # Link validation: opcional, pero si existe debe ser URL válida
+        if cmd.link and cmd.link.strip() and not _is_valid_url(cmd.link.strip()):
+            raise AppError("INVALID_LINK", messages.INVALID_MEETING_LINK, ErrorKind.VALIDATION)
+
+        # Concurrency check: rechazo si algún participante ya tiene reunión en ese horario
+        has_conflict = self._repo.check_concurrent_meeting(
+            participant_ids=cmd.participant_ids,
+            date=cmd.date,
+            start_time=cmd.start_time,
+            end_time=cmd.end_time,
+        )
+        if has_conflict:
+            raise AppError(
+                "PARTICIPANT_MEETING_CONFLICT",
+                messages.PARTICIPANT_MEETING_CONFLICT,
+                ErrorKind.CONFLICT,
+            )
 
         now = self._clock.now()
         meeting_id = self._id_gen.generate()
@@ -339,13 +482,14 @@ class CreateMeetingUseCase:
         meeting = Meeting(
             id=meeting_id,
             project_id=cmd.project_id,
-            title=cmd.title,
+            title=cmd.title.strip(),
+            type=m_type,
             description=cmd.description,
             date=cmd.date,
             start_time=cmd.start_time,
             end_time=cmd.end_time,
             duration=cmd.duration,
-            link=cmd.link,
+            link=cmd.link.strip() if cmd.link else None,
             status="scheduled",
             creator_id=actor.id,
             participant_ids=cmd.participant_ids,
@@ -355,19 +499,265 @@ class CreateMeetingUseCase:
 
         with self._uow:
             self._repo.save_meeting(meeting)
+            if self._notification_sender is not None:
+                self._notification_sender.notify_meeting_scheduled(meeting, cmd.participant_ids)
             self._uow.commit()
 
-        return MeetingDTO(
-            id=meeting.id,
-            project_id=meeting.project_id,
-            title=meeting.title,
-            description=meeting.description,
-            date=meeting.date,
-            start_time=meeting.start_time,
-            end_time=meeting.end_time,
-            duration=meeting.duration,
-            link=meeting.link,
-            status=meeting.status,
-            creator_id=meeting.creator_id,
-            participant_ids=meeting.participant_ids,
-        )
+        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+
+
+class ListMeetingsUseCase:
+    """Lists meetings scoped by user role (admin, manager, developer)."""
+
+    def __init__(
+        self,
+        repo: AvailabilityRepository,
+        clock: Clock,
+        project_lookup: ProjectLookup | None = None,
+        user_lookup: UserLookup | None = None,
+    ) -> None:
+        self._repo = repo
+        self._clock = clock
+        self._project_lookup = project_lookup
+        self._user_lookup = user_lookup
+
+    def execute(
+        self,
+        actor: CurrentUser,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        filter_type: str | None = None,
+    ) -> list[MeetingDTO]:
+        if actor.role == "admin":
+            meetings = self._repo.list_all_meetings()
+        elif actor.role == "manager":
+            managed_pids = (
+                self._project_lookup.get_managed_project_ids(actor.id)
+                if self._project_lookup
+                else []
+            )
+            created_meetings = self._repo.get_meetings_by_creator(actor.id)
+            project_meetings = self._repo.get_meetings_by_projects(managed_pids)
+            participating_meetings = self._repo.get_meetings_for_participants(
+                [actor.id], "1970-01-01", "2099-12-31"
+            )
+            by_id = {
+                m.id: m
+                for m in (
+                    *created_meetings,
+                    *project_meetings,
+                    *participating_meetings,
+                )
+            }
+            meetings = list(by_id.values())
+        else:
+            # developer: only meetings where they participate
+            meetings = self._repo.get_meetings_for_participants(
+                [actor.id], "1970-01-01", "2099-12-31"
+            )
+
+        if date_from:
+            meetings = [m for m in meetings if m.date >= date_from]
+        if date_to:
+            meetings = [m for m in meetings if m.date <= date_to]
+
+        now_dt = self._clock.now()
+        now_date = now_dt.strftime("%Y-%m-%d")
+        now_time = now_dt.strftime("%H:%M")
+
+        if filter_type in ("proximas", "upcoming"):
+            meetings = [
+                m
+                for m in meetings
+                if m.status != "cancelled"
+                and (m.date > now_date or (m.date == now_date and m.start_time >= now_time))
+            ]
+            meetings.sort(key=lambda m: (m.date, m.start_time))
+        elif filter_type in ("pasadas", "past"):
+            meetings = [
+                m
+                for m in meetings
+                if m.status == "completed"
+                or (m.date < now_date or (m.date == now_date and m.start_time < now_time))
+                or m.status == "cancelled"
+            ]
+            meetings.sort(key=lambda m: (m.date, m.start_time), reverse=True)
+        else:
+            meetings.sort(key=lambda m: (m.date, m.start_time))
+
+        return [
+            _build_meeting_dto(m, self._repo, self._project_lookup, self._user_lookup)
+            for m in meetings
+        ]
+
+
+class GetMeetingDetailUseCase:
+    """Gets meeting details with role-based access control."""
+
+    def __init__(
+        self,
+        repo: AvailabilityRepository,
+        project_lookup: ProjectLookup | None = None,
+        user_lookup: UserLookup | None = None,
+    ) -> None:
+        self._repo = repo
+        self._project_lookup = project_lookup
+        self._user_lookup = user_lookup
+
+    def execute(self, actor: CurrentUser, meeting_id: str) -> MeetingDTO:
+        meeting = self._repo.get_meeting_by_id(meeting_id)
+        if meeting is None:
+            raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if actor.role == "admin":
+            pass
+        elif actor.role == "manager":
+            managed_pids = (
+                self._project_lookup.get_managed_project_ids(actor.id)
+                if self._project_lookup
+                else []
+            )
+            is_creator = meeting.creator_id == actor.id
+            is_manager_of_project = meeting.project_id in managed_pids
+            is_participant = actor.id in meeting.participant_ids
+            if not (is_creator or is_manager_of_project or is_participant):
+                raise AccessDeniedError()
+        else:
+            # developer
+            if actor.id not in meeting.participant_ids:
+                raise AccessDeniedError()
+
+        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+
+
+class CancelMeetingUseCase:
+    """Cancels a scheduled meeting. Only creator or admin can cancel."""
+
+    def __init__(
+        self,
+        repo: AvailabilityRepository,
+        clock: Clock,
+        uow: UnitOfWork,
+        project_lookup: ProjectLookup | None = None,
+        user_lookup: UserLookup | None = None,
+    ) -> None:
+        self._repo = repo
+        self._clock = clock
+        self._uow = uow
+        self._project_lookup = project_lookup
+        self._user_lookup = user_lookup
+
+    def execute(self, actor: CurrentUser, meeting_id: str) -> MeetingDTO:
+        meeting = self._repo.get_meeting_by_id(meeting_id)
+        if meeting is None:
+            raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if meeting.creator_id != actor.id and actor.role != "admin":
+            raise AccessDeniedError()
+
+        meeting.status = "cancelled"
+        meeting.updated_at = self._clock.now()
+
+        with self._uow:
+            self._repo.update_meeting(meeting)
+            self._uow.commit()
+
+        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+
+
+class RespondMeetingUseCase:
+    """Records participant response (aceptada / rechazada)."""
+
+    def __init__(
+        self,
+        repo: AvailabilityRepository,
+        uow: UnitOfWork,
+        project_lookup: ProjectLookup | None = None,
+        user_lookup: UserLookup | None = None,
+    ) -> None:
+        self._repo = repo
+        self._uow = uow
+        self._project_lookup = project_lookup
+        self._user_lookup = user_lookup
+
+    def execute(self, actor: CurrentUser, meeting_id: str, response: str) -> MeetingDTO:
+        meeting = self._repo.get_meeting_by_id(meeting_id)
+        if meeting is None:
+            raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if actor.id not in meeting.participant_ids:
+            raise AccessDeniedError()
+
+        normalized_resp = response.lower().strip()
+        if normalized_resp not in ("aceptada", "rechazada"):
+            raise AppError("INVALID_RESPONSE", "Respuesta no válida.", ErrorKind.VALIDATION)
+
+        with self._uow:
+            self._repo.update_participant_response(meeting_id, actor.id, normalized_resp)
+            self._uow.commit()
+
+        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+
+
+class UpdateMeetingSummaryUseCase:
+    """Registers or updates meeting summary and minutes URL."""
+
+    def __init__(
+        self,
+        repo: AvailabilityRepository,
+        clock: Clock,
+        uow: UnitOfWork,
+        project_lookup: ProjectLookup | None = None,
+        user_lookup: UserLookup | None = None,
+    ) -> None:
+        self._repo = repo
+        self._clock = clock
+        self._uow = uow
+        self._project_lookup = project_lookup
+        self._user_lookup = user_lookup
+
+    def execute(
+        self,
+        actor: CurrentUser,
+        meeting_id: str,
+        summary: str | None,
+        minutes_url: str | None,
+    ) -> MeetingDTO:
+        meeting = self._repo.get_meeting_by_id(meeting_id)
+        if meeting is None:
+            raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if actor.role == "admin":
+            pass
+        elif actor.role == "manager":
+            managed_pids = (
+                self._project_lookup.get_managed_project_ids(actor.id)
+                if self._project_lookup
+                else []
+            )
+            if meeting.creator_id != actor.id and meeting.project_id not in managed_pids:
+                raise AccessDeniedError()
+        else:
+            raise AccessDeniedError()
+
+        if summary and len(summary) > 2000:
+            raise AppError("SUMMARY_TOO_LONG", messages.SUMMARY_TOO_LONG, ErrorKind.VALIDATION)
+
+        if minutes_url and minutes_url.strip() and not _is_valid_url(minutes_url.strip()):
+            raise AppError(
+                "INVALID_MINUTES_URL",
+                "El enlace del acta no tiene un formato de URL válido.",
+                ErrorKind.VALIDATION,
+            )
+
+        meeting.summary = summary
+        meeting.minutes_url = minutes_url.strip() if minutes_url else None
+        if summary and summary.strip():
+            meeting.status = "completed"
+        meeting.updated_at = self._clock.now()
+
+        with self._uow:
+            self._repo.update_meeting(meeting)
+            self._uow.commit()
+
+        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)

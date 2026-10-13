@@ -58,19 +58,24 @@ tests/api/test_projects_ep03_api.py
 
 `GET /api/v1/auth/managers` lista gerentes activos para formularios (auth module).
 
-## EP-04 / EP-05 — Disponibilidad y Reuniones (HU_DN_02_32 … HU_DN_02_34, HU_DN_03_35 … HU_DN_03_36)
+## EP-04 / EP-05 — Disponibilidad y Reuniones (HU_DN_02_32 … HU_DN_02_34, HU_DN_03_35 … HU_DN_03_41)
 
 ```
 app/modules/availability/
-  domain/          entities (TimeSlot, UserAvailability, Meeting), rules, messages, ports (AvailabilityRepository, TeamMembersLookup)
-  application/     use_cases (SaveUserAvailability, GetUserAvailability, GetTeamAvailability, SearchMeetingSlots, CreateMeeting), dtos.py
-  infrastructure/  models (user_availabilities, meetings, meeting_participants), repositories (SqlAlchemyAvailabilityRepository)
+  domain/          entities (TimeSlot, UserAvailability, Meeting, MeetingParticipant, VALID_MEETING_TYPES, VALID_PARTICIPANT_RESPONSES), rules, messages, ports (AvailabilityRepository, TeamMembersLookup, ProjectLookup, NotificationSender, UserLookup)
+  application/     use_cases (SaveUserAvailability, GetUserAvailability, GetTeamAvailability, SearchMeetingSlots, CreateMeeting, ListMeetings, GetMeetingDetail, CancelMeeting, RespondMeeting, UpdateMeetingSummary), dtos.py
+  infrastructure/  models (user_availabilities, meetings [type, summary, minutes_url], meeting_participants [response]), repositories (SqlAlchemyAvailabilityRepository)
 app/orchestration/
-  availability_routes.py     GET/POST /api/v1/availability/mine, GET /availability/team, POST /availability/search-slots, POST/GET /availability/meetings
+  availability_routes.py     POST/GET /api/v1/availability/mine, GET /availability/team, POST /availability/search-slots, POST/GET /availability/meetings, GET /availability/meetings/{id}, POST /availability/meetings/{id}/cancel, POST /availability/meetings/{id}/respond, POST /availability/meetings/{id}/summary, GET /availability/projects
   team_members_lookup.py     puerto TeamMembersLookup → resuelve usuarios visibles por rol (BR-4)
-migrations/versions/006_availability_and_meetings.py
+  meeting_adapters.py        puertos ProjectLookup, UserLookup, NotificationSender (BR-4)
+migrations/versions/
+  006_availability_and_meetings.py
+  007_meeting_fields_and_responses.py
 tests/
   unit/test_availability_domain.py
   application/test_availability_use_cases.py
   api/test_availability_api.py
+  api/test_meetings_ep05_api.py
 ```
+

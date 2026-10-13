@@ -24,6 +24,18 @@ class UserAvailability:
     updated_at: datetime
 
 
+VALID_MEETING_TYPES: tuple[str, ...] = ("Daily", "Planning", "Review", "Retro", "General")
+VALID_PARTICIPANT_RESPONSES: tuple[str, ...] = ("pendiente", "aceptada", "rechazada")
+
+
+@dataclass
+class MeetingParticipant:
+    """Participant in a meeting with their response status."""
+
+    user_id: str
+    response: str = "pendiente"  # 'pendiente', 'aceptada', 'rechazada'
+
+
 @dataclass
 class Meeting:
     """Scheduled meeting entity."""
@@ -37,8 +49,11 @@ class Meeting:
     end_time: str  # Format: 'HH:MM'
     duration: int  # minutes
     link: str | None
-    status: str
+    status: str  # 'scheduled', 'completed', 'cancelled'
     creator_id: str
     participant_ids: list[str]
     created_at: datetime
     updated_at: datetime
+    type: str = "General"
+    summary: str | None = None
+    minutes_url: str | None = None
