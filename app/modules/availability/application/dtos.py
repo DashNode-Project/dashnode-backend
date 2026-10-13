@@ -105,7 +105,7 @@ class RespondMeetingCommand(BaseModel):
 
 
 class UpdateMeetingSummaryCommand(BaseModel):
-    summary: str | None = Field(default=None, max_length=2000)
+    summary: str | None = Field(default=None)
     minutes_url: str | None = Field(default=None)
 
 

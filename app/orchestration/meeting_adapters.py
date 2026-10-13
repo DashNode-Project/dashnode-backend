@@ -124,3 +124,20 @@ class SqlAlchemyMeetingNotificationSender(NotificationSender):
                 created_at=now,
             )
             self._session.add(notif)
+
+    def notify_meeting_cancelled(self, meeting: Meeting, participant_ids: list[str]) -> None:
+        now = self._clock.now()
+        for pid in participant_ids:
+            notif = NotificationModel(
+                id=self._id_gen.generate(),
+                recipient_id=pid,
+                type="meeting_cancelled",
+                title=f"Reunión cancelada: {meeting.title}",
+                message=(
+                    f"La reunión '{meeting.title}' programada para el {meeting.date} "
+                    "ha sido cancelada."
+                ),
+                is_read=False,
+                created_at=now,
+            )
+            self._session.add(notif)

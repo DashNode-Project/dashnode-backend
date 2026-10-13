@@ -218,6 +218,7 @@ def get_meeting_detail(
         repo=repo,
         project_lookup=project_lookup,
         user_lookup=user_lookup,
+        clock=_clock,
     )
     return use_case.execute(actor=current_user, meeting_id=meeting_id)
 
@@ -236,12 +237,14 @@ def cancel_meeting(
     uow = SqlAlchemyUnitOfWork(session=db)
     project_lookup = SqlAlchemyProjectLookup(session=db)
     user_lookup = SqlAlchemyUserLookup(session=db)
+    notif_sender = SqlAlchemyMeetingNotificationSender(session=db, id_gen=_id_gen, clock=_clock)
     use_case = CancelMeetingUseCase(
         repo=repo,
         clock=_clock,
         uow=uow,
         project_lookup=project_lookup,
         user_lookup=user_lookup,
+        notification_sender=notif_sender,
     )
     return use_case.execute(actor=current_user, meeting_id=meeting_id)
 
@@ -264,6 +267,7 @@ def respond_meeting(
     use_case = RespondMeetingUseCase(
         repo=repo,
         uow=uow,
+        clock=_clock,
         project_lookup=project_lookup,
         user_lookup=user_lookup,
     )

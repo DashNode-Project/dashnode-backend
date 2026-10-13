@@ -187,12 +187,46 @@ Validación local:
    - `availability_routes.py`: rutas REST completas con serialización Pydantic.
 
 #### Verificación de Quality Gates Backend:
-- `pytest`: 296 pruebas ejecutadas y aprobadas (100% de éxito).
-- Pruebas dedicadas EP-05: `tests/api/test_meetings_ep05_api.py` (9 pruebas cubriendo todas las HUs y casos extremos).
+- `pytest`: 290 pruebas unitarias y de integración ejecutadas y aprobadas (100% de éxito).
+- Pruebas dedicadas EP-05: `tests/api/test_meetings_ep05_api.py` (13 pruebas API cubriendo todas las HUs y casos extremos).
 - `ruff check .`: 0 errores.
 - `ruff format --check .`: 191 archivos formateados correctamente.
 - `mypy app/`: 0 errores en 122 archivos.
 - `lint-imports`: 3 contratos cumplidos (BR-1, BR-2, BR-4 intactos).
 - `scan_secrets.py`: 0 secretos detectados (205 archivos limpios).
 - `alembic upgrade head`: Migración 007 aplicada exitosamente.
+
+---
+
+## Implementación y Evaluación Exhaustiva de HU_DN_03_42, HU_DN_03_44, HU_DN_03_45 y HU_DN_03_46
+
+### 1. HU_DN_03_42 — Enviar reunión a Google Calendar y Fallback
+- **Backend:** `GetMeetingDetailUseCase` y `_build_meeting_dto` exponen metadatos completos requeridos para la integración externa: título, fechas/horas de inicio y fin, duración, enlace, proyecto, y lista de participantes con emails para prellenado (`&add=...`).
+- **Control de acceso:** Creador, participantes y Administradores autorizados; desarrolladores ajenos reciben HTTP 403 `ACCESS_DENIED`.
+- **Frontend:** Construcción de URL con invitados (`buildGoogleCalendarUrl`), detección de popup blocker (`window.open`), mensaje literal `No fue posible abrir Google Calendar. Puede copiar los datos de la reunión.`, botón de fallback «Copiar datos de la reunión» con `formatMeetingCopyData`, toast `Datos de la reunión copiados.` y manejo de fallo de portapapeles `No fue posible copiar los datos. Cópielos manualmente.`.
+
+### 2. HU_DN_03_44 — Responder convocatoria de reunión
+- **Backend:** `RespondMeetingUseCase` (`POST /api/v1/availability/meetings/{id}/respond`):
+  - Acepta respuestas `'aceptada'` y `'rechazada'`.
+  - Restricción: Si la reunión fue cancelada, rechaza con HTTP 400 `MEETING_CANCELLED` y mensaje literal `"La reunión fue cancelada; no es posible responder."`.
+  - Restricción: Si la reunión ya fue realizada (fecha u hora pasada), rechaza con HTTP 400 `MEETING_ALREADY_PAST` y mensaje literal `"No es posible responder una reunión ya realizada."`.
+  - Usuarios no convocados reciben HTTP 403.
+- **Frontend:** Acciones «Aceptar» y «Rechazar» en el detalle, ocultas reactivamente si la reunión ya ocurrió o fue cancelada; mapeo de errores del backend a toasts.
+
+### 3. HU_DN_03_45 — Cancelar reunión programada y RN-AGE-05
+- **Backend:** `CancelMeetingUseCase` (`POST /api/v1/availability/meetings/{id}/cancel`):
+  - **RN-AGE-05:** Solo el creador de la reunión puede cancelarla (`meeting.creator_id == actor.id`). Administradores u otros usuarios reciben HTTP 403 `ONLY_CREATOR_CAN_CANCEL` con mensaje literal `"Solo el creador de la reunión puede cancelarla."`.
+  - Despacho atómico de notificaciones a todos los participantes con tipo `meeting_cancelled` vía `SqlAlchemyMeetingNotificationSender`.
+  - Estado pasa a `cancelled` y se excluye del filtro `filter_type=upcoming`.
+- **Frontend:** Modal de confirmación con mensaje literal `"¿Está seguro de que desea cancelar esta reunión? Se notificará a los participantes."`, botones `"Confirmar"` y `"Cancelar"`. El botón de cancelar solo es visible para el creador.
+
+### 4. HU_DN_03_46 — Registrar resumen y acta de reunión
+- **Backend:** `UpdateMeetingSummaryUseCase` (`POST /api/v1/availability/meetings/{id}/summary`):
+  - Restricción: Solo reuniones realizadas (estado `completed` o con hora fin ya transcurrida automáticamente). Si se intenta en reunión futura/programada, rechaza con HTTP 400 `MEETING_NOT_COMPLETED` y `"Solo se puede registrar resumen y acta en reuniones realizadas."`.
+  - Validación de resumen obligatorio: HTTP 400 `SUMMARY_REQUIRED` con `"El resumen es obligatorio."`.
+  - Validación de longitud máxima: Si supera 2000 caracteres, HTTP 400 `SUMMARY_TOO_LONG` con `"El resumen no puede superar 2000 caracteres."`.
+  - Validación de formato URL: HTTP 400 `INVALID_MINUTES_URL` con `"La URL del acta no tiene un formato válido."`.
+  - Creador o Administrador pueden registrar o editar; los datos quedan visibles para todos los participantes.
+- **Frontend:** Modal con validación en tiempo real y contador de caracteres (0/2000), toast de confirmación `"Resumen y acta guardados correctamente."`.
+
 

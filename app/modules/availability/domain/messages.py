@@ -25,7 +25,21 @@ INVALID_MEETING_LINK = "El enlace de la reunión no tiene un formato de URL vál
 PARTICIPANT_MEETING_CONFLICT = "Uno o más participantes ya tienen una reunión en ese horario."
 NO_MEETINGS_TO_SHOW = "No hay reuniones para mostrar."
 MEETING_CANCELLED = "Reunión cancelada correctamente."
-MEETING_RESPONSE_RECORDED = "Respuesta registrada correctamente."
-MEETING_SUMMARY_SAVED = "Resumen guardado correctamente."
-MEETING_NOT_FOUND = "Reunión no encontrada."
+MEETING_RESPONSE_RECORDED = "Su respuesta ha sido registrada."
+MEETING_CANCELLED_CANNOT_RESPOND = "La reunión fue cancelada; no es posible responder."
+MEETING_ALREADY_PAST = "No es posible responder una reunión ya realizada."
+ONLY_CREATOR_CAN_CANCEL = "Solo el creador de la reunión puede cancelarla."
+MEETING_CANCEL_CONFIRMATION = (
+    "¿Está seguro de que desea cancelar esta reunión? Se notificará a los participantes."
+)
+SUMMARY_REQUIRED = "El resumen es obligatorio."
 SUMMARY_TOO_LONG = "El resumen no puede superar 2000 caracteres."
+INVALID_MINUTES_URL = "La URL del acta no tiene un formato válido."
+MEETING_SUMMARY_SAVED = "Resumen y acta guardados correctamente."
+MEETING_NOT_COMPLETED = "Solo se puede registrar resumen y acta en reuniones realizadas."
+GOOGLE_CALENDAR_OPEN_FAILED = (
+    "No fue posible abrir Google Calendar. Puede copiar los datos de la reunión."
+)
+CLIPBOARD_COPY_FAILED = "No fue posible copiar los datos. Cópielos manualmente."
+MEETING_DATA_COPIED = "Datos de la reunión copiados."
+MEETING_NOT_FOUND = "Reunión no encontrada."

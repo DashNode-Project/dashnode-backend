@@ -340,6 +340,7 @@ def _build_meeting_dto(
     repo: AvailabilityRepository,
     project_lookup: ProjectLookup | None,
     user_lookup: UserLookup | None,
+    clock: Clock | None = None,
 ) -> MeetingDTO:
     project_name: str | None = None
     if meeting.project_id and project_lookup:
@@ -365,6 +366,14 @@ def _build_meeting_dto(
         for uid in meeting.participant_ids
     ]
 
+    effective_status = meeting.status
+    if clock is not None and meeting.status == "scheduled":
+        now_dt = clock.now()
+        now_date = now_dt.strftime("%Y-%m-%d")
+        now_time = now_dt.strftime("%H:%M")
+        if meeting.date < now_date or (meeting.date == now_date and meeting.end_time <= now_time):
+            effective_status = "completed"
+
     return MeetingDTO(
         id=meeting.id,
         project_id=meeting.project_id,
@@ -377,7 +386,7 @@ def _build_meeting_dto(
         end_time=meeting.end_time,
         duration=meeting.duration,
         link=meeting.link,
-        status=meeting.status,
+        status=effective_status,
         creator_id=meeting.creator_id,
         creator_name=creator_name,
         participant_ids=meeting.participant_ids,
@@ -586,7 +595,7 @@ class ListMeetingsUseCase:
             meetings.sort(key=lambda m: (m.date, m.start_time))
 
         return [
-            _build_meeting_dto(m, self._repo, self._project_lookup, self._user_lookup)
+            _build_meeting_dto(m, self._repo, self._project_lookup, self._user_lookup, self._clock)
             for m in meetings
         ]
 
@@ -599,10 +608,12 @@ class GetMeetingDetailUseCase:
         repo: AvailabilityRepository,
         project_lookup: ProjectLookup | None = None,
         user_lookup: UserLookup | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self._repo = repo
         self._project_lookup = project_lookup
         self._user_lookup = user_lookup
+        self._clock = clock
 
     def execute(self, actor: CurrentUser, meeting_id: str) -> MeetingDTO:
         meeting = self._repo.get_meeting_by_id(meeting_id)
@@ -627,11 +638,13 @@ class GetMeetingDetailUseCase:
             if actor.id not in meeting.participant_ids:
                 raise AccessDeniedError()
 
-        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+        return _build_meeting_dto(
+            meeting, self._repo, self._project_lookup, self._user_lookup, self._clock
+        )
 
 
 class CancelMeetingUseCase:
-    """Cancels a scheduled meeting. Only creator or admin can cancel."""
+    """Cancels a scheduled meeting. Only creator can cancel (RN-AGE-05)."""
 
     def __init__(
         self,
@@ -640,29 +653,40 @@ class CancelMeetingUseCase:
         uow: UnitOfWork,
         project_lookup: ProjectLookup | None = None,
         user_lookup: UserLookup | None = None,
+        notification_sender: NotificationSender | None = None,
     ) -> None:
         self._repo = repo
         self._clock = clock
         self._uow = uow
         self._project_lookup = project_lookup
         self._user_lookup = user_lookup
+        self._notification_sender = notification_sender
 
     def execute(self, actor: CurrentUser, meeting_id: str) -> MeetingDTO:
         meeting = self._repo.get_meeting_by_id(meeting_id)
         if meeting is None:
             raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
 
-        if meeting.creator_id != actor.id and actor.role != "admin":
-            raise AccessDeniedError()
+        # RN-AGE-05: Solo el creador de la reunión puede cancelarla, sin importar su rol
+        if meeting.creator_id != actor.id:
+            raise AppError(
+                "ONLY_CREATOR_CAN_CANCEL",
+                messages.ONLY_CREATOR_CAN_CANCEL,
+                ErrorKind.FORBIDDEN,
+            )
 
         meeting.status = "cancelled"
         meeting.updated_at = self._clock.now()
 
         with self._uow:
             self._repo.update_meeting(meeting)
+            if self._notification_sender is not None:
+                self._notification_sender.notify_meeting_cancelled(meeting, meeting.participant_ids)
             self._uow.commit()
 
-        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+        return _build_meeting_dto(
+            meeting, self._repo, self._project_lookup, self._user_lookup, self._clock
+        )
 
 
 class RespondMeetingUseCase:
@@ -672,11 +696,13 @@ class RespondMeetingUseCase:
         self,
         repo: AvailabilityRepository,
         uow: UnitOfWork,
+        clock: Clock | None = None,
         project_lookup: ProjectLookup | None = None,
         user_lookup: UserLookup | None = None,
     ) -> None:
         self._repo = repo
         self._uow = uow
+        self._clock = clock
         self._project_lookup = project_lookup
         self._user_lookup = user_lookup
 
@@ -688,6 +714,29 @@ class RespondMeetingUseCase:
         if actor.id not in meeting.participant_ids:
             raise AccessDeniedError()
 
+        # Restricción: no se puede responder una reunión cancelada ni ya realizada
+        if meeting.status == "cancelled":
+            raise AppError(
+                "MEETING_CANCELLED",
+                messages.MEETING_CANCELLED_CANNOT_RESPOND,
+                ErrorKind.VALIDATION,
+            )
+
+        if self._clock is not None:
+            now_dt = self._clock.now()
+            now_date = now_dt.strftime("%Y-%m-%d")
+            now_time = now_dt.strftime("%H:%M")
+            is_past = meeting.status == "completed" or (
+                meeting.date < now_date
+                or (meeting.date == now_date and meeting.end_time <= now_time)
+            )
+            if is_past:
+                raise AppError(
+                    "MEETING_ALREADY_PAST",
+                    messages.MEETING_ALREADY_PAST,
+                    ErrorKind.VALIDATION,
+                )
+
         normalized_resp = response.lower().strip()
         if normalized_resp not in ("aceptada", "rechazada"):
             raise AppError("INVALID_RESPONSE", "Respuesta no válida.", ErrorKind.VALIDATION)
@@ -696,11 +745,13 @@ class RespondMeetingUseCase:
             self._repo.update_participant_response(meeting_id, actor.id, normalized_resp)
             self._uow.commit()
 
-        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+        return _build_meeting_dto(
+            meeting, self._repo, self._project_lookup, self._user_lookup, self._clock
+        )
 
 
 class UpdateMeetingSummaryUseCase:
-    """Registers or updates meeting summary and minutes URL."""
+    """Registers or updates meeting summary and minutes URL for completed meetings."""
 
     def __init__(
         self,
@@ -740,24 +791,46 @@ class UpdateMeetingSummaryUseCase:
         else:
             raise AccessDeniedError()
 
-        if summary and len(summary) > 2000:
+        # Restricción: solo aplica a reuniones realizadas
+        now_dt = self._clock.now()
+        now_date = now_dt.strftime("%Y-%m-%d")
+        now_time = now_dt.strftime("%H:%M")
+        is_past = meeting.status == "completed" or (
+            meeting.status != "cancelled"
+            and (
+                meeting.date < now_date
+                or (meeting.date == now_date and meeting.end_time <= now_time)
+            )
+        )
+        if not is_past:
+            raise AppError(
+                "MEETING_NOT_COMPLETED",
+                messages.MEETING_NOT_COMPLETED,
+                ErrorKind.VALIDATION,
+            )
+
+        if not summary or not summary.strip():
+            raise AppError("SUMMARY_REQUIRED", messages.SUMMARY_REQUIRED, ErrorKind.VALIDATION)
+
+        if len(summary.strip()) > 2000:
             raise AppError("SUMMARY_TOO_LONG", messages.SUMMARY_TOO_LONG, ErrorKind.VALIDATION)
 
         if minutes_url and minutes_url.strip() and not _is_valid_url(minutes_url.strip()):
             raise AppError(
                 "INVALID_MINUTES_URL",
-                "El enlace del acta no tiene un formato de URL válido.",
+                messages.INVALID_MINUTES_URL,
                 ErrorKind.VALIDATION,
             )
 
-        meeting.summary = summary
+        meeting.summary = summary.strip()
         meeting.minutes_url = minutes_url.strip() if minutes_url else None
-        if summary and summary.strip():
-            meeting.status = "completed"
+        meeting.status = "completed"
         meeting.updated_at = self._clock.now()
 
         with self._uow:
             self._repo.update_meeting(meeting)
             self._uow.commit()
 
-        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+        return _build_meeting_dto(
+            meeting, self._repo, self._project_lookup, self._user_lookup, self._clock
+        )

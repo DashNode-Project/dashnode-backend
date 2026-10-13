@@ -95,6 +95,8 @@ class NotificationSender(Protocol):
 
     def notify_meeting_scheduled(self, meeting: Meeting, participant_ids: list[str]) -> None: ...
 
+    def notify_meeting_cancelled(self, meeting: Meeting, participant_ids: list[str]) -> None: ...
+
 
 class UserLookup(Protocol):
     """Cross-cutting user details lookup (orchestrated, BR-4)."""
