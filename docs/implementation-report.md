@@ -107,3 +107,21 @@ Informe E2E completo: `docs/integration-report.md`.
 
 Validación local: `pytest` 256 passed, cobertura ~89 %, `ruff check` limpio, import-linter BR-4 cumplido (`project_routes` en orchestration).
 
+## EP-04 / EP-05 — Disponibilidad y Reuniones (ramas `feature/ep-04-availability-dis`, `feature/ep-05-meetings-age`)
+
+| HU | Backend | Tests |
+|---|---|---|
+| HU_DN_02_32 | `SaveUserAvailabilityUseCase`, `GetUserAvailabilityUseCase`, `SqlAlchemyAvailabilityRepository`, migración `006_availability_and_meetings.py` | `test_save_user_availability_success_and_no_changes`, `test_availability_mine_save_and_retrieve_and_no_changes` |
+| HU_DN_02_33 | Reutilización/herencia con fallback a última disponibilidad guardada (`is_inherited: true`) | `test_get_user_availability_inheritance` |
+| HU_DN_02_34 | `GetTeamAvailabilityUseCase`, `TeamMembersLookup` (BR-4), control de acceso solo admin/manager | `test_get_team_availability_permissions`, `test_availability_team_permissions` |
+| HU_DN_03_35 | Reglas de validación de criterios en dominio: intervalo 24h, días obligatorios, participantes obligatorios, duración en horas completas | `test_validate_meeting_search_criteria` |
+| HU_DN_03_36 | `SearchMeetingSlotsUseCase` (cálculo de intersección y exclusión de reuniones agendadas), `CreateMeetingUseCase`, `MeetingModel`, `MeetingParticipantModel` | `test_search_meeting_slots_and_create_meeting`, `test_search_meeting_slots_no_slots_found` |
+
+Validación local:
+- `pytest -m "not integration"`: 277 pruebas pasadas, 0 fallos.
+- Cobertura: 89 % total en `app/` (umbral mínimo 80 %).
+- Calidad de código: `ruff check .` limpio, `ruff format --check .` limpio.
+- Verificación estática de tipos: `mypy .` limpio (0 errores en 170 archivos).
+- Arquitectura modular: `lint-imports` limpio (3 contratos cumplidos: BR-1, BR-2, BR-4).
+
+

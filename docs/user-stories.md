@@ -558,3 +558,22 @@
 Mensajes literales en `app/modules/projects/domain/messages.py`. Rutas HTTP en `app/orchestration/project_routes.py` (BR-4).
 
 ---
+
+## Estado de implementación — EP-04 Disponibilidad del equipo (HU_DN_02_32 … HU_DN_02_34)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_02_32 | Implementado | `GET/POST /api/v1/availability/mine`, cuadrícula 7 días x 24h, bloques de 1h, fusión de intervalos contiguos sin solapes, almacenamiento en UTC, respuesta `AVAILABILITY_SAVED` y rechazo `NO_CHANGES_TO_SAVE`. Tests: `test_save_user_availability_success_and_no_changes`, `test_availability_mine_save_and_retrieve_and_no_changes`. |
+| HU_DN_02_33 | Implementado | Reutilización/herencia automática de disponibilidad previa en semanas posteriores sin registro propio (`is_inherited: true`). Tests: `test_get_user_availability_inheritance`. |
+| HU_DN_02_34 | Implementado | `GET /api/v1/availability/team?week=`, solo Admin y Manager (Desarrollador 403 `AccessDeniedError`), visibilidad por rol (Admin: todos; Gerente: miembros de sus proyectos) vía `TeamMembersLookup` (BR-4). Tests: `test_get_team_availability_permissions`, `test_availability_team_permissions`. |
+
+---
+
+## Estado de implementación — EP-05 Agendamiento y reuniones (HU_DN_03_35 … HU_DN_03_36)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_03_35 | Implementado | Validación estricta de criterios de búsqueda: intervalo 24h inicio < fin, días >= 1, participantes >= 1, duración en horas completas >= 1h que quepa en el intervalo. Mensajes de validación de dominio literales. Tests: `test_search_meeting_slots_validation` en dominio y API. |
+| HU_DN_03_36 | Implementado | `POST /api/v1/availability/search-slots`, intersección de disponibilidad común para participantes en los días e intervalo solicitados, exclusión de franjas con reuniones ya programadas, respuesta rápida, error `NO_AVAILABLE_SLOTS`. Creación de reunión vía `POST /api/v1/availability/meetings`. Tests: `test_search_meeting_slots_and_create_meeting`, `test_search_meeting_slots_no_slots_found`. |
+
+Mensajes literales en `app/modules/availability/domain/messages.py`. Migración `006_availability_and_meetings.py`. Rutas HTTP en `app/orchestration/availability_routes.py` (BR-4).

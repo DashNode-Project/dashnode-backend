@@ -57,3 +57,20 @@ tests/api/test_projects_ep03_api.py
 ```
 
 `GET /api/v1/auth/managers` lista gerentes activos para formularios (auth module).
+
+## EP-04 / EP-05 — Disponibilidad y Reuniones (HU_DN_02_32 … HU_DN_02_34, HU_DN_03_35 … HU_DN_03_36)
+
+```
+app/modules/availability/
+  domain/          entities (TimeSlot, UserAvailability, Meeting), rules, messages, ports (AvailabilityRepository, TeamMembersLookup)
+  application/     use_cases (SaveUserAvailability, GetUserAvailability, GetTeamAvailability, SearchMeetingSlots, CreateMeeting), dtos.py
+  infrastructure/  models (user_availabilities, meetings, meeting_participants), repositories (SqlAlchemyAvailabilityRepository)
+app/orchestration/
+  availability_routes.py     GET/POST /api/v1/availability/mine, GET /availability/team, POST /availability/search-slots, POST/GET /availability/meetings
+  team_members_lookup.py     puerto TeamMembersLookup → resuelve usuarios visibles por rol (BR-4)
+migrations/versions/006_availability_and_meetings.py
+tests/
+  unit/test_availability_domain.py
+  application/test_availability_use_cases.py
+  api/test_availability_api.py
+```

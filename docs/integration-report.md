@@ -129,3 +129,23 @@ node scripts/e2e-stack.mjs --base http://localhost:8080 --env-file ../dashnode-b
 | GET | `/api/v1/auth/managers` | Admin, Gerente | Lista de gerentes activos (formularios) |
 
 Frontend: `/proyectos` (listado + crear), `/proyectos/:id` (resumen, editar, estado, gerente, eliminar admin). Notificaciones vía `ToastProvider` (10 s, inferior derecha), incluido «Funcionalidad en desarrollo».
+
+---
+
+## EP-04 y EP-05 — Disponibilidad y Reuniones (HU_DN_02_32 … HU_DN_02_34, HU_DN_03_35 … HU_DN_03_36)
+
+**Ramas:** `feature/ep-04-availability-dis`, `feature/ep-05-meetings-age` (backend + frontend).
+
+### Contrato de integración API
+
+| Método | Ruta | Roles | Descripción / Mensaje de éxito |
+|---|---|---|---|
+| GET | `/api/v1/availability/mine?week=YYYY-MM-DD` | Autenticado | Consulta disponibilidad propia y marca si es heredada (`is_inherited`). |
+| POST | `/api/v1/availability/mine` | Autenticado | Guarda bloques horarios en 24h (formato UTC). Éxito: «Disponibilidad guardada correctamente.». Si no hay cambios: 400 «No hay cambios por guardar.». |
+| GET | `/api/v1/availability/team?week=YYYY-MM-DD` | Admin, Gerente | Rejilla semanal de disponibilidad de usuarios visibles con indicadores textuales ("D" / "ND") y visuales. Desarrollador: 403 `AccessDeniedError`. |
+| POST | `/api/v1/availability/search-slots` | Admin, Gerente | Búsqueda e intersección de franjas horarias libres según criterios (intervalo, días, participantes, duración en horas completas). Excluye reuniones agendadas. Si vacío: 400 «No hay horarios disponibles para los criterios seleccionados.». |
+| POST | `/api/v1/availability/meetings` | Admin, Gerente | Crea y agenda reunión. Éxito: «Reunión agendada correctamente.». |
+| GET | `/api/v1/availability/meetings` | Autenticado | Lista reuniones programadas para el usuario autenticado. |
+
+Frontend: `/disponibilidad` (pestañas «Mi disponibilidad», «Equipo», «Agendar reunión»). Integración estricta con la plantilla visual Figma en `demo/`. Notificaciones toast con mensajes literales de los criterios de aceptación.
+
