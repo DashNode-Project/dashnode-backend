@@ -112,6 +112,22 @@ class SqlAlchemyUserRepository(UserRepository):
         stmt = stmt.order_by(UserModel.name, UserModel.email)
         return [self._to_domain(model) for model in self._session.execute(stmt).scalars()]
 
+    def list_active_managers(self) -> list[User]:
+        stmt = (
+            select(UserModel)
+            .where(UserModel.role == UserRole.MANAGER.value, UserModel.is_active.is_(True))
+            .order_by(UserModel.name, UserModel.email)
+        )
+        return [self._to_domain(model) for model in self._session.execute(stmt).scalars()]
+
+    def list_active_users(self, *, name_contains: str | None = None) -> list[User]:
+        stmt = select(UserModel).where(UserModel.is_active.is_(True))
+        if name_contains:
+            pattern = f"%{name_contains.strip()}%"
+            stmt = stmt.where(UserModel.name.ilike(pattern) | UserModel.email.ilike(pattern))
+        stmt = stmt.order_by(UserModel.name, UserModel.email)
+        return [self._to_domain(model) for model in self._session.execute(stmt).scalars()]
+
 
 class SqlAlchemySessionRepository(SessionRepository):
     """SQLAlchemy implementation of the SessionRepository port."""

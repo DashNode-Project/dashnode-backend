@@ -539,3 +539,22 @@
 | HU_DN_01_21 | Implementado | `GET/PATCH /api/v1/auth/profile`, avatar local 2 MB, migración `004_user_avatar` |
 
 ---
+
+## Estado de implementación — EP-03 (HU_DN_02_22 … HU_DN_02_26, Sprint 2)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_02_22 | Implementado | `POST /api/v1/projects`, `GET /api/v1/auth/managers`, migración `005_project_ep03_fields`, tests `test_hu_22_*` en `test_projects_ep03_api.py` |
+| HU_DN_02_23 | Implementado | `PATCH /api/v1/projects/{id}`, autorización admin o gerente responsable, tests `test_hu_23_*` |
+| HU_DN_02_24 | Implementado | `PATCH /api/v1/projects/{id}/status`, estados SRS, tests `test_hu_24_*` |
+| HU_DN_02_25 | Implementado | `POST /api/v1/projects/{id}/manager`, validación rol Gerente activo, tests `test_hu_25_*` |
+| HU_DN_02_26 | Implementado | `DELETE /api/v1/projects/{id}` (soft delete en cascada + `audit_logs`), solo admin, tests `test_hu_26_*` |
+| HU_DN_02_27 | Implementado | `POST /api/v1/projects/{id}/members`, `GET /auth/active-users`, tests `test_hu_27_*` |
+| HU_DN_02_28 | Implementado | `DELETE /api/v1/projects/{id}/members/{user_id}`, tests `test_hu_28_*` |
+| HU_DN_02_29 | Implementado | `GET /api/v1/projects` con alcance por rol + `manager_name`, mensaje vacío en frontend |
+| HU_DN_02_30 | Implementado | Espacio de trabajo con pestañas (`ProjectWorkspaceLayout`), módulos futuros vía toast |
+| HU_DN_02_31 | Implementado | `GET /api/v1/projects/{id}/health`, tarjetas Progreso/Velocidad/Issues en Resumen |
+
+Mensajes literales en `app/modules/projects/domain/messages.py`. Rutas HTTP en `app/orchestration/project_routes.py` (BR-4).
+
+---

@@ -64,6 +64,10 @@ def test_deactivate_manager_with_projects_blocked(client: TestClient, db_engine:
                 name="Proyecto",
                 description="",
                 owner_id=mgr_id,
+                manager_id=mgr_id,
+                priority="media",
+                tech_stack="[]",
+                status="planificacion",
                 created_at=now,
                 updated_at=now,
             )

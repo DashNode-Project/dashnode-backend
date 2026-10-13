@@ -10,11 +10,20 @@ from tests.support import login_as
 
 
 def test_tasks_crud_flow(client: TestClient, db_engine: Engine) -> None:
+    from tests.support import create_user
+
+    mgr_id = create_user(db_engine, email="lead-mgr@dashnode.io", role="manager")
     login_as(client, db_engine, email="lead@dashnode.io", role="admin")
 
     # Create project
     proj_resp = client.post(
-        "/api/v1/projects", json={"name": "Tasks Test Project", "description": "Testing tasks"}
+        "/api/v1/projects",
+        json={
+            "name": "Tasks Test Project",
+            "description": "Testing tasks",
+            "priority": "media",
+            "manager_id": mgr_id,
+        },
     )
     assert proj_resp.status_code == 201
     proj_id = proj_resp.json()["id"]

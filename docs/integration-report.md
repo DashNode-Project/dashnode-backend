@@ -112,3 +112,20 @@ node scripts/e2e-stack.mjs --base http://localhost:8080 --env-file ../dashnode-b
 - Recuperación de contraseña (HU_DN_01_06): enlace inerte + variables `SMTP_*` / `FRONTEND_BASE_URL` preparadas.
 - Desactivación de usuarios (HU_DN_01_17): se prueba con cuenta seed.
 - Demo del Product Owner (paso humano).
+
+---
+
+## EP-03 — Proyectos (HU_DN_02_22 … HU_DN_02_26)
+
+**Rama:** `feature/ep-03-projects-pro` (backend + frontend).
+
+| Método | Ruta | Roles | Mensaje de éxito (literal) |
+|---|---|---|---|
+| POST | `/api/v1/projects` | Admin, Gerente | Proyecto creado correctamente. |
+| PATCH | `/api/v1/projects/{id}` | Admin; Gerente si responsable | Proyecto actualizado correctamente. |
+| PATCH | `/api/v1/projects/{id}/status` | Admin; Gerente si responsable | Estado del proyecto actualizado. |
+| POST | `/api/v1/projects/{id}/manager` | Admin; Gerente si responsable | Gerente responsable actualizado correctamente. |
+| DELETE | `/api/v1/projects/{id}` | Solo Admin | Proyecto eliminado correctamente. |
+| GET | `/api/v1/auth/managers` | Admin, Gerente | Lista de gerentes activos (formularios) |
+
+Frontend: `/proyectos` (listado + crear), `/proyectos/:id` (resumen, editar, estado, gerente, eliminar admin). Notificaciones vía `ToastProvider` (10 s, inferior derecha), incluido «Funcionalidad en desarrollo».

@@ -104,6 +104,10 @@ def test_update_manager_with_projects_blocked(client: TestClient, db_engine: Eng
                 name="Proyecto Alpha",
                 description="",
                 owner_id=mgr_id,
+                manager_id=mgr_id,
+                priority="media",
+                tech_stack="[]",
+                status="planificacion",
                 created_at=now,
                 updated_at=now,
             )
