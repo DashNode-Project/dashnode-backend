@@ -1,0 +1,13 @@
+"""Literal backlog messages for Projects (EP-03)."""
+
+PROJECT_NAME_REQUIRED = "El nombre del proyecto es obligatorio."
+MEETING_LINK_INVALID = "El enlace de reunión no tiene un formato de URL válido."
+MANAGER_REQUIRED = "Debe asignar un gerente responsable."
+MANAGER_MUST_BE_MANAGER_ROLE = "Seleccione un usuario con rol Gerente."
+PROJECT_CREATED = "Proyecto creado correctamente."
+PROJECT_UPDATED = "Proyecto actualizado correctamente."
+PROJECT_STATUS_INVALID = "El estado seleccionado no es válido."
+PROJECT_STATUS_UPDATED = "Estado del proyecto actualizado."
+MANAGER_UPDATED = "Gerente responsable actualizado correctamente."
+PROJECT_DELETED = "Proyecto eliminado correctamente."
+PROJECT_NOT_FOUND = "Proyecto no encontrado."
