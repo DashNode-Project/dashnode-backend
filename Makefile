@@ -34,7 +34,10 @@ test:
 audit:
 	pip-audit --skip-editable
 
-check: secrets lint typecheck arch test
+format-check:
+	ruff format --check .
+
+check: secrets lint format-check typecheck arch test
 
 hooks-install:
 	git config core.hooksPath .githooks
