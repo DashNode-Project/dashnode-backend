@@ -147,7 +147,7 @@ class SqlAlchemyAvailabilityRepository(AvailabilityRepository):
                 ),
                 MeetingModel.date >= start_date,
                 MeetingModel.date <= end_date,
-                MeetingModel.status == "scheduled",
+                MeetingModel.status != "cancelled",
             )
             .distinct()
         )
@@ -261,6 +261,21 @@ class SqlAlchemyAvailabilityRepository(AvailabilityRepository):
             model.summary = meeting.summary
             model.minutes_url = meeting.minutes_url
             model.updated_at = meeting.updated_at
+
+    def cancel_scheduled_meetings_for_project(self, project_id: str, when: object) -> None:
+        from datetime import datetime
+
+        from sqlalchemy import update
+
+        assert isinstance(when, datetime)
+        self._session.execute(
+            update(MeetingModel)
+            .where(
+                MeetingModel.project_id == project_id,
+                MeetingModel.status == "scheduled",
+            )
+            .values(status="cancelled", updated_at=when)
+        )
 
     def get_participant_responses(self, meeting_id: str) -> dict[str, str]:
         records = self._session.execute(

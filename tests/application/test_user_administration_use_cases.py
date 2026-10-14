@@ -111,10 +111,12 @@ def test_manager_invite_forces_developer_and_rejects_manager_role() -> None:
         actor_id="mgr-1",
         cmd=InviteDeveloperCommand(name="Dev", email="d@empresa.com"),
     )
-    assert result.message == messages.INVITE_DEVELOPER_SUCCESS
+    assert result.message == messages.INVITE_DEVELOPER_WITH_PASSWORD
+    assert result.initial_password == "dev_cambiar_contrasena"
     created = repo.get_by_email("d@empresa.com")
     assert created is not None
     assert created.role == UserRole.DEVELOPER
+    assert created.invited_by_user_id == "mgr-1"
 
     with pytest.raises(AccessDeniedError):
         use_case.execute(

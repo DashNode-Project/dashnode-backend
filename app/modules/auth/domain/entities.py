@@ -4,9 +4,10 @@ Domain entities and value objects for the Auth module.
 @origin [SAD-Propuesto]
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 
 class UserRole(StrEnum):
@@ -26,6 +27,9 @@ class User:
     created_at: datetime
     updated_at: datetime
     avatar_key: str | None = None
+    invited_by_user_id: str | None = None
+    invitation_accepted_at: datetime | None = None
+    profile_details: dict[str, Any] = field(default_factory=dict)
 
     def can_authenticate(self) -> bool:
         """Determines if the user account is allowed to log in."""

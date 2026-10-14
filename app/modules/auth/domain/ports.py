@@ -37,6 +37,8 @@ class UserRepository(Protocol):
 
     def list_active_users(self, *, name_contains: str | None = None) -> list[User]: ...
 
+    def list_developers_invited_by(self, manager_id: str) -> list[User]: ...
+
 
 class SessionRepository(Protocol):
     """Port for server-side sessions (looked up by the hash of the opaque token)."""

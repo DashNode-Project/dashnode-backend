@@ -62,6 +62,16 @@ class UpdateProfileUseCase:
         now = self._clock.now()
         user.name = name
         user.updated_at = now
+        if cmd.details is not None:
+            user.profile_details = {
+                "last_name": cmd.details.last_name,
+                "nickname": cmd.details.nickname,
+                "description": cmd.details.description,
+                "experience": cmd.details.experience,
+                "skills": cmd.details.skills,
+                "github": cmd.details.github,
+                "linkedin": cmd.details.linkedin,
+            }
         if avatar_bytes is not None:
             user.avatar_key = self._storage.save(user_id=user.id, content=avatar_bytes)
 

@@ -25,10 +25,13 @@ from app.modules.auth.application.session_use_cases import (
 from app.modules.auth.application.use_cases import RegisterManagerUseCase
 from app.modules.auth.application.user_administration_use_cases import (
     CreateUserByAdminUseCase,
+    DeactivateDeveloperByManagerUseCase,
     InviteDeveloperByManagerUseCase,
     ListActiveManagersUseCase,
     ListActiveUsersUseCase,
     ListAdminUsersUseCase,
+    ListManagerDevelopersUseCase,
+    ReactivateDeveloperByManagerUseCase,
 )
 from app.modules.auth.infrastructure.email_sender import (
     LoggingTransactionalEmailSender,
@@ -195,6 +198,33 @@ def get_invite_developer_use_case(db: Session = Depends(get_db)) -> InviteDevelo
         clock=clock,
         uow=SqlAlchemyUnitOfWork(session=db),
         policy=credential_token_policy(),
+    )
+
+
+def get_list_manager_developers_use_case(
+    db: Session = Depends(get_db),
+) -> ListManagerDevelopersUseCase:
+    return ListManagerDevelopersUseCase(user_repo=SqlAlchemyUserRepository(session=db))
+
+
+def get_deactivate_developer_by_manager_use_case(
+    db: Session = Depends(get_db),
+) -> DeactivateDeveloperByManagerUseCase:
+    return DeactivateDeveloperByManagerUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        session_repo=SqlAlchemySessionRepository(session=db),
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+    )
+
+
+def get_reactivate_developer_by_manager_use_case(
+    db: Session = Depends(get_db),
+) -> ReactivateDeveloperByManagerUseCase:
+    return ReactivateDeveloperByManagerUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
     )
 
 

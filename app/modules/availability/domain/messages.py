@@ -14,6 +14,7 @@ DURATION_EXCEEDS_INTERVAL = "La duración no cabe en el intervalo seleccionado."
 NO_AVAILABLE_SLOTS = "No hay horarios disponibles para los criterios seleccionados."
 
 MEETING_CREATED = "Reunión agendada correctamente."
+MEETING_SLOT_ALREADY_PAST = "No puede agendar una reunión en un horario que ya finalizó hoy."
 MEETING_SCHEDULED = "Reunión programada correctamente."
 MEETING_TITLE_REQUIRED = "El título de la reunión es obligatorio."
 MEETING_TYPE_REQUIRED = "Seleccione el tipo de reunión."

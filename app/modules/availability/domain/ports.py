@@ -1,6 +1,7 @@
 """Repository and service ports for Availability domain."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from app.modules.availability.domain.entities import Meeting, UserAvailability
@@ -55,6 +56,8 @@ class AvailabilityRepository(Protocol):
     def get_meetings_by_creator(self, creator_id: str) -> list[Meeting]: ...
 
     def update_meeting(self, meeting: Meeting) -> None: ...
+
+    def cancel_scheduled_meetings_for_project(self, project_id: str, when: datetime) -> None: ...
 
     def get_participant_responses(self, meeting_id: str) -> dict[str, str]: ...
 

@@ -30,7 +30,12 @@ from app.modules.projects.domain.entities import (
     ProjectStatus,
 )
 from app.modules.projects.domain.health import compute_health_indicators
-from app.modules.projects.domain.ports import ActiveUserLookup, ManagerLookup, ProjectRepository
+from app.modules.projects.domain.ports import (
+    ActiveUserLookup,
+    ManagerLookup,
+    ProjectDeletionCollaborator,
+    ProjectRepository,
+)
 from app.modules.projects.domain.rules import (
     parse_status,
     validate_manager_id,
@@ -275,11 +280,13 @@ class DeleteProjectUseCase:
         id_gen: IdGenerator,
         clock: Clock,
         uow: UnitOfWork,
+        deletion_collaborator: ProjectDeletionCollaborator | None = None,
     ) -> None:
         self._repo = project_repo
         self._id_gen = id_gen
         self._clock = clock
         self._uow = uow
+        self._deletion_collaborator = deletion_collaborator
 
     def execute(self, project_id: str, actor: CurrentUser) -> MessageResponse:
         if actor.role != "admin":
@@ -292,6 +299,8 @@ class DeleteProjectUseCase:
         now = self._clock.now()
         with self._uow:
             self._repo.soft_delete_cascade(project_id, now)
+            if self._deletion_collaborator is not None:
+                self._deletion_collaborator.after_project_soft_deleted(project_id, now)
             self._repo.add_audit_entry(
                 entry_id=self._id_gen.generate(),
                 user_id=actor.id,

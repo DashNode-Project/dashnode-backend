@@ -46,7 +46,10 @@ def test_manager_invite_developer(client: TestClient, db_engine: Engine) -> None
         json={"name": "Nuevo Dev", "email": "invite@empresa.com"},
     )
     assert response.status_code == 201
-    assert response.json()["message"] == messages.INVITE_DEVELOPER_SUCCESS
+    body = response.json()
+    assert body["message"] == messages.INVITE_DEVELOPER_WITH_PASSWORD
+    assert body["initial_password"] == "nuevo_dev_cambiar_contrasena"
+    assert body["user_id"]
 
 
 def test_manager_invite_cannot_assign_manager(client: TestClient, db_engine: Engine) -> None:

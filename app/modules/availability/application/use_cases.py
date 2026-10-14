@@ -396,6 +396,22 @@ def _build_meeting_dto(
     )
 
 
+def _resolve_initial_meeting_status(clock: Clock, date: str, end_time: str) -> str:
+    """Past calendar days become completed; same-day ended slots are rejected."""
+    now = clock.now()
+    today = now.strftime("%Y-%m-%d")
+    now_time = now.strftime("%H:%M")
+    if date < today:
+        return "completed"
+    if date == today and end_time <= now_time:
+        raise AppError(
+            "MEETING_SLOT_ALREADY_PAST",
+            messages.MEETING_SLOT_ALREADY_PAST,
+            ErrorKind.VALIDATION,
+        )
+    return "scheduled"
+
+
 class CreateMeetingUseCase:
     """Creates and schedules a meeting for participants."""
 
@@ -487,6 +503,7 @@ class CreateMeetingUseCase:
 
         now = self._clock.now()
         meeting_id = self._id_gen.generate()
+        initial_status = _resolve_initial_meeting_status(self._clock, cmd.date, cmd.end_time)
 
         meeting = Meeting(
             id=meeting_id,
@@ -499,7 +516,7 @@ class CreateMeetingUseCase:
             end_time=cmd.end_time,
             duration=cmd.duration,
             link=cmd.link.strip() if cmd.link else None,
-            status="scheduled",
+            status=initial_status,
             creator_id=actor.id,
             participant_ids=cmd.participant_ids,
             created_at=now,

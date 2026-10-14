@@ -101,7 +101,7 @@ class FakeAvailabilityRepository:
             if m.date >= start_date
             and m.date <= end_date
             and any(p in user_ids for p in m.participant_ids)
-            and m.status == "scheduled"
+            and m.status != "cancelled"
         ]
 
     def save_meeting(self, meeting: Meeting) -> None:
@@ -127,6 +127,15 @@ class FakeAvailabilityRepository:
             if m.id == meeting.id:
                 self.meetings[idx] = meeting
                 return
+
+    def cancel_scheduled_meetings_for_project(self, project_id: str, when: object) -> None:
+        from dataclasses import replace
+        from datetime import datetime
+
+        assert isinstance(when, datetime)
+        for idx, meeting in enumerate(self.meetings):
+            if meeting.project_id == project_id and meeting.status == "scheduled":
+                self.meetings[idx] = replace(meeting, status="cancelled", updated_at=when)
 
     def get_participant_responses(self, meeting_id: str) -> dict[str, str]:
         return {}

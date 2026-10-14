@@ -13,8 +13,10 @@ from app.modules.auth.application.dtos import (
     CompletePasswordResetCommand,
     CreateUserByAdminCommand,
     InviteDeveloperCommand,
+    InviteDeveloperResponse,
     LoginCommand,
     LogoutResponse,
+    ManagerDeveloperSummaryDTO,
     MessageResponse,
     RegisterManagerCommand,
     RegisterManagerResponse,
@@ -30,21 +32,27 @@ from app.modules.auth.application.session_use_cases import LoginUseCase, LogoutU
 from app.modules.auth.application.use_cases import RegisterManagerUseCase
 from app.modules.auth.application.user_administration_use_cases import (
     CreateUserByAdminUseCase,
+    DeactivateDeveloperByManagerUseCase,
     InviteDeveloperByManagerUseCase,
     ListActiveManagersUseCase,
     ListActiveUsersUseCase,
     ListAdminUsersUseCase,
+    ListManagerDevelopersUseCase,
+    ReactivateDeveloperByManagerUseCase,
 )
 from app.orchestration.auth_container import (
     get_admin_request_password_reset_use_case,
     get_complete_password_reset_use_case,
     get_create_user_by_admin_use_case,
+    get_deactivate_developer_by_manager_use_case,
     get_invite_developer_use_case,
     get_list_active_managers_use_case,
     get_list_active_users_use_case,
     get_list_admin_users_use_case,
+    get_list_manager_developers_use_case,
     get_login_use_case,
     get_logout_use_case,
+    get_reactivate_developer_by_manager_use_case,
     get_register_manager_use_case,
     get_request_password_reset_use_case,
 )
@@ -214,7 +222,7 @@ def create_user_by_admin(
 
 @router.post(
     "/manager/users/invite",
-    response_model=MessageResponse,
+    response_model=InviteDeveloperResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Invitar Desarrollador (solo Gerente)",
 )
@@ -222,8 +230,50 @@ def invite_developer(
     cmd: InviteDeveloperCommand,
     current_user: CurrentUser = Depends(require_manager),
     use_case: InviteDeveloperByManagerUseCase = Depends(get_invite_developer_use_case),
-) -> MessageResponse:
+) -> InviteDeveloperResponse:
     return use_case.execute(actor_id=current_user.id, cmd=cmd)
+
+
+@router.get(
+    "/manager/developers",
+    response_model=list[ManagerDeveloperSummaryDTO],
+    summary="Desarrolladores solicitados por el gerente",
+)
+def list_manager_developers(
+    current_user: CurrentUser = Depends(require_manager),
+    use_case: ListManagerDevelopersUseCase = Depends(get_list_manager_developers_use_case),
+) -> list[ManagerDeveloperSummaryDTO]:
+    return use_case.execute(actor_id=current_user.id)
+
+
+@router.post(
+    "/manager/developers/{user_id}/deactivate",
+    response_model=MessageResponse,
+    summary="Desactivar desarrollador del equipo del gerente",
+)
+def deactivate_manager_developer(
+    user_id: str,
+    current_user: CurrentUser = Depends(require_manager),
+    use_case: DeactivateDeveloperByManagerUseCase = Depends(
+        get_deactivate_developer_by_manager_use_case
+    ),
+) -> MessageResponse:
+    return use_case.execute(actor_id=current_user.id, target_user_id=user_id)
+
+
+@router.post(
+    "/manager/developers/{user_id}/reactivate",
+    response_model=MessageResponse,
+    summary="Reactivar desarrollador del equipo del gerente",
+)
+def reactivate_manager_developer(
+    user_id: str,
+    current_user: CurrentUser = Depends(require_manager),
+    use_case: ReactivateDeveloperByManagerUseCase = Depends(
+        get_reactivate_developer_by_manager_use_case
+    ),
+) -> MessageResponse:
+    return use_case.execute(actor_id=current_user.id, target_user_id=user_id)
 
 
 @router.post(
