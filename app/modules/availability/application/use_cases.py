@@ -255,15 +255,15 @@ class SearchMeetingSlotsUseCase:
         duration_m = cmd.duration_hours * 60
 
         total_slots_count = 0
+        now_dt = self._clock.now()
+        today_str = now_dt.strftime("%Y-%m-%d")
+        now_time_str = now_dt.strftime("%H:%M")
 
         for day in DAYS_OF_WEEK:
             if day not in cmd.days:
                 continue
 
             day_date = dates_by_day[day]
-            now_dt = self._clock.now()
-            today = now_dt.strftime("%Y-%m-%d")
-            now_time = now_dt.strftime("%H:%M")
             meetings_on_day = [
                 m
                 for m in existing_meetings
@@ -306,8 +306,8 @@ class SearchMeetingSlotsUseCase:
                             break
 
                 slot_start = minutes_to_time(cur_start_m)
-                slot_in_past = day_date < today or (
-                    day_date == today and slot_start < now_time
+                slot_in_past = day_date < today_str or (
+                    day_date == today_str and slot_start < now_time_str
                 )
 
                 if all_available and no_conflict and not slot_in_past:
@@ -746,9 +746,7 @@ class UpdateMeetingUseCase:
         self._project_lookup = project_lookup
         self._user_lookup = user_lookup
 
-    def execute(
-        self, actor: CurrentUser, meeting_id: str, cmd: UpdateMeetingCommand
-    ) -> MeetingDTO:
+    def execute(self, actor: CurrentUser, meeting_id: str, cmd: UpdateMeetingCommand) -> MeetingDTO:
         deny_admin_operational_access(actor)
         if actor.role != "manager":
             raise AccessDeniedError()

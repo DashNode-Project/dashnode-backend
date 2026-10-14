@@ -92,9 +92,7 @@ def _seed_meeting(
             )
         )
         for uid in participant_ids:
-            session.add(
-                MeetingParticipantModel(meeting_id=m_id, user_id=uid, response="pendiente")
-            )
+            session.add(MeetingParticipantModel(meeting_id=m_id, user_id=uid, response="pendiente"))
         session.commit()
     return m_id
 

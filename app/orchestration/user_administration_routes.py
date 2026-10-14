@@ -11,11 +11,15 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.modules.auth.application.dtos import (
+    AdminDashboardSummaryDTO,
     MessageResponse,
     UpdateUserByAdminCommand,
     UpdateUserByAdminResponse,
 )
-from app.modules.auth.application.user_administration_use_cases import UpdateUserByAdminUseCase
+from app.modules.auth.application.user_administration_use_cases import (
+    GetAdminDashboardSummaryUseCase,
+    UpdateUserByAdminUseCase,
+)
 from app.modules.auth.application.user_lifecycle_use_cases import (
     DeactivateUserByAdminUseCase,
     GetPendingAssignmentsUseCase,
@@ -46,6 +50,22 @@ def get_update_user_by_admin_use_case(
         clock=_clock,
         uow=SqlAlchemyUnitOfWork(session=db),
     )
+
+
+@router.get(
+    "/admin/dashboard-summary",
+    response_model=AdminDashboardSummaryDTO,
+    summary="Métricas de inicio del administrador",
+)
+def admin_dashboard_summary(
+    current_user: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db_session),
+) -> AdminDashboardSummaryDTO:
+    use_case = GetAdminDashboardSummaryUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        project_ownership=SqlAlchemyProjectOwnershipQuery(session=db),
+    )
+    return use_case.execute(actor_id=current_user.id)
 
 
 @router.patch(

@@ -24,8 +24,6 @@ class SqlAlchemyProjectOwnershipQuery(ProjectOwnershipQuery):
 
     def count_active_projects(self) -> int:
         stmt = (
-            select(func.count())
-            .select_from(ProjectModel)
-            .where(ProjectModel.deleted_at.is_(None))
+            select(func.count()).select_from(ProjectModel).where(ProjectModel.deleted_at.is_(None))
         )
         return int(self._session.execute(stmt).scalar_one())

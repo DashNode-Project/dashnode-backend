@@ -26,7 +26,6 @@ from app.modules.auth.application.use_cases import RegisterManagerUseCase
 from app.modules.auth.application.user_administration_use_cases import (
     CreateUserByAdminUseCase,
     DeactivateDeveloperByManagerUseCase,
-    GetAdminDashboardSummaryUseCase,
     InviteDeveloperByManagerUseCase,
     ListActiveManagersUseCase,
     ListActiveUsersUseCase,
@@ -45,7 +44,6 @@ from app.modules.auth.infrastructure.repositories import (
     SqlAlchemyUserRepository,
 )
 from app.modules.auth.infrastructure.session_tokens import SecureSessionTokenService
-from app.orchestration.project_ownership_query import SqlAlchemyProjectOwnershipQuery
 from app.orchestration.security import SessionAuthenticator
 from app.shared.application.identity import CurrentSession, CurrentUser
 from app.shared.infrastructure.clock import SystemClock
@@ -159,15 +157,6 @@ def get_admin_request_password_reset_use_case(
 
 def get_list_admin_users_use_case(db: Session = Depends(get_db)) -> ListAdminUsersUseCase:
     return ListAdminUsersUseCase(user_repo=SqlAlchemyUserRepository(session=db))
-
-
-def get_admin_dashboard_summary_use_case(
-    db: Session = Depends(get_db),
-) -> GetAdminDashboardSummaryUseCase:
-    return GetAdminDashboardSummaryUseCase(
-        user_repo=SqlAlchemyUserRepository(session=db),
-        project_ownership=SqlAlchemyProjectOwnershipQuery(session=db),
-    )
 
 
 def get_list_active_managers_use_case(
