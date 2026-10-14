@@ -1,38 +1,47 @@
-version: "3.8"
+# Local development stack. All secrets come from `.env` (generate it with
+# `python scripts/generate_env.py`); nothing sensitive is stored in this file.
+name: dashnode-backend
 
 services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: dashnode
-      POSTGRES_PASSWORD: dashnode
-      POSTGRES_DB: dashnode
+      POSTGRES_USER: ${POSTGRES_USER:?Run python scripts/generate_env.py first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run python scripts/generate_env.py first}
+      POSTGRES_DB: ${POSTGRES_DB:-dashnode}
     ports:
-      - "5432:5432"
+      # Loopback only: the database is never exposed to the network.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dashnode"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 2s
       timeout: 2s
-      retries: 10
+      retries: 15
+    restart: unless-stopped
 
   api:
     build: .
-    ports:
-      - "${API_PORT:-8000}:8000"
+    env_file: .env
     environment:
-      - APP_ENV=${APP_ENV:-development}
-      - DATABASE_URL=postgresql+psycopg://dashnode:dashnode@db:5432/dashnode
-      - JWT_SECRET=${JWT_SECRET:-super_secret_development_key_only_change_in_prod}
+      # Inside the network the database host is the service name, not localhost.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-dashnode}
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - dashnode-api
+
+networks:
+  default:
+    # Fixed name so the frontend stack can attach to it and reach the API by alias.
+    name: dashnode-net
 
 volumes:
   postgres_data:

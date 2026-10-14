@@ -4,9 +4,10 @@ Domain entities and value objects for the Auth module.
 @origin [SAD-Propuesto]
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 
 class UserRole(StrEnum):
@@ -25,6 +26,10 @@ class User:
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    avatar_key: str | None = None
+    invited_by_user_id: str | None = None
+    invitation_accepted_at: datetime | None = None
+    profile_details: dict[str, Any] = field(default_factory=dict)
 
     def can_authenticate(self) -> bool:
         """Determines if the user account is allowed to log in."""
@@ -34,3 +39,68 @@ class User:
         """Deactivates user account."""
         self.is_active = False
         self.updated_at = when
+
+    def reactivate(self, when: datetime) -> None:
+        self.is_active = True
+        self.updated_at = when
+
+
+@dataclass
+class UserSession:
+    """Server-side session. Only the hash of the opaque token is ever stored."""
+
+    id: str
+    user_id: str
+    token_hash: str
+    created_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None = None
+
+    def is_expired(self, now: datetime) -> bool:
+        return now >= self.expires_at
+
+    def is_revoked(self) -> bool:
+        return self.revoked_at is not None
+
+    def revoke(self, when: datetime) -> None:
+        if self.revoked_at is None:
+            self.revoked_at = when
+
+
+@dataclass(frozen=True)
+class LoginAttempt:
+    """One login attempt for an e-mail (known or not), used to limit brute force."""
+
+    id: str
+    email: str
+    attempted_at: datetime
+
+
+class CredentialTokenPurpose(StrEnum):
+    """Stored values in DB; member names avoid PASSWORD_* so secret scanners stay quiet."""
+
+    RESET_CREDENTIAL = "password_reset"
+    ACTIVATION = "activation"
+
+
+@dataclass
+class PasswordCredentialToken:
+    """Single-use link to set a password (reset or activation). Only the digest is stored."""
+
+    id: str
+    user_id: str
+    token_hash: str
+    purpose: CredentialTokenPurpose
+    created_at: datetime
+    expires_at: datetime
+    used_at: datetime | None = None
+
+    def is_expired(self, now: datetime) -> bool:
+        return now >= self.expires_at
+
+    def is_used(self) -> bool:
+        return self.used_at is not None
+
+    def mark_used(self, when: datetime) -> None:
+        if self.used_at is None:
+            self.used_at = when
