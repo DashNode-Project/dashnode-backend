@@ -1,6 +1,7 @@
 """HU_DN_01_21 — profile HTTP contract."""
 
 import io
+import json
 
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
@@ -9,6 +10,7 @@ from app.modules.auth.domain import messages
 from tests.support import DEFAULT_PASSWORD, create_user, login_as
 
 PROFILE = "/api/v1/auth/profile"
+CHANGE_PASSWORD = "/api/v1/auth/profile/change-password"
 
 
 def test_get_and_update_profile(client: TestClient, db_engine: Engine) -> None:
@@ -33,6 +35,57 @@ def test_get_and_update_profile(client: TestClient, db_engine: Engine) -> None:
     assert updated["message"] == messages.PROFILE_UPDATED
     assert updated["profile"]["name"] == "Nuevo Nombre"
     assert updated["profile"]["avatar_url"]
+
+
+def test_profile_details_persisted(client: TestClient, db_engine: Engine) -> None:
+    login_as(client, db_engine, email="dev2@empresa.com", role="developer")
+    details = {
+        "last_name": "Gómez",
+        "nickname": "jgomez",
+        "description": "Desarrollador full-stack.",
+        "experience": "5 años en productos SaaS.",
+        "skills": ["React", "Python"],
+        "github": "github.com/jgomez",
+        "linkedin": "linkedin.com/in/jgomez",
+        "availability_text": "Lunes: 09:00-18:00",
+    }
+    patch_resp = client.patch(
+        PROFILE,
+        data={"name": "Jhorman", "details": json.dumps(details)},
+    )
+    assert patch_resp.status_code == 200
+    stored = patch_resp.json()["profile"]["details"]
+    assert stored["nickname"] == "jgomez"
+    assert stored["skills"] == ["React", "Python"]
+    assert stored["availability_text"] == "Lunes: 09:00-18:00"
+
+
+def test_change_password_success(client: TestClient, db_engine: Engine) -> None:
+    login_as(client, db_engine, email="mgr2@empresa.com", role="manager")
+    response = client.post(
+        CHANGE_PASSWORD,
+        json={
+            "current_password": DEFAULT_PASSWORD,
+            "new_password": "NuevaClave9",
+            "confirm_password": "NuevaClave9",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == messages.PASSWORD_CHANGED
+
+
+def test_change_password_wrong_current(client: TestClient, db_engine: Engine) -> None:
+    login_as(client, db_engine, email="mgr3@empresa.com", role="manager")
+    response = client.post(
+        CHANGE_PASSWORD,
+        json={
+            "current_password": "wrong-secret",
+            "new_password": "NuevaClave9",
+            "confirm_password": "NuevaClave9",
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == messages.CURRENT_PASSWORD_INVALID
 
 
 def test_profile_name_required(client: TestClient, db_engine: Engine) -> None:

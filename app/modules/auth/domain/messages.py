@@ -48,6 +48,10 @@ ADMIN_RESET_DISABLED_TARGET = "No se puede restablecer la contraseña de un usua
 # --- EP-02: user provisioning and administration -----------------------------------
 USER_CREATED = "Usuario creado correctamente. Se ha enviado un enlace de activación a su correo."
 INVITE_DEVELOPER_SUCCESS = "Invitación enviada correctamente al Desarrollador."
+INVITE_DEVELOPER_WITH_PASSWORD = (
+    "Desarrollador creado. Comunica la contraseña inicial al usuario; "
+    "debe cambiarla en su primer acceso."
+)
 USER_UPDATED = "Usuario actualizado correctamente."
 MANAGER_ROLE_CHANGE_BLOCKED = (
     "No puede cambiar el rol de un Gerente responsable de proyectos. "
@@ -64,3 +68,6 @@ MANAGER_DEACTIVATE_BLOCKED = (
 REACTIVATE_NOT_INACTIVE = "Solo se pueden reactivar usuarios desactivados."
 PROFILE_UPDATED = "Perfil actualizado correctamente."
 AVATAR_INVALID = "El avatar debe ser una imagen PNG, JPG o WEBP de hasta 2 MB."
+CURRENT_PASSWORD_REQUIRED = "Ingresa tu contraseña actual."
+CURRENT_PASSWORD_INVALID = "La contraseña actual no es correcta."
+PASSWORD_CHANGED = "Contraseña actualizada correctamente."

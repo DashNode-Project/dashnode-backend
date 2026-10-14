@@ -105,8 +105,16 @@ class RespondMeetingCommand(BaseModel):
 
 
 class UpdateMeetingSummaryCommand(BaseModel):
-    summary: str | None = Field(default=None, max_length=2000)
+    summary: str | None = Field(default=None)
     minutes_url: str | None = Field(default=None)
+
+
+class UpdateMeetingCommand(BaseModel):
+    title: str | None = Field(default=None, description="Nuevo título de la reunión")
+    link: str | None = Field(default=None, description="Nuevo enlace de la reunión")
+    participant_ids: list[str] | None = Field(
+        default=None, description="Lista actualizada de participantes"
+    )
 
 
 class ProjectManagedDTO(BaseModel):

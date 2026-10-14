@@ -113,6 +113,12 @@ class LoginUseCase:
             raise AccountDisabledError
 
         now = self._clock.now()
+        mark_invite_accepted = (
+            user.invited_by_user_id is not None and user.invitation_accepted_at is None
+        )
+        if mark_invite_accepted:
+            user.invitation_accepted_at = now
+            user.updated_at = now
         token = self._tokens.new_token()
         session = UserSession(
             id=self._id_gen.generate(),
@@ -125,6 +131,8 @@ class LoginUseCase:
             self._attempts.clear_for(email)
             # Sessions older than their cookie retention can never be presented again.
             self._sessions.purge_expired_before(now - self._policy.session_retention)
+            if mark_invite_accepted:
+                self._users.update(user)
             self._sessions.add(session)
             self._uow.commit()
 

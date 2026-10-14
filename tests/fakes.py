@@ -63,6 +63,14 @@ class FakeUserRepository:
             users = [u for u in users if needle in u.name.lower() or needle in u.email.lower()]
         return sorted(users, key=lambda u: (u.name, u.email))
 
+    def list_developers_invited_by(self, manager_id: str) -> list[User]:
+        users = [
+            u
+            for u in self.users_by_id.values()
+            if u.invited_by_user_id == manager_id and u.role == UserRole.DEVELOPER
+        ]
+        return sorted(users, key=lambda u: (u.name, u.email))
+
 
 class FakeClock:
     def __init__(self, fixed_now: datetime = T0) -> None:
@@ -247,10 +255,14 @@ class FakeTransactionalEmailSender:
 
 
 class FakeProjectOwnershipQuery:
-    def __init__(self, owns: bool = False) -> None:
+    def __init__(self, owns: bool = False, project_count: int = 0) -> None:
         self.owns = owns
+        self.project_count = project_count
         self.checked: list[str] = []
 
     def user_owns_projects(self, user_id: str) -> bool:
         self.checked.append(user_id)
         return self.owns
+
+    def count_active_projects(self) -> int:
+        return self.project_count

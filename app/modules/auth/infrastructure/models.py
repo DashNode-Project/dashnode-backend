@@ -5,8 +5,9 @@ SQLAlchemy ORM models for Auth module.
 """
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Index, String
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.database import Base
@@ -25,6 +26,11 @@ class UserModel(Base):
     role: Mapped[str] = mapped_column(String(50), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     avatar_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    invited_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    invitation_accepted_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    profile_details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
 

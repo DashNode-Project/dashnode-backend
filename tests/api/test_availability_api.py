@@ -71,11 +71,10 @@ def test_availability_team_permissions(client: TestClient, db_engine: Engine) ->
     assert res_mgr.status_code == 200
     assert "users" in res_mgr.json()
 
-    # Admin -> 200
     login_as(client, db_engine, email="adm@dashnode.local", role="admin")
     res_adm = client.get("/api/v1/availability/team?week=2026-10-12")
-    assert res_adm.status_code == 200
-    assert "users" in res_adm.json()
+    assert res_adm.status_code == 403
+    assert res_adm.json()["error"]["code"] == "ACCESS_DENIED"
 
 
 def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: Engine) -> None:
@@ -88,7 +87,7 @@ def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: 
     client.post(
         "/api/v1/availability/mine",
         json={
-            "week_start_date": "2026-10-12",
+            "week_start_date": "2027-06-07",
             "slots": {"monday": [{"start": "09:00", "end": "12:00"}]},
         },
     )
@@ -99,7 +98,7 @@ def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: 
     client.post(
         "/api/v1/availability/mine",
         json={
-            "week_start_date": "2026-10-12",
+            "week_start_date": "2027-06-07",
             "slots": {"monday": [{"start": "10:00", "end": "14:00"}]},
         },
     )
@@ -137,7 +136,7 @@ def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: 
             "days": ["monday"],
             "participant_ids": [u1, u2],
             "duration_hours": 1,
-            "week_start_date": "2026-10-12",
+            "week_start_date": "2027-06-07",
         },
     )
     assert res_inv.status_code == 400
@@ -152,7 +151,7 @@ def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: 
             "days": ["monday"],
             "participant_ids": [u1, u2],
             "duration_hours": 1,
-            "week_start_date": "2026-10-12",
+            "week_start_date": "2027-06-07",
         },
     )
     assert res_search.status_code == 200
@@ -169,7 +168,7 @@ def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: 
             "type": "Planning",
             "project_id": proj_id,
             "description": "Sprint sync",
-            "date": "2026-10-12",
+            "date": "2027-06-07",
             "start_time": "10:00",
             "end_time": "11:00",
             "duration": 60,
@@ -188,7 +187,7 @@ def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: 
             "days": ["monday"],
             "participant_ids": [u1, u2],
             "duration_hours": 1,
-            "week_start_date": "2026-10-12",
+            "week_start_date": "2027-06-07",
         },
     )
     assert res_search2.status_code == 200

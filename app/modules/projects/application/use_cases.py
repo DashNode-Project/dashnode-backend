@@ -30,7 +30,12 @@ from app.modules.projects.domain.entities import (
     ProjectStatus,
 )
 from app.modules.projects.domain.health import compute_health_indicators
-from app.modules.projects.domain.ports import ActiveUserLookup, ManagerLookup, ProjectRepository
+from app.modules.projects.domain.ports import (
+    ActiveUserLookup,
+    ManagerLookup,
+    ProjectDeletionCollaborator,
+    ProjectRepository,
+)
 from app.modules.projects.domain.rules import (
     parse_status,
     validate_manager_id,
@@ -58,7 +63,7 @@ def _require_active_manager(lookup: ManagerLookup, manager_id: str) -> None:
 
 
 class CreateProjectUseCase:
-    """HU_DN_02_22: create project (admin/manager only)."""
+    """HU_DN_02_22: create project (manager only)."""
 
     def __init__(
         self,
@@ -267,7 +272,7 @@ class AssignProjectManagerUseCase:
 
 
 class DeleteProjectUseCase:
-    """HU_DN_02_26: admin-only soft delete with cascade and audit."""
+    """HU_DN_02_26: managing manager soft delete with cascade and audit."""
 
     def __init__(
         self,
@@ -275,23 +280,27 @@ class DeleteProjectUseCase:
         id_gen: IdGenerator,
         clock: Clock,
         uow: UnitOfWork,
+        deletion_collaborator: ProjectDeletionCollaborator | None = None,
     ) -> None:
         self._repo = project_repo
         self._id_gen = id_gen
         self._clock = clock
         self._uow = uow
+        self._deletion_collaborator = deletion_collaborator
 
     def execute(self, project_id: str, actor: CurrentUser) -> MessageResponse:
-        if actor.role != "admin":
-            raise AccessDeniedError()
-
         project = self._repo.get_by_id(project_id)
         if project is None:
             raise AppError("PROJECT_NOT_FOUND", messages.PROJECT_NOT_FOUND, ErrorKind.NOT_FOUND)
 
+        if not can_manage_project(actor, project):
+            raise AccessDeniedError()
+
         now = self._clock.now()
         with self._uow:
             self._repo.soft_delete_cascade(project_id, now)
+            if self._deletion_collaborator is not None:
+                self._deletion_collaborator.after_project_soft_deleted(project_id, now)
             self._repo.add_audit_entry(
                 entry_id=self._id_gen.generate(),
                 user_id=actor.id,
@@ -306,7 +315,7 @@ class DeleteProjectUseCase:
 
 
 class AddProjectMemberUseCase:
-    """HU_DN_02_27: add active user as project member (managing manager or admin)."""
+    """HU_DN_02_27: add active user as project member (managing manager)."""
 
     def __init__(
         self,
@@ -458,6 +467,10 @@ class ListProjectsUseCase:
         self._users = users
 
     def execute(self, user: CurrentUser) -> list[ProjectDTO]:
+        if user.role == "admin":
+            from app.shared.domain.authorization import AccessDeniedError
+
+            raise AccessDeniedError()
         projects = self._repo.list_visible_for_user(user.id, role=user.role)
         return [
             project_to_dto(

@@ -21,6 +21,7 @@ from app.modules.projects.application.use_cases import (
 )
 from app.modules.projects.infrastructure.repositories import SqlAlchemyProjectRepository
 from app.orchestration.project_active_user_lookup import SqlAlchemyActiveUserLookup
+from app.orchestration.project_meeting_cleanup import MeetingCleanupOnProjectDelete
 from app.shared.infrastructure.clock import SystemClock
 from app.shared.infrastructure.database import SqlAlchemyUnitOfWork
 from app.shared.infrastructure.database import get_db_session as get_db
@@ -62,6 +63,7 @@ def get_delete_project_use_case(
         id_gen=id_generator,
         clock=clock,
         uow=SqlAlchemyUnitOfWork(session=db),
+        deletion_collaborator=MeetingCleanupOnProjectDelete(session=db),
     )
 
 

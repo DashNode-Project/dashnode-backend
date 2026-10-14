@@ -682,4 +682,86 @@ Mensajes literales en `app/modules/availability/domain/messages.py`. Migración 
 6. Fallo técnico: si la información no puede cargarse se muestra 'No fue posible cargar la información. Intente nuevamente.'
 
 **Fecha recepción:** 2026-10-13  
+**Estado:** COMPLETED
+
+---
+
+## HU_DN_03_42 — Abrir Google Calendar con un evento prellenado de la reunión, con copia de sus datos si la apertura falla
+**Como** Gerente o Desarrollador participante  
+**Quiero** Abrir Google Calendar con un evento prellenado de la reunión, con copia de sus datos si la apertura falla  
+**Para** guardar la reunión en mi calendario con un solo paso y no perder la información si la integración externa falla
+
+### Criterios de aceptación
+1. Dónde: detalle de la reunión, acción 'Enviar a Google Calendar'; tras un fallo al abrir Google Calendar, el mismo detalle de la reunión.
+2. Campos: datos prellenados en el evento (2.1) y controles que aparecen si la apertura falla (2.2):
+   2.1 Título, fecha y hora, duración, enlace y correos de los integrantes.
+   2.2 Mensaje de error y botón 'Copiar datos de la reunión'.
+3. Validación: el usuario confirma la creación del evento dentro de Google Calendar; el fallo de la integración no cambia el estado ni los datos de la reunión.
+4. Restricción: el sistema no crea ni modifica eventos sin acción y autorización del usuario (RN-AGE-04); no almacena credenciales de Google (RNF-COM-02); el relleno de invitados no está garantizado (R-04); la reunión permanece registrada (RNF-FIA-01). Puede enviar cualquier participante de la reunión (Administrador, Gerente o Desarrollador participante), no solo quien la programa.
+5. Éxito: al pulsar la acción se abre Google Calendar con el evento prellenado; al copiar se muestra 'Datos de la reunión copiados.'
+6. Fallo: al fallar la apertura: 'No fue posible abrir Google Calendar. Puede copiar los datos de la reunión.'; si el portapapeles no está disponible: 'No fue posible copiar los datos. Cópielos manualmente.'
+7. Fallo técnico: ante un error no anticipado (caída del servicio o tiempo de espera agotado) se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-13  
+**Estado:** COMPLETED
+
+---
+
+## HU_DN_03_44 — Responder la invitación a una reunión aceptándola o rechazándola
+**Como** Gerente o Desarrollador participante  
+**Quiero** Responder la invitación a una reunión aceptándola o rechazándola  
+**Para** informar al organizador si asistiré
+
+### Criterios de aceptación
+1. Dónde: detalle de una reunión en la que soy invitado.
+2. Campos: controles:
+   2.1 Botón 'Aceptar' y botón 'Rechazar'.
+3. Validación: la respuesta pasa de pendiente a aceptada o rechazada y puede modificarse antes de que la reunión ocurra.
+4. Restricción: no se puede responder una reunión cancelada ni ya realizada.
+5. Éxito: 'Su respuesta ha sido registrada.' y el organizador la ve en la lista de participantes.
+6. Fallo: reunión cancelada: 'La reunión fue cancelada; no es posible responder.'
+7. Fallo técnico: ante un error no anticipado (caída del servicio o tiempo de espera agotado) se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-13  
+**Estado:** COMPLETED
+
+---
+
+## HU_DN_03_45 — Cancelar una reunión que programé
+**Como** Gerente creador de la reunión  
+**Quiero** Cancelar una reunión que programé  
+**Para** avisar al equipo cuando una reunión ya no se realizará
+
+### Criterios de aceptación
+1. Dónde: detalle de la reunión, acción 'Cancelar reunión' (visible solo para el creador).
+2. Campos: diálogo de confirmación:
+   2.1 Mensaje: '¿Está seguro de que desea cancelar esta reunión? Se notificará a los participantes.'
+   2.2 Botón 'Confirmar' y botón 'Cancelar'.
+3. Validación: sin confirmación no se cancela.
+4. Restricción: solo quien creó la reunión puede cancelarla, sin importar su rol; un Administrador no puede cancelar una reunión creada por un Gerente: se rechaza con 'Solo el creador de la reunión puede cancelarla.' (RN-AGE-05).
+5. Éxito: 'Reunión cancelada correctamente.'; la reunión pasa a Cancelada, deja de contarse como próxima y los participantes reciben una notificación.
+6. Fallo técnico: ante un error no anticipado (caída del servicio o tiempo de espera agotado) se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-13  
+**Estado:** COMPLETED
+
+---
+
+## HU_DN_03_46 — Registrar el resumen y la URL del acta de una reunión realizada
+**Como** Gerente  
+**Quiero** Registrar el resumen y la URL del acta de una reunión realizada  
+**Para** dejar constancia de lo tratado y los acuerdos de la reunión
+
+### Criterios de aceptación
+1. Dónde: detalle de una reunión realizada, acción 'Registrar resumen y acta'.
+2. Campos: el formulario contiene:
+   2.1 Resumen: texto, obligatorio, longitud máxima 2000 caracteres. Si está vacío: 'El resumen es obligatorio.'
+   2.2 URL del acta: texto con formato de URL, opcional. Si no es válida: 'La URL del acta no tiene un formato válido.'
+   2.3 Botón 'Guardar' y botón 'Cancelar'.
+3. Validación: una URL inválida se rechaza.
+4. Restricción: solo aplica a reuniones realizadas; una reunión pasa a «realizada» automáticamente cuando su hora de fin ya transcurrió, sin acción manual.
+5. Éxito: 'Resumen y acta guardados correctamente.' y ambos datos se muestran en el detalle.
+6. Fallo técnico: ante un error no anticipado (caída del servicio o tiempo de espera agotado) se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-13  
 **Estado:** COMPLETED

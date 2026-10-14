@@ -15,6 +15,7 @@ from app.modules.availability.application.dtos import (
     TeamAvailabilityResponse,
     TeamUserAvailabilityDTO,
     TimeSlotDTO,
+    UpdateMeetingCommand,
     UserAvailabilityResponse,
 )
 from app.modules.availability.domain import messages
@@ -41,6 +42,7 @@ from app.modules.availability.domain.rules import (
     validate_search_criteria,
 )
 from app.shared.application.identity import CurrentUser
+from app.shared.application.operational_access import deny_admin_operational_access
 from app.shared.application.ports import Clock, IdGenerator, UnitOfWork
 from app.shared.domain.authorization import AccessDeniedError
 from app.shared.domain.errors import AppError, ErrorKind
@@ -83,6 +85,7 @@ class SaveUserAvailabilityUseCase:
         self._uow = uow
 
     def execute(self, actor: CurrentUser, cmd: SaveAvailabilityCommand) -> MessageResponse:
+        deny_admin_operational_access(actor)
         now = self._clock.now()
         normalized_incoming = _dto_slots_to_domain(cmd.slots)
 
@@ -158,8 +161,8 @@ class GetTeamAvailabilityUseCase:
         self._team_lookup = team_lookup
 
     def execute(self, actor: CurrentUser, week_start_date: str) -> TeamAvailabilityResponse:
-        # Developer is strictly forbidden
-        if actor.role not in ("admin", "manager"):
+        deny_admin_operational_access(actor)
+        if actor.role != "manager":
             raise AccessDeniedError()
 
         visible_users = self._team_lookup.get_visible_users(actor.id, actor.role)
@@ -200,7 +203,8 @@ class SearchMeetingSlotsUseCase:
     def execute(
         self, actor: CurrentUser, cmd: SearchMeetingSlotsCommand
     ) -> SearchMeetingSlotsResponse:
-        if actor.role not in ("admin", "manager"):
+        deny_admin_operational_access(actor)
+        if actor.role != "manager":
             raise AccessDeniedError()
 
         errors = validate_search_criteria(
@@ -251,6 +255,9 @@ class SearchMeetingSlotsUseCase:
         duration_m = cmd.duration_hours * 60
 
         total_slots_count = 0
+        now_dt = self._clock.now()
+        today_str = now_dt.strftime("%Y-%m-%d")
+        now_time_str = now_dt.strftime("%H:%M")
 
         for day in DAYS_OF_WEEK:
             if day not in cmd.days:
@@ -298,10 +305,15 @@ class SearchMeetingSlotsUseCase:
                             no_conflict = False
                             break
 
-                if all_available and no_conflict:
+                slot_start = minutes_to_time(cur_start_m)
+                slot_in_past = day_date < today_str or (
+                    day_date == today_str and slot_start < now_time_str
+                )
+
+                if all_available and no_conflict and not slot_in_past:
                     day_slots.append(
                         TimeSlotDTO(
-                            start=minutes_to_time(cur_start_m),
+                            start=slot_start,
                             end=minutes_to_time(cur_end_m),
                         )
                     )
@@ -340,6 +352,7 @@ def _build_meeting_dto(
     repo: AvailabilityRepository,
     project_lookup: ProjectLookup | None,
     user_lookup: UserLookup | None,
+    clock: Clock | None = None,
 ) -> MeetingDTO:
     project_name: str | None = None
     if meeting.project_id and project_lookup:
@@ -365,6 +378,14 @@ def _build_meeting_dto(
         for uid in meeting.participant_ids
     ]
 
+    effective_status = meeting.status
+    if clock is not None and meeting.status == "scheduled":
+        now_dt = clock.now()
+        now_date = now_dt.strftime("%Y-%m-%d")
+        now_time = now_dt.strftime("%H:%M")
+        if meeting.date < now_date or (meeting.date == now_date and meeting.end_time <= now_time):
+            effective_status = "completed"
+
     return MeetingDTO(
         id=meeting.id,
         project_id=meeting.project_id,
@@ -377,7 +398,7 @@ def _build_meeting_dto(
         end_time=meeting.end_time,
         duration=meeting.duration,
         link=meeting.link,
-        status=meeting.status,
+        status=effective_status,
         creator_id=meeting.creator_id,
         creator_name=creator_name,
         participant_ids=meeting.participant_ids,
@@ -385,6 +406,32 @@ def _build_meeting_dto(
         summary=meeting.summary,
         minutes_url=meeting.minutes_url,
     )
+
+
+def _validate_meeting_schedule_datetime(clock: Clock, date: str, start_time: str) -> None:
+    """Rejects past calendar dates and same-day slots that already started."""
+    now = clock.now()
+    today = now.strftime("%Y-%m-%d")
+    now_time = now.strftime("%H:%M")
+    if date < today:
+        raise AppError(
+            "MEETING_DATE_IN_PAST",
+            messages.MEETING_DATE_IN_PAST,
+            ErrorKind.VALIDATION,
+        )
+    if date == today and start_time < now_time:
+        raise AppError(
+            "MEETING_SLOT_ALREADY_PAST",
+            messages.MEETING_SLOT_ALREADY_PAST,
+            ErrorKind.VALIDATION,
+        )
+
+
+def _is_meeting_upcoming(clock: Clock, date: str, start_time: str) -> bool:
+    now = clock.now()
+    today = now.strftime("%Y-%m-%d")
+    now_time = now.strftime("%H:%M")
+    return date > today or (date == today and start_time >= now_time)
 
 
 class CreateMeetingUseCase:
@@ -409,7 +456,8 @@ class CreateMeetingUseCase:
         self._user_lookup = user_lookup
 
     def execute(self, actor: CurrentUser, cmd: CreateMeetingCommand) -> MeetingDTO:
-        if actor.role not in ("admin", "manager"):
+        deny_admin_operational_access(actor)
+        if actor.role != "manager":
             raise AccessDeniedError()
 
         # Title validation: obligatorio, max 100 caracteres
@@ -476,6 +524,8 @@ class CreateMeetingUseCase:
                 ErrorKind.CONFLICT,
             )
 
+        _validate_meeting_schedule_datetime(self._clock, cmd.date, cmd.start_time)
+
         now = self._clock.now()
         meeting_id = self._id_gen.generate()
 
@@ -528,9 +578,8 @@ class ListMeetingsUseCase:
         date_to: str | None = None,
         filter_type: str | None = None,
     ) -> list[MeetingDTO]:
-        if actor.role == "admin":
-            meetings = self._repo.list_all_meetings()
-        elif actor.role == "manager":
+        deny_admin_operational_access(actor)
+        if actor.role == "manager":
             managed_pids = (
                 self._project_lookup.get_managed_project_ids(actor.id)
                 if self._project_lookup
@@ -586,7 +635,7 @@ class ListMeetingsUseCase:
             meetings.sort(key=lambda m: (m.date, m.start_time))
 
         return [
-            _build_meeting_dto(m, self._repo, self._project_lookup, self._user_lookup)
+            _build_meeting_dto(m, self._repo, self._project_lookup, self._user_lookup, self._clock)
             for m in meetings
         ]
 
@@ -599,19 +648,20 @@ class GetMeetingDetailUseCase:
         repo: AvailabilityRepository,
         project_lookup: ProjectLookup | None = None,
         user_lookup: UserLookup | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self._repo = repo
         self._project_lookup = project_lookup
         self._user_lookup = user_lookup
+        self._clock = clock
 
     def execute(self, actor: CurrentUser, meeting_id: str) -> MeetingDTO:
+        deny_admin_operational_access(actor)
         meeting = self._repo.get_meeting_by_id(meeting_id)
         if meeting is None:
             raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
 
-        if actor.role == "admin":
-            pass
-        elif actor.role == "manager":
+        if actor.role == "manager":
             managed_pids = (
                 self._project_lookup.get_managed_project_ids(actor.id)
                 if self._project_lookup
@@ -627,11 +677,214 @@ class GetMeetingDetailUseCase:
             if actor.id not in meeting.participant_ids:
                 raise AccessDeniedError()
 
-        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+        return _build_meeting_dto(
+            meeting, self._repo, self._project_lookup, self._user_lookup, self._clock
+        )
 
 
 class CancelMeetingUseCase:
-    """Cancels a scheduled meeting. Only creator or admin can cancel."""
+    """Cancels a scheduled meeting. Only creator can cancel (RN-AGE-05)."""
+
+    def __init__(
+        self,
+        repo: AvailabilityRepository,
+        clock: Clock,
+        uow: UnitOfWork,
+        project_lookup: ProjectLookup | None = None,
+        user_lookup: UserLookup | None = None,
+        notification_sender: NotificationSender | None = None,
+    ) -> None:
+        self._repo = repo
+        self._clock = clock
+        self._uow = uow
+        self._project_lookup = project_lookup
+        self._user_lookup = user_lookup
+        self._notification_sender = notification_sender
+
+    def execute(self, actor: CurrentUser, meeting_id: str) -> MeetingDTO:
+        deny_admin_operational_access(actor)
+        meeting = self._repo.get_meeting_by_id(meeting_id)
+        if meeting is None:
+            raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        # RN-AGE-05: Solo el creador de la reunión puede cancelarla, sin importar su rol
+        if meeting.creator_id != actor.id:
+            raise AppError(
+                "ONLY_CREATOR_CAN_CANCEL",
+                messages.ONLY_CREATOR_CAN_CANCEL,
+                ErrorKind.FORBIDDEN,
+            )
+
+        meeting.status = "cancelled"
+        meeting.updated_at = self._clock.now()
+
+        with self._uow:
+            self._repo.update_meeting(meeting)
+            if self._notification_sender is not None:
+                self._notification_sender.notify_meeting_cancelled(meeting, meeting.participant_ids)
+            self._uow.commit()
+
+        return _build_meeting_dto(
+            meeting, self._repo, self._project_lookup, self._user_lookup, self._clock
+        )
+
+
+class UpdateMeetingUseCase:
+    """Updates title, link and participants for a scheduled upcoming meeting (creator only)."""
+
+    def __init__(
+        self,
+        repo: AvailabilityRepository,
+        clock: Clock,
+        uow: UnitOfWork,
+        project_lookup: ProjectLookup | None = None,
+        user_lookup: UserLookup | None = None,
+    ) -> None:
+        self._repo = repo
+        self._clock = clock
+        self._uow = uow
+        self._project_lookup = project_lookup
+        self._user_lookup = user_lookup
+
+    def execute(self, actor: CurrentUser, meeting_id: str, cmd: UpdateMeetingCommand) -> MeetingDTO:
+        deny_admin_operational_access(actor)
+        if actor.role != "manager":
+            raise AccessDeniedError()
+
+        meeting = self._repo.get_meeting_by_id(meeting_id)
+        if meeting is None:
+            raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if meeting.creator_id != actor.id:
+            raise AppError(
+                "ONLY_CREATOR_CAN_UPDATE",
+                messages.ONLY_CREATOR_CAN_UPDATE,
+                ErrorKind.FORBIDDEN,
+            )
+
+        if meeting.status != "scheduled":
+            raise AppError(
+                "MEETING_NOT_SCHEDULED",
+                messages.MEETING_NOT_SCHEDULED,
+                ErrorKind.VALIDATION,
+            )
+
+        if not _is_meeting_upcoming(self._clock, meeting.date, meeting.start_time):
+            raise AppError(
+                "MEETING_ALREADY_PAST",
+                messages.MEETING_ALREADY_PAST,
+                ErrorKind.VALIDATION,
+            )
+
+        if cmd.title is not None:
+            if not cmd.title.strip():
+                raise AppError(
+                    "TITLE_REQUIRED", messages.MEETING_TITLE_REQUIRED, ErrorKind.VALIDATION
+                )
+            if len(cmd.title.strip()) > 100:
+                raise AppError(
+                    "TITLE_TOO_LONG",
+                    "El título no puede superar los 100 caracteres.",
+                    ErrorKind.VALIDATION,
+                )
+            meeting.title = cmd.title.strip()
+
+        if cmd.link is not None:
+            link_val = cmd.link.strip() if cmd.link else None
+            if link_val and not _is_valid_url(link_val):
+                raise AppError("INVALID_LINK", messages.INVALID_MEETING_LINK, ErrorKind.VALIDATION)
+            meeting.link = link_val
+
+        participant_ids = meeting.participant_ids
+        if cmd.participant_ids is not None:
+            participant_ids = cmd.participant_ids
+            if self._project_lookup is not None and meeting.project_id:
+                proj = self._project_lookup.get_project(meeting.project_id)
+                if proj is None:
+                    raise AppError(
+                        "PROJECT_REQUIRED", messages.PROJECT_REQUIRED, ErrorKind.VALIDATION
+                    )
+                for pid in participant_ids:
+                    if pid not in proj.member_ids and pid != proj.manager_id:
+                        raise AppError(
+                            "PARTICIPANTS_NOT_MEMBERS",
+                            messages.PARTICIPANTS_MUST_BE_PROJECT_MEMBERS,
+                            ErrorKind.VALIDATION,
+                        )
+
+            has_conflict = self._repo.check_concurrent_meeting(
+                participant_ids=participant_ids,
+                date=meeting.date,
+                start_time=meeting.start_time,
+                end_time=meeting.end_time,
+                exclude_meeting_id=meeting.id,
+            )
+            if has_conflict:
+                raise AppError(
+                    "PARTICIPANT_MEETING_CONFLICT",
+                    messages.PARTICIPANT_MEETING_CONFLICT,
+                    ErrorKind.CONFLICT,
+                )
+            meeting.participant_ids = participant_ids
+
+        meeting.updated_at = self._clock.now()
+
+        with self._uow:
+            self._repo.update_meeting(meeting)
+            if cmd.participant_ids is not None:
+                self._repo.replace_meeting_participants(meeting.id, meeting.participant_ids)
+            self._uow.commit()
+
+        return _build_meeting_dto(
+            meeting, self._repo, self._project_lookup, self._user_lookup, self._clock
+        )
+
+
+class DeleteMeetingUseCase:
+    """Hard-deletes a scheduled meeting (creator manager only)."""
+
+    def __init__(
+        self,
+        repo: AvailabilityRepository,
+        clock: Clock,
+        uow: UnitOfWork,
+    ) -> None:
+        self._repo = repo
+        self._clock = clock
+        self._uow = uow
+
+    def execute(self, actor: CurrentUser, meeting_id: str) -> MessageResponse:
+        deny_admin_operational_access(actor)
+        if actor.role != "manager":
+            raise AccessDeniedError()
+
+        meeting = self._repo.get_meeting_by_id(meeting_id)
+        if meeting is None:
+            raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if meeting.creator_id != actor.id:
+            raise AppError(
+                "ONLY_CREATOR_CAN_DELETE",
+                messages.ONLY_CREATOR_CAN_DELETE,
+                ErrorKind.FORBIDDEN,
+            )
+
+        if meeting.status != "scheduled":
+            raise AppError(
+                "MEETING_NOT_SCHEDULED",
+                messages.MEETING_NOT_SCHEDULED,
+                ErrorKind.VALIDATION,
+            )
+
+        with self._uow:
+            self._repo.delete_meeting(meeting_id)
+            self._uow.commit()
+
+        return MessageResponse(message=messages.MEETING_DELETED)
+
+
+class RestoreMeetingUseCase:
+    """Restores a cancelled meeting when its start is still in the future (creator only)."""
 
     def __init__(
         self,
@@ -648,21 +901,45 @@ class CancelMeetingUseCase:
         self._user_lookup = user_lookup
 
     def execute(self, actor: CurrentUser, meeting_id: str) -> MeetingDTO:
+        deny_admin_operational_access(actor)
+        if actor.role != "manager":
+            raise AccessDeniedError()
+
         meeting = self._repo.get_meeting_by_id(meeting_id)
         if meeting is None:
             raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
 
-        if meeting.creator_id != actor.id and actor.role != "admin":
-            raise AccessDeniedError()
+        if meeting.creator_id != actor.id:
+            raise AppError(
+                "ONLY_CREATOR_CAN_RESTORE",
+                messages.ONLY_CREATOR_CAN_RESTORE,
+                ErrorKind.FORBIDDEN,
+            )
 
-        meeting.status = "cancelled"
+        if meeting.status != "cancelled":
+            raise AppError(
+                "MEETING_NOT_CANCELLED",
+                messages.MEETING_NOT_CANCELLED,
+                ErrorKind.VALIDATION,
+            )
+
+        if not _is_meeting_upcoming(self._clock, meeting.date, meeting.start_time):
+            raise AppError(
+                "MEETING_CANNOT_RESTORE",
+                messages.MEETING_CANNOT_RESTORE,
+                ErrorKind.VALIDATION,
+            )
+
+        meeting.status = "scheduled"
         meeting.updated_at = self._clock.now()
 
         with self._uow:
             self._repo.update_meeting(meeting)
             self._uow.commit()
 
-        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+        return _build_meeting_dto(
+            meeting, self._repo, self._project_lookup, self._user_lookup, self._clock
+        )
 
 
 class RespondMeetingUseCase:
@@ -672,21 +949,47 @@ class RespondMeetingUseCase:
         self,
         repo: AvailabilityRepository,
         uow: UnitOfWork,
+        clock: Clock | None = None,
         project_lookup: ProjectLookup | None = None,
         user_lookup: UserLookup | None = None,
     ) -> None:
         self._repo = repo
         self._uow = uow
+        self._clock = clock
         self._project_lookup = project_lookup
         self._user_lookup = user_lookup
 
     def execute(self, actor: CurrentUser, meeting_id: str, response: str) -> MeetingDTO:
+        deny_admin_operational_access(actor)
         meeting = self._repo.get_meeting_by_id(meeting_id)
         if meeting is None:
             raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
 
         if actor.id not in meeting.participant_ids:
             raise AccessDeniedError()
+
+        # Restricción: no se puede responder una reunión cancelada ni ya realizada
+        if meeting.status == "cancelled":
+            raise AppError(
+                "MEETING_CANCELLED",
+                messages.MEETING_CANCELLED_CANNOT_RESPOND,
+                ErrorKind.VALIDATION,
+            )
+
+        if self._clock is not None:
+            now_dt = self._clock.now()
+            now_date = now_dt.strftime("%Y-%m-%d")
+            now_time = now_dt.strftime("%H:%M")
+            is_past = meeting.status == "completed" or (
+                meeting.date < now_date
+                or (meeting.date == now_date and meeting.end_time <= now_time)
+            )
+            if is_past:
+                raise AppError(
+                    "MEETING_ALREADY_PAST",
+                    messages.MEETING_ALREADY_PAST,
+                    ErrorKind.VALIDATION,
+                )
 
         normalized_resp = response.lower().strip()
         if normalized_resp not in ("aceptada", "rechazada"):
@@ -696,11 +999,13 @@ class RespondMeetingUseCase:
             self._repo.update_participant_response(meeting_id, actor.id, normalized_resp)
             self._uow.commit()
 
-        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+        return _build_meeting_dto(
+            meeting, self._repo, self._project_lookup, self._user_lookup, self._clock
+        )
 
 
 class UpdateMeetingSummaryUseCase:
-    """Registers or updates meeting summary and minutes URL."""
+    """Registers or updates meeting summary and minutes URL for completed meetings."""
 
     def __init__(
         self,
@@ -723,13 +1028,12 @@ class UpdateMeetingSummaryUseCase:
         summary: str | None,
         minutes_url: str | None,
     ) -> MeetingDTO:
+        deny_admin_operational_access(actor)
         meeting = self._repo.get_meeting_by_id(meeting_id)
         if meeting is None:
             raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
 
-        if actor.role == "admin":
-            pass
-        elif actor.role == "manager":
+        if actor.role == "manager":
             managed_pids = (
                 self._project_lookup.get_managed_project_ids(actor.id)
                 if self._project_lookup
@@ -740,24 +1044,46 @@ class UpdateMeetingSummaryUseCase:
         else:
             raise AccessDeniedError()
 
-        if summary and len(summary) > 2000:
+        # Restricción: solo aplica a reuniones realizadas
+        now_dt = self._clock.now()
+        now_date = now_dt.strftime("%Y-%m-%d")
+        now_time = now_dt.strftime("%H:%M")
+        is_past = meeting.status == "completed" or (
+            meeting.status != "cancelled"
+            and (
+                meeting.date < now_date
+                or (meeting.date == now_date and meeting.end_time <= now_time)
+            )
+        )
+        if not is_past:
+            raise AppError(
+                "MEETING_NOT_COMPLETED",
+                messages.MEETING_NOT_COMPLETED,
+                ErrorKind.VALIDATION,
+            )
+
+        if not summary or not summary.strip():
+            raise AppError("SUMMARY_REQUIRED", messages.SUMMARY_REQUIRED, ErrorKind.VALIDATION)
+
+        if len(summary.strip()) > 2000:
             raise AppError("SUMMARY_TOO_LONG", messages.SUMMARY_TOO_LONG, ErrorKind.VALIDATION)
 
         if minutes_url and minutes_url.strip() and not _is_valid_url(minutes_url.strip()):
             raise AppError(
                 "INVALID_MINUTES_URL",
-                "El enlace del acta no tiene un formato de URL válido.",
+                messages.INVALID_MINUTES_URL,
                 ErrorKind.VALIDATION,
             )
 
-        meeting.summary = summary
+        meeting.summary = summary.strip()
         meeting.minutes_url = minutes_url.strip() if minutes_url else None
-        if summary and summary.strip():
-            meeting.status = "completed"
+        meeting.status = "completed"
         meeting.updated_at = self._clock.now()
 
         with self._uow:
             self._repo.update_meeting(meeting)
             self._uow.commit()
 
-        return _build_meeting_dto(meeting, self._repo, self._project_lookup, self._user_lookup)
+        return _build_meeting_dto(
+            meeting, self._repo, self._project_lookup, self._user_lookup, self._clock
+        )

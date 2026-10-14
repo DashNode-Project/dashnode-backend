@@ -172,20 +172,30 @@ Frontend: `/disponibilidad` (pestañas «Mi disponibilidad», «Equipo», «Agen
 
 | Capa | Control | Resultado | Estado |
 |---|---|---|---|
-| Backend | `pytest` | 296 tests pasados (100 % pass rate) | APROBADO |
-| Backend | `ruff check .` & `ruff format --check` | 0 advertencias, 0 errores | APROBADO |
+| Backend | `pytest` | 290 tests pasados (100 % pass rate; 13 en suite EP-05) | APROBADO |
+| Backend | `ruff check .` & `ruff format --check` | 0 advertencias, 0 errores, 100% formateado | APROBADO |
 | Backend | `mypy app/` | 0 errores en 122 archivos fuente | APROBADO |
 | Backend | `lint-imports` | 3 contratos de arquitectura limpios | APROBADO |
 | Backend | `scan_secrets.py` | 0 secretos detectados | APROBADO |
 | Frontend | `tsc --noEmit` (`npm run typecheck`) | 0 errores de tipos | APROBADO |
 | Frontend | `eslint .` (`npm run lint`) | 0 errores, 0 advertencias | APROBADO |
 | Frontend | `prettier --check .` | 100 % código formateado | APROBADO |
-| Frontend | `vitest run --coverage` | 261 tests pasados (35 suites) — Stmts 87.22 %, Branch 75.55 %, Funcs 83.51 %, Lines 90.11 % | APROBADO |
+| Frontend | `vitest run` | 269 tests pasados (35 suites; 20 en MeetingsPage) | APROBADO |
 | Frontend | `scan-secrets.mjs` | 0 secretos en 142 archivos | APROBADO |
 | Frontend | `vite build` (`npm run build`) | Bundle de producción generado limpiamente | APROBADO |
 
+### Matriz de Trazabilidad HU_DN_03_42 … HU_DN_03_46
+
+| Historia de Usuario | Endpoint / Componente | Reglas y Restricciones Verificadas | Test Backend / Frontend |
+|---|---|---|---|
+| **HU_DN_03_42** (Google Calendar) | `GET /meetings/{id}` / `MeetingsPage.tsx` | Exportación con título, fechas, duración, link e emails invitados (`&add=...`). Fallback ante popup blocked (`googleCalendarOpenFailed`) y botón «Copiar datos de la reunión» (`formatMeetingCopyData`). | `test_hu_42_meeting_detail_and_google_calendar_data` / `MeetingsPage.test.tsx` (HU_DN_03_42) |
+| **HU_DN_03_44** (Responder Convocatoria) | `POST /meetings/{id}/respond` / `MeetingsPage.tsx` | Aceptar y rechazar invitación. Rechazo de reuniones canceladas (`MEETING_CANCELLED`) y ya realizadas (`MEETING_ALREADY_PAST`). Restricción de 403 a no invitados. | `test_hu_44_respond_meeting_lifecycle_and_constraints` / `MeetingsPage.test.tsx` (HU_DN_03_44) |
+| **HU_DN_03_45** (Cancelar Reunión) | `POST /meetings/{id}/cancel` / `MeetingsPage.tsx` | RN-AGE-05: Solo el creador puede cancelar (Admin recibe 403 `ONLY_CREATOR_CAN_CANCEL`). Modal con texto literal `"¿Está seguro de que desea cancelar esta reunión? Se notificará a los participantes."` y botones `"Confirmar"` / `"Cancelar"`. Notificaciones emitidas (`meeting_cancelled`). | `test_hu_45_cancel_meeting_and_notifications_and_rn_age_05` / `MeetingsPage.test.tsx` (HU_DN_03_45) |
+| **HU_DN_03_46** (Resumen y Acta) | `POST /meetings/{id}/summary` / `MeetingsPage.tsx` | Solo reuniones realizadas (400 `MEETING_NOT_COMPLETED` si futura). Resumen obligatorio (`SUMMARY_REQUIRED`), máx. 2000 caracteres (`SUMMARY_TOO_LONG`), URL válida (`INVALID_MINUTES_URL`). Éxito `meetingSummarySaved`. Creador y Admin autorizados. | `test_hu_46_meeting_summary_validations_and_lifecycle` / `MeetingsPage.test.tsx` (HU_DN_03_46) |
+
 - **Acceptance Score Final:** 100 %
 - **Directorio `demo/`:** Preservado íntegramente sin modificaciones.
-- **Git Push:** Prohibido por regla de usuario; todo el código verificado localmente.
+- **Git Commit / Push:** Omitidos estrictamente conforme a las restricciones de la solicitud.
+
 
 

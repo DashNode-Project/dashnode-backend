@@ -37,6 +37,8 @@ class UserRepository(Protocol):
 
     def list_active_users(self, *, name_contains: str | None = None) -> list[User]: ...
 
+    def list_developers_invited_by(self, manager_id: str) -> list[User]: ...
+
 
 class SessionRepository(Protocol):
     """Port for server-side sessions (looked up by the hash of the opaque token)."""
@@ -94,6 +96,8 @@ class ProjectOwnershipQuery(Protocol):
     """Cross-module check: whether a user owns at least one project (orchestration adapter)."""
 
     def user_owns_projects(self, user_id: str) -> bool: ...
+
+    def count_active_projects(self) -> int: ...
 
 
 class TransactionalEmailSender(Protocol):

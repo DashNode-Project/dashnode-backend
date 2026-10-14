@@ -39,6 +39,14 @@ def test_hu_22_developer_cannot_create(client: TestClient, db_engine: Engine) ->
     assert resp.status_code == 403
 
 
+def test_hu_22_admin_cannot_create(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = create_user(db_engine, email="mgr-admin-block@dashnode.io", role="manager")
+    login_as(client, db_engine, email="admin-block@dashnode.io", role="admin")
+    resp = client.post("/api/v1/projects", json=_create_payload(mgr_id))
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "ACCESS_DENIED"
+
+
 def test_hu_22_validation_messages(client: TestClient, db_engine: Engine) -> None:
     mgr_id = login_as(client, db_engine, email="mgr3@dashnode.io", role="manager")
     resp = client.post(
@@ -90,8 +98,7 @@ def test_hu_24_status_update(client: TestClient, db_engine: Engine) -> None:
 
 
 def test_hu_25_assign_manager(client: TestClient, db_engine: Engine) -> None:
-    mgr_id = create_user(db_engine, email="other-mgr@dashnode.io", role="manager")
-    login_as(client, db_engine, email="admin@dashnode.io", role="admin")
+    mgr_id = login_as(client, db_engine, email="other-mgr@dashnode.io", role="manager")
     created = client.post(
         "/api/v1/projects",
         json=_create_payload(mgr_id),
@@ -104,9 +111,8 @@ def test_hu_25_assign_manager(client: TestClient, db_engine: Engine) -> None:
     assert resp.json()["message"] == "Gerente responsable actualizado correctamente."
 
 
-def test_hu_26_admin_soft_delete(client: TestClient, db_engine: Engine) -> None:
-    mgr_id = create_user(db_engine, email="mgr-del@dashnode.io", role="manager")
-    login_as(client, db_engine, email="admin-del@dashnode.io", role="admin")
+def test_hu_26_manager_soft_delete(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="mgr-del@dashnode.io", role="manager")
     created = client.post("/api/v1/projects", json=_create_payload(mgr_id)).json()
     proj_id = created["id"]
 

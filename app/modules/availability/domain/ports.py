@@ -1,6 +1,7 @@
 """Repository and service ports for Availability domain."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from app.modules.availability.domain.entities import Meeting, UserAvailability
@@ -56,6 +57,12 @@ class AvailabilityRepository(Protocol):
 
     def update_meeting(self, meeting: Meeting) -> None: ...
 
+    def replace_meeting_participants(self, meeting_id: str, participant_ids: list[str]) -> None: ...
+
+    def delete_meeting(self, meeting_id: str) -> None: ...
+
+    def cancel_scheduled_meetings_for_project(self, project_id: str, when: datetime) -> None: ...
+
     def get_participant_responses(self, meeting_id: str) -> dict[str, str]: ...
 
     def update_participant_response(self, meeting_id: str, user_id: str, response: str) -> None: ...
@@ -94,6 +101,8 @@ class NotificationSender(Protocol):
     """Cross-cutting notification dispatch (orchestrated, BR-4)."""
 
     def notify_meeting_scheduled(self, meeting: Meeting, participant_ids: list[str]) -> None: ...
+
+    def notify_meeting_cancelled(self, meeting: Meeting, participant_ids: list[str]) -> None: ...
 
 
 class UserLookup(Protocol):

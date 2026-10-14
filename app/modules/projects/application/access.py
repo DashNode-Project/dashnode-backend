@@ -6,14 +6,12 @@ from app.shared.application.identity import CurrentUser
 
 
 def can_create_project(user: CurrentUser) -> bool:
-    return user.role in ("admin", "manager")
+    return user.role == "manager"
 
 
 def can_manage_project(user: CurrentUser, project: Project) -> bool:
     if project.is_deleted():
         return False
-    if user.role == "admin":
-        return True
     return user.role == "manager" and project.manager_id == user.id
 
 
@@ -21,7 +19,7 @@ def can_view_project(user: CurrentUser, project: Project, repo: ProjectRepositor
     if project.is_deleted():
         return False
     if user.role == "admin":
-        return True
+        return False
     if user.role == "manager" and project.manager_id == user.id:
         return True
     return repo.is_member(project.id, user.id)

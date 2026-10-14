@@ -46,16 +46,37 @@ class UserDTO(BaseModel):
     avatar_url: str | None = None
 
 
+class ProfileDetailsDTO(BaseModel):
+    last_name: str | None = None
+    nickname: str | None = None
+    description: str | None = None
+    experience: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    github: str | None = None
+    linkedin: str | None = None
+    availability_text: str | None = None
+
+
 class ProfileDTO(BaseModel):
     id: str
     email: str
     name: str
     role: UserRole
+    is_active: bool = True
+    created_at: datetime
     avatar_url: str | None = None
+    details: ProfileDetailsDTO = Field(default_factory=ProfileDetailsDTO)
+
+
+class ChangePasswordCommand(BaseModel):
+    current_password: str = Field(default="", max_length=1000)
+    new_password: str = Field(default="", max_length=1000)
+    confirm_password: str = Field(default="", max_length=1000)
 
 
 class UpdateProfileCommand(BaseModel):
     name: str = Field(default="", max_length=1000)
+    details: ProfileDetailsDTO | None = None
 
 
 class ProfileResponse(BaseModel):
@@ -101,6 +122,10 @@ class AdminUserSummaryDTO(BaseModel):
     is_active: bool
 
 
+class AdminDashboardSummaryDTO(BaseModel):
+    project_count: int
+
+
 class CreateUserByAdminCommand(BaseModel):
     name: str = Field(default="", max_length=1000)
     email: str = Field(default="", max_length=1000)
@@ -111,6 +136,20 @@ class InviteDeveloperCommand(BaseModel):
     name: str = Field(default="", max_length=1000)
     email: str = Field(default="", max_length=1000)
     role: str | None = Field(default=None, max_length=50)
+
+
+class InviteDeveloperResponse(BaseModel):
+    message: str
+    user_id: str
+    initial_password: str
+
+
+class ManagerDeveloperSummaryDTO(BaseModel):
+    id: str
+    name: str
+    email: str
+    status: str
+    is_active: bool
 
 
 class UpdateUserByAdminCommand(BaseModel):

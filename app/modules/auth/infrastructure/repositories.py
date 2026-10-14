@@ -48,6 +48,9 @@ class SqlAlchemyUserRepository(UserRepository):
             role=UserRole(model.role),
             is_active=model.is_active,
             avatar_key=model.avatar_key,
+            invited_by_user_id=model.invited_by_user_id,
+            invitation_accepted_at=model.invitation_accepted_at,
+            profile_details=dict(model.profile_details or {}),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -75,6 +78,9 @@ class SqlAlchemyUserRepository(UserRepository):
             role=user.role.value,
             is_active=user.is_active,
             avatar_key=user.avatar_key,
+            invited_by_user_id=user.invited_by_user_id,
+            invitation_accepted_at=user.invitation_accepted_at,
+            profile_details=user.profile_details or {},
             created_at=user.created_at,
             updated_at=user.updated_at,
         )
@@ -95,7 +101,21 @@ class SqlAlchemyUserRepository(UserRepository):
             model.role = user.role.value
             model.is_active = user.is_active
             model.avatar_key = user.avatar_key
+            model.invited_by_user_id = user.invited_by_user_id
+            model.invitation_accepted_at = user.invitation_accepted_at
+            model.profile_details = user.profile_details or {}
             model.updated_at = user.updated_at
+
+    def list_developers_invited_by(self, manager_id: str) -> list[User]:
+        stmt = (
+            select(UserModel)
+            .where(
+                UserModel.invited_by_user_id == manager_id,
+                UserModel.role == UserRole.DEVELOPER.value,
+            )
+            .order_by(UserModel.name, UserModel.email)
+        )
+        return [self._to_domain(model) for model in self._session.execute(stmt).scalars()]
 
     def list_all(self) -> list[User]:
         return self.list_filtered()

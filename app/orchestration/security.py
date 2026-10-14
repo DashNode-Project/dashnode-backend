@@ -71,3 +71,12 @@ def require_admin_or_manager(user: CurrentUser = Depends(get_current_user)) -> C
     if user.role not in ("admin", "manager"):
         raise AccessDeniedError()
     return user
+
+
+def require_non_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Managers and developers only; administrators manage users (EP-01)."""
+    from app.shared.domain.authorization import AccessDeniedError
+
+    if user.role == "admin":
+        raise AccessDeniedError()
+    return user

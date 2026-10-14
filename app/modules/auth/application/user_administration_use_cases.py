@@ -3,9 +3,12 @@
 import secrets
 
 from app.modules.auth.application.dtos import (
+    AdminDashboardSummaryDTO,
     AdminUserSummaryDTO,
     CreateUserByAdminCommand,
     InviteDeveloperCommand,
+    InviteDeveloperResponse,
+    ManagerDeveloperSummaryDTO,
     MessageResponse,
     UpdateUserByAdminCommand,
     UpdateUserByAdminResponse,
@@ -13,6 +16,7 @@ from app.modules.auth.application.dtos import (
 from app.modules.auth.application.mappers import to_user_dto
 from app.modules.auth.application.password_reset_use_cases import CredentialTokenPolicy
 from app.modules.auth.domain import messages
+from app.modules.auth.domain.developer_credentials import default_developer_password_from_name
 from app.modules.auth.domain.entities import (
     CredentialTokenPurpose,
     PasswordCredentialToken,
@@ -27,6 +31,7 @@ from app.modules.auth.domain.errors import (
 from app.modules.auth.domain.ports import (
     PasswordCredentialTokenRepository,
     ProjectOwnershipQuery,
+    SessionRepository,
     SessionTokenService,
     TransactionalEmailSender,
     UserRepository,
@@ -198,7 +203,7 @@ class InviteDeveloperByManagerUseCase(_ActivationMailMixin):
         self._uow = uow
         self._policy = policy
 
-    def execute(self, *, actor_id: str, cmd: InviteDeveloperCommand) -> MessageResponse:
+    def execute(self, *, actor_id: str, cmd: InviteDeveloperCommand) -> InviteDeveloperResponse:
         actor = self._users.get_by_id(actor_id)
         if actor is None or actor.role != UserRole.MANAGER:
             raise AccessDeniedError()
@@ -213,14 +218,16 @@ class InviteDeveloperByManagerUseCase(_ActivationMailMixin):
             raise EmailAlreadyRegisteredError()
 
         now = self._clock.now()
-        pending_secret = secrets.token_urlsafe(48)
+        initial_password = default_developer_password_from_name(clean_name)
         user = User(
             id=self._id_gen.generate(),
             email=clean_email,
-            hashed_password=self._hasher.hash(pending_secret),
+            hashed_password=self._hasher.hash(initial_password),
             name=clean_name,
             role=UserRole.DEVELOPER,
             is_active=True,
+            invited_by_user_id=actor_id,
+            invitation_accepted_at=None,
             created_at=now,
             updated_at=now,
         )
@@ -228,8 +235,105 @@ class InviteDeveloperByManagerUseCase(_ActivationMailMixin):
             self._users.save(user)
             self._uow.commit()
 
-        self._issue_activation(user)
-        return MessageResponse(message=messages.INVITE_DEVELOPER_SUCCESS)
+        return InviteDeveloperResponse(
+            message=messages.INVITE_DEVELOPER_WITH_PASSWORD,
+            user_id=user.id,
+            initial_password=initial_password,
+        )
+
+
+class ListManagerDevelopersUseCase:
+    """Developers invited by the acting manager (scoped list)."""
+
+    def __init__(self, user_repo: UserRepository) -> None:
+        self._users = user_repo
+
+    def execute(self, *, actor_id: str) -> list[ManagerDeveloperSummaryDTO]:
+        actor = self._users.get_by_id(actor_id)
+        if actor is None or actor.role != UserRole.MANAGER:
+            raise AccessDeniedError()
+
+        rows = self._users.list_developers_invited_by(actor_id)
+        result: list[ManagerDeveloperSummaryDTO] = []
+        for user in rows:
+            if user.invitation_accepted_at is None:
+                status = "pending"
+            elif user.is_active:
+                status = "active"
+            else:
+                status = "inactive"
+            result.append(
+                ManagerDeveloperSummaryDTO(
+                    id=user.id,
+                    name=user.name,
+                    email=user.email,
+                    status=status,
+                    is_active=user.is_active,
+                )
+            )
+        return result
+
+
+class DeactivateDeveloperByManagerUseCase:
+    def __init__(
+        self,
+        user_repo: UserRepository,
+        session_repo: SessionRepository,
+        clock: Clock,
+        uow: UnitOfWork,
+    ) -> None:
+        self._users = user_repo
+        self._sessions = session_repo
+        self._clock = clock
+        self._uow = uow
+
+    def execute(self, *, actor_id: str, target_user_id: str) -> MessageResponse:
+        actor = self._users.get_by_id(actor_id)
+        if actor is None or actor.role != UserRole.MANAGER:
+            raise AccessDeniedError()
+
+        target = self._users.get_by_id(target_user_id)
+        if target is None:
+            raise AppError("USER_NOT_FOUND", messages.USER_NOT_FOUND, ErrorKind.NOT_FOUND)
+        if target.invited_by_user_id != actor_id or target.role != UserRole.DEVELOPER:
+            raise AccessDeniedError()
+
+        now = self._clock.now()
+        target.deactivate(now)
+        with self._uow:
+            self._sessions.revoke_all_active_for_user(target.id, now)
+            self._users.update(target)
+            self._uow.commit()
+        return MessageResponse(message=messages.USER_DEACTIVATED)
+
+
+class ReactivateDeveloperByManagerUseCase:
+    def __init__(self, user_repo: UserRepository, clock: Clock, uow: UnitOfWork) -> None:
+        self._users = user_repo
+        self._clock = clock
+        self._uow = uow
+
+    def execute(self, *, actor_id: str, target_user_id: str) -> MessageResponse:
+        actor = self._users.get_by_id(actor_id)
+        if actor is None or actor.role != UserRole.MANAGER:
+            raise AccessDeniedError()
+
+        target = self._users.get_by_id(target_user_id)
+        if target is None:
+            raise AppError("USER_NOT_FOUND", messages.USER_NOT_FOUND, ErrorKind.NOT_FOUND)
+        if target.invited_by_user_id != actor_id or target.role != UserRole.DEVELOPER:
+            raise AccessDeniedError()
+        if target.is_active:
+            from app.modules.auth.domain.errors import ReactivateNotInactiveError
+
+            raise ReactivateNotInactiveError()
+
+        now = self._clock.now()
+        target.reactivate(now)
+        with self._uow:
+            self._users.update(target)
+            self._uow.commit()
+        return MessageResponse(message=messages.USER_REACTIVATED)
 
 
 class ListAdminUsersUseCase:
@@ -276,6 +380,24 @@ class ListAdminUsersUseCase:
             )
             for u in users
         ]
+
+
+class GetAdminDashboardSummaryUseCase:
+    """Read-only org metrics for the administrator home (no project operations)."""
+
+    def __init__(
+        self,
+        user_repo: UserRepository,
+        project_ownership: ProjectOwnershipQuery,
+    ) -> None:
+        self._users = user_repo
+        self._projects = project_ownership
+
+    def execute(self, *, actor_id: str) -> AdminDashboardSummaryDTO:
+        actor = self._users.get_by_id(actor_id)
+        if actor is None or actor.role != UserRole.ADMIN:
+            raise AccessDeniedError()
+        return AdminDashboardSummaryDTO(project_count=self._projects.count_active_projects())
 
 
 class UpdateUserByAdminUseCase:
