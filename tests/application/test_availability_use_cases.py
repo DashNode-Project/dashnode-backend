@@ -164,6 +164,14 @@ class FakeAvailabilityRepository:
                 return True
         return False
 
+    def replace_meeting_participants(self, meeting_id: str, participant_ids: list[str]) -> None:
+        meeting = self.get_meeting_by_id(meeting_id)
+        if meeting is not None:
+            meeting.participant_ids = participant_ids
+
+    def delete_meeting(self, meeting_id: str) -> None:
+        self.meetings = [m for m in self.meetings if m.id != meeting_id]
+
 
 class FakeTeamMembersLookup(TeamMembersLookup):
     def __init__(self, visible: list[UserBasicInfo]) -> None:
@@ -380,3 +388,83 @@ def test_search_meeting_slots_no_slots_found() -> None:
         search_case.execute(mgr, search_cmd)
     assert exc_info.value.code == "NO_AVAILABLE_SLOTS"
     assert exc_info.value.message == messages.NO_AVAILABLE_SLOTS
+
+
+def test_create_meeting_rejects_past_date() -> None:
+    repo = FakeAvailabilityRepository()
+    clock = FakeClock(NOW)
+    uow = FakeUnitOfWork()
+    id_gen = FakeIdGenerator(["m-past"])
+    create_case = CreateMeetingUseCase(repo=repo, id_gen=id_gen, clock=clock, uow=uow)
+    mgr = make_actor(id="mgr1", email="mgr@test.com", role="manager")
+
+    with pytest.raises(AppError) as exc_info:
+        create_case.execute(
+            mgr,
+            CreateMeetingCommand(
+                title="Past",
+                date="2026-10-11",
+                start_time="09:00",
+                end_time="10:00",
+                duration=60,
+                participant_ids=["u1"],
+            ),
+        )
+    assert exc_info.value.code == "MEETING_DATE_IN_PAST"
+
+
+def test_create_meeting_rejects_same_day_past_start() -> None:
+    repo = FakeAvailabilityRepository()
+    clock = FakeClock(NOW)
+    uow = FakeUnitOfWork()
+    id_gen = FakeIdGenerator(["m-past-slot"])
+    create_case = CreateMeetingUseCase(repo=repo, id_gen=id_gen, clock=clock, uow=uow)
+    mgr = make_actor(id="mgr1", email="mgr@test.com", role="manager")
+
+    with pytest.raises(AppError) as exc_info:
+        create_case.execute(
+            mgr,
+            CreateMeetingCommand(
+                title="Too early today",
+                date="2026-10-12",
+                start_time="09:00",
+                end_time="10:00",
+                duration=60,
+                participant_ids=["u1"],
+            ),
+        )
+    assert exc_info.value.code == "MEETING_SLOT_ALREADY_PAST"
+
+
+def test_search_meeting_slots_excludes_past_times_today() -> None:
+    repo = FakeAvailabilityRepository()
+    clock = FakeClock(NOW)
+    search_case = SearchMeetingSlotsUseCase(repo=repo, clock=clock)
+    mgr = make_actor(id="mgr1", email="mgr@test.com", role="manager")
+
+    repo.save_user_availability(
+        UserAvailability(
+            id="a-1",
+            user_id="u1",
+            week_start_date="2026-10-12",
+            slots={"monday": [TimeSlot(start="08:00", end="18:00")]},
+            created_at=NOW,
+            updated_at=NOW,
+        )
+    )
+
+    res = search_case.execute(
+        mgr,
+        SearchMeetingSlotsCommand(
+            interval_start="08:00",
+            interval_end="18:00",
+            days=["monday"],
+            participant_ids=["u1"],
+            duration_hours=1,
+            week_start_date="2026-10-12",
+        ),
+    )
+    monday = next(r for r in res.results if r.day == "monday")
+    starts = [s.start for s in monday.slots]
+    assert "09:00" not in starts
+    assert "10:00" in starts

@@ -54,6 +54,7 @@ class ProfileDetailsDTO(BaseModel):
     skills: list[str] = Field(default_factory=list)
     github: str | None = None
     linkedin: str | None = None
+    availability_text: str | None = None
 
 
 class ProfileDTO(BaseModel):
@@ -61,8 +62,16 @@ class ProfileDTO(BaseModel):
     email: str
     name: str
     role: UserRole
+    is_active: bool = True
+    created_at: datetime
     avatar_url: str | None = None
     details: ProfileDetailsDTO = Field(default_factory=ProfileDetailsDTO)
+
+
+class ChangePasswordCommand(BaseModel):
+    current_password: str = Field(default="", max_length=1000)
+    new_password: str = Field(default="", max_length=1000)
+    confirm_password: str = Field(default="", max_length=1000)
 
 
 class UpdateProfileCommand(BaseModel):

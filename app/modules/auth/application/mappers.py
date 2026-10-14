@@ -40,6 +40,7 @@ def _profile_details_from_user(user: User) -> ProfileDetailsDTO:
         skills=[str(s) for s in skills],
         github=raw.get("github"),
         linkedin=raw.get("linkedin"),
+        availability_text=raw.get("availability_text"),
     )
 
 
@@ -49,6 +50,8 @@ def to_profile_dto(user: User) -> ProfileDTO:
         email=user.email,
         name=user.name,
         role=user.role,
+        is_active=user.is_active,
+        created_at=user.created_at,
         avatar_url=avatar_url_for(user),
         details=_profile_details_from_user(user),
     )

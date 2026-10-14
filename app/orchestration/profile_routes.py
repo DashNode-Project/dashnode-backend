@@ -1,13 +1,25 @@
 """Profile and avatar routes (HU_DN_01_21)."""
 
+import json
+
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.modules.auth.application.dtos import ProfileResponse, UpdateProfileCommand
-from app.modules.auth.application.profile_use_cases import GetProfileUseCase, UpdateProfileUseCase
+from app.modules.auth.application.dtos import (
+    ChangePasswordCommand,
+    ProfileDetailsDTO,
+    ProfileResponse,
+    UpdateProfileCommand,
+)
+from app.modules.auth.application.profile_use_cases import (
+    ChangePasswordUseCase,
+    GetProfileUseCase,
+    UpdateProfileUseCase,
+)
 from app.modules.auth.infrastructure.avatar_storage import LocalAvatarStorage
 from app.modules.auth.infrastructure.repositories import SqlAlchemyUserRepository
+from app.orchestration.auth_container import password_hasher
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
 from app.shared.infrastructure.clock import SystemClock
@@ -16,6 +28,13 @@ from app.shared.infrastructure.database import SqlAlchemyUnitOfWork, get_db_sess
 router = APIRouter(prefix="/auth", tags=["auth"])
 _clock = SystemClock()
 _storage = LocalAvatarStorage()
+
+
+def _parse_details(raw: str | None) -> ProfileDetailsDTO | None:
+    if raw is None or not raw.strip():
+        return None
+    data = json.loads(raw)
+    return ProfileDetailsDTO.model_validate(data)
 
 
 @router.get("/profile", response_model=ProfileResponse)
@@ -30,6 +49,7 @@ def get_profile(
 @router.patch("/profile", response_model=ProfileResponse)
 async def update_profile(
     name: str = Form(default=""),
+    details: str | None = Form(default=None),
     avatar: UploadFile | None = File(default=None),
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db_session),
@@ -45,9 +65,24 @@ async def update_profile(
     )
     return use_case.execute(
         user_id=current_user.id,
-        cmd=UpdateProfileCommand(name=name),
+        cmd=UpdateProfileCommand(name=name, details=_parse_details(details)),
         avatar_bytes=avatar_bytes,
     )
+
+
+@router.post("/profile/change-password", response_model=ProfileResponse)
+def change_password(
+    cmd: ChangePasswordCommand,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> ProfileResponse:
+    use_case = ChangePasswordUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        hasher=password_hasher,
+        clock=_clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+    )
+    return use_case.execute(user_id=current_user.id, cmd=cmd)
 
 
 @router.get("/profile/avatar")

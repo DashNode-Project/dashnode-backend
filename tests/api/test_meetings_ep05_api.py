@@ -3,11 +3,15 @@ Integration and API tests for EP-05: Agendamiento y reuniones.
 Covers HU_DN_03_37, HU_DN_03_38, HU_DN_03_39, HU_DN_03_40, HU_DN_03_41.
 """
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.modules.availability.domain import messages
+from app.modules.availability.infrastructure.models import MeetingModel, MeetingParticipantModel
 from app.modules.notifications.infrastructure.models import NotificationModel
 from tests.support import DEFAULT_PASSWORD, create_user, login_as
 
@@ -44,6 +48,55 @@ def _setup_project_with_members(
         )
         assert add_res.status_code == 201
     return project_id
+
+
+def _seed_meeting(
+    db_engine: Engine,
+    *,
+    project_id: str,
+    creator_id: str,
+    participant_ids: list[str],
+    title: str,
+    date: str,
+    start_time: str,
+    end_time: str,
+    duration: int = 60,
+    meeting_type: str = "General",
+    link: str | None = None,
+    status: str = "scheduled",
+    meeting_id: str | None = None,
+) -> str:
+    """Insert a meeting row directly (e.g. past dates no longer accepted via POST)."""
+    m_id = meeting_id or str(uuid4())
+    now = datetime.now(UTC)
+    factory = sessionmaker(bind=db_engine)
+    with factory() as session:
+        session.add(
+            MeetingModel(
+                id=m_id,
+                project_id=project_id,
+                title=title,
+                type=meeting_type,
+                description="",
+                date=date,
+                start_time=start_time,
+                end_time=end_time,
+                duration=duration,
+                link=link,
+                status=status,
+                summary=None,
+                minutes_url=None,
+                creator_id=creator_id,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        for uid in participant_ids:
+            session.add(
+                MeetingParticipantModel(meeting_id=m_id, user_id=uid, response="pendiente")
+            )
+        session.commit()
+    return m_id
 
 
 # =========================================================================
@@ -135,6 +188,14 @@ def test_hu_38_create_meeting_validations(client: TestClient, db_engine: Engine)
     switch_user(client, "dev1_val@dashnode.io")
     res_dev = client.post("/api/v1/availability/meetings", json=base_payload)
     assert res_dev.status_code == 403
+
+    # 7. Past date rejected
+    switch_user(client, "mgr_val@dashnode.io")
+    payload = dict(base_payload, date="2026-01-01")
+    res_past = client.post("/api/v1/availability/meetings", json=payload)
+    assert res_past.status_code == 400
+    assert res_past.json()["error"]["code"] == "MEETING_DATE_IN_PAST"
+    assert res_past.json()["error"]["message"] == messages.MEETING_DATE_IN_PAST
 
 
 def test_hu_38_successful_meeting_creation_and_notifications(
@@ -290,22 +351,18 @@ def test_hu_39_filter_upcoming_and_past(client: TestClient, db_engine: Engine) -
     )
     assert res_up.status_code == 201
 
-    # Meeting in the past
-    res_past = client.post(
-        "/api/v1/availability/meetings",
-        json={
-            "title": "Pasada",
-            "type": "Daily",
-            "project_id": p_id,
-            "date": "2026-01-01",
-            "start_time": "10:00",
-            "end_time": "10:30",
-            "duration": 30,
-            "link": None,
-            "participant_ids": [dev_id],
-        },
+    _seed_meeting(
+        db_engine,
+        project_id=p_id,
+        creator_id=mgr_id,
+        participant_ids=[dev_id],
+        title="Pasada",
+        date="2026-01-01",
+        start_time="10:00",
+        end_time="10:30",
+        duration=30,
+        meeting_type="Daily",
     )
-    assert res_past.status_code == 201
 
     # Filter upcoming
     res = client.get("/api/v1/availability/meetings?filter_type=upcoming")
@@ -415,22 +472,17 @@ def test_hu_41_cancel_meeting_and_summary_registration(
     dev_id = create_user(db_engine, email="dev_acta@dashnode.io", role="developer")
     p_id = _setup_project_with_members(client, mgr_id, [dev_id], "P Minuta")
 
-    res = client.post(
-        "/api/v1/availability/meetings",
-        json={
-            "title": "Minuta Test",
-            "type": "Retro",
-            "project_id": p_id,
-            "date": "2026-01-01",
-            "start_time": "16:00",
-            "end_time": "17:00",
-            "duration": 60,
-            "link": None,
-            "participant_ids": [dev_id],
-        },
+    m_id = _seed_meeting(
+        db_engine,
+        project_id=p_id,
+        creator_id=mgr_id,
+        participant_ids=[dev_id],
+        title="Minuta Test",
+        date="2026-01-01",
+        start_time="16:00",
+        end_time="17:00",
+        meeting_type="Retro",
     )
-    assert res.status_code == 201
-    m_id = res.json()["id"]
 
     # Developer cannot register summary or cancel
     switch_user(client, "dev_acta@dashnode.io")
@@ -591,23 +643,18 @@ def test_hu_44_respond_meeting_lifecycle_and_constraints(
     )
 
     # 5. Cannot respond to a meeting already in the past (400 MEETING_ALREADY_PAST)
-    switch_user(client, "mgr_hu44@dashnode.io")
-    res_past = client.post(
-        "/api/v1/availability/meetings",
-        json={
-            "title": "Daily Antigua",
-            "type": "Daily",
-            "project_id": p_id,
-            "date": "2026-01-01",
-            "start_time": "08:00",
-            "end_time": "08:30",
-            "duration": 30,
-            "link": None,
-            "participant_ids": [dev_id],
-        },
+    past_m_id = _seed_meeting(
+        db_engine,
+        project_id=p_id,
+        creator_id=mgr_id,
+        participant_ids=[dev_id],
+        title="Daily Antigua",
+        date="2026-01-01",
+        start_time="08:00",
+        end_time="08:30",
+        duration=30,
+        meeting_type="Daily",
     )
-    assert res_past.status_code == 201
-    past_m_id = res_past.json()["id"]
 
     switch_user(client, "dev_hu44@dashnode.io")
     res_resp_past = client.post(
@@ -747,22 +794,17 @@ def test_hu_46_meeting_summary_validations_and_lifecycle(
     assert res_sum_fut.json()["error"]["message"] == messages.MEETING_NOT_COMPLETED
 
     # 2. Past meeting (eligible for summary)
-    res_past = client.post(
-        "/api/v1/availability/meetings",
-        json={
-            "title": "Reunión Realizada",
-            "type": "Retro",
-            "project_id": p_id,
-            "date": "2026-01-01",
-            "start_time": "09:00",
-            "end_time": "10:00",
-            "duration": 60,
-            "link": None,
-            "participant_ids": [dev_id],
-        },
+    past_id = _seed_meeting(
+        db_engine,
+        project_id=p_id,
+        creator_id=mgr_id,
+        participant_ids=[dev_id],
+        title="Reunión Realizada",
+        date="2026-01-01",
+        start_time="09:00",
+        end_time="10:00",
+        meeting_type="Retro",
     )
-    assert res_past.status_code == 201
-    past_id = res_past.json()["id"]
 
     # Validation: empty summary (400 SUMMARY_REQUIRED)
     res_empty = client.post(
@@ -833,3 +875,92 @@ def test_hu_46_meeting_summary_validations_and_lifecycle(
     )
     assert res_admin_update.status_code == 403
     assert res_admin_update.json()["error"]["code"] == "ACCESS_DENIED"
+
+
+# =========================================================================
+# Update, delete and restore scheduled meetings
+# =========================================================================
+
+
+def test_meeting_update_delete_restore_lifecycle(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="mgr_crud@dashnode.io", role="manager")
+    dev_id = create_user(db_engine, email="dev_crud@dashnode.io", role="developer")
+    dev2_id = create_user(db_engine, email="dev2_crud@dashnode.io", role="developer")
+    p_id = _setup_project_with_members(client, mgr_id, [dev_id, dev2_id], "P CRUD")
+
+    res = client.post(
+        "/api/v1/availability/meetings",
+        json={
+            "title": "Original",
+            "type": "Planning",
+            "project_id": p_id,
+            "date": "2026-12-20",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "duration": 60,
+            "link": "https://meet.google.com/original",
+            "participant_ids": [dev_id],
+        },
+    )
+    assert res.status_code == 201
+    m_id = res.json()["id"]
+
+    patch_res = client.patch(
+        f"/api/v1/availability/meetings/{m_id}",
+        json={
+            "title": "Actualizada",
+            "link": "https://meet.google.com/updated",
+            "participant_ids": [dev_id, dev2_id],
+        },
+    )
+    assert patch_res.status_code == 200
+    updated = patch_res.json()
+    assert updated["title"] == "Actualizada"
+    assert updated["link"] == "https://meet.google.com/updated"
+    assert set(updated["participant_ids"]) == {dev_id, dev2_id}
+
+    create_user(db_engine, email="other_mgr_crud@dashnode.io", role="manager")
+    switch_user(client, "other_mgr_crud@dashnode.io")
+    forbidden_patch = client.patch(
+        f"/api/v1/availability/meetings/{m_id}",
+        json={"title": "Hack"},
+    )
+    assert forbidden_patch.status_code == 403
+    assert forbidden_patch.json()["error"]["code"] == "ONLY_CREATOR_CAN_UPDATE"
+
+    switch_user(client, "mgr_crud@dashnode.io")
+    cancel_res = client.post(f"/api/v1/availability/meetings/{m_id}/cancel")
+    assert cancel_res.status_code == 200
+
+    restore_res = client.post(f"/api/v1/availability/meetings/{m_id}/restore")
+    assert restore_res.status_code == 200
+    assert restore_res.json()["status"] == "scheduled"
+
+    del_res = client.delete(f"/api/v1/availability/meetings/{m_id}")
+    assert del_res.status_code == 200
+    assert del_res.json()["message"] == messages.MEETING_DELETED
+
+    gone = client.get(f"/api/v1/availability/meetings/{m_id}")
+    assert gone.status_code == 404
+
+
+def test_meeting_restore_rejects_past_cancelled(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="mgr_restore@dashnode.io", role="manager")
+    dev_id = create_user(db_engine, email="dev_restore@dashnode.io", role="developer")
+    p_id = _setup_project_with_members(client, mgr_id, [dev_id], "P Restore")
+
+    m_id = _seed_meeting(
+        db_engine,
+        project_id=p_id,
+        creator_id=mgr_id,
+        participant_ids=[dev_id],
+        title="Cancelada pasada",
+        date="2026-01-01",
+        start_time="09:00",
+        end_time="10:00",
+        status="cancelled",
+    )
+
+    res = client.post(f"/api/v1/availability/meetings/{m_id}/restore")
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "MEETING_CANNOT_RESTORE"

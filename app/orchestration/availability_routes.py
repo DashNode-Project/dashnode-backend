@@ -15,20 +15,24 @@ from app.modules.availability.application.dtos import (
     SearchMeetingSlotsCommand,
     SearchMeetingSlotsResponse,
     TeamAvailabilityResponse,
+    UpdateMeetingCommand,
     UpdateMeetingSummaryCommand,
     UserAvailabilityResponse,
 )
 from app.modules.availability.application.use_cases import (
     CancelMeetingUseCase,
     CreateMeetingUseCase,
+    DeleteMeetingUseCase,
     GetMeetingDetailUseCase,
     GetTeamAvailabilityUseCase,
     GetUserAvailabilityUseCase,
     ListMeetingsUseCase,
     RespondMeetingUseCase,
+    RestoreMeetingUseCase,
     SaveUserAvailabilityUseCase,
     SearchMeetingSlotsUseCase,
     UpdateMeetingSummaryUseCase,
+    UpdateMeetingUseCase,
 )
 from app.modules.availability.infrastructure.repositories import SqlAlchemyAvailabilityRepository
 from app.orchestration.meeting_adapters import (
@@ -219,6 +223,71 @@ def get_meeting_detail(
         project_lookup=project_lookup,
         user_lookup=user_lookup,
         clock=_clock,
+    )
+    return use_case.execute(actor=current_user, meeting_id=meeting_id)
+
+
+@router.patch(
+    "/meetings/{meeting_id}",
+    response_model=MeetingDTO,
+    summary="Actualizar una reunión programada",
+)
+def update_meeting(
+    meeting_id: str,
+    cmd: UpdateMeetingCommand,
+    current_user: CurrentUser = Depends(require_manager),
+    db: Session = Depends(get_db_session),
+) -> MeetingDTO:
+    repo = SqlAlchemyAvailabilityRepository(session=db)
+    uow = SqlAlchemyUnitOfWork(session=db)
+    project_lookup = SqlAlchemyProjectLookup(session=db)
+    user_lookup = SqlAlchemyUserLookup(session=db)
+    use_case = UpdateMeetingUseCase(
+        repo=repo,
+        clock=_clock,
+        uow=uow,
+        project_lookup=project_lookup,
+        user_lookup=user_lookup,
+    )
+    return use_case.execute(actor=current_user, meeting_id=meeting_id, cmd=cmd)
+
+
+@router.delete(
+    "/meetings/{meeting_id}",
+    response_model=MessageResponse,
+    summary="Eliminar una reunión programada",
+)
+def delete_meeting(
+    meeting_id: str,
+    current_user: CurrentUser = Depends(require_manager),
+    db: Session = Depends(get_db_session),
+) -> MessageResponse:
+    repo = SqlAlchemyAvailabilityRepository(session=db)
+    uow = SqlAlchemyUnitOfWork(session=db)
+    use_case = DeleteMeetingUseCase(repo=repo, clock=_clock, uow=uow)
+    return use_case.execute(actor=current_user, meeting_id=meeting_id)
+
+
+@router.post(
+    "/meetings/{meeting_id}/restore",
+    response_model=MeetingDTO,
+    summary="Restaurar una reunión cancelada",
+)
+def restore_meeting(
+    meeting_id: str,
+    current_user: CurrentUser = Depends(require_manager),
+    db: Session = Depends(get_db_session),
+) -> MeetingDTO:
+    repo = SqlAlchemyAvailabilityRepository(session=db)
+    uow = SqlAlchemyUnitOfWork(session=db)
+    project_lookup = SqlAlchemyProjectLookup(session=db)
+    user_lookup = SqlAlchemyUserLookup(session=db)
+    use_case = RestoreMeetingUseCase(
+        repo=repo,
+        clock=_clock,
+        uow=uow,
+        project_lookup=project_lookup,
+        user_lookup=user_lookup,
     )
     return use_case.execute(actor=current_user, meeting_id=meeting_id)
 
