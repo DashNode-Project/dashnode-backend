@@ -3,6 +3,7 @@
 import secrets
 
 from app.modules.auth.application.dtos import (
+    AdminDashboardSummaryDTO,
     AdminUserSummaryDTO,
     CreateUserByAdminCommand,
     InviteDeveloperCommand,
@@ -379,6 +380,24 @@ class ListAdminUsersUseCase:
             )
             for u in users
         ]
+
+
+class GetAdminDashboardSummaryUseCase:
+    """Read-only org metrics for the administrator home (no project operations)."""
+
+    def __init__(
+        self,
+        user_repo: UserRepository,
+        project_ownership: ProjectOwnershipQuery,
+    ) -> None:
+        self._users = user_repo
+        self._projects = project_ownership
+
+    def execute(self, *, actor_id: str) -> AdminDashboardSummaryDTO:
+        actor = self._users.get_by_id(actor_id)
+        if actor is None or actor.role != UserRole.ADMIN:
+            raise AccessDeniedError()
+        return AdminDashboardSummaryDTO(project_count=self._projects.count_active_projects())
 
 
 class UpdateUserByAdminUseCase:

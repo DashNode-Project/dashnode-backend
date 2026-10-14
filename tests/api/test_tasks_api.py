@@ -6,16 +6,22 @@ API tests for Tasks routes.
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from tests.support import login_as
+from tests.support import DEFAULT_PASSWORD, create_user, login_as
+
+
+def switch_user(client: TestClient, email: str) -> None:
+    client.cookies.clear()
+    res = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": DEFAULT_PASSWORD},
+    )
+    assert res.status_code == 200, res.text
 
 
 def test_tasks_crud_flow(client: TestClient, db_engine: Engine) -> None:
-    from tests.support import create_user
+    mgr_id = login_as(client, db_engine, email="lead-mgr@dashnode.io", role="manager")
+    dev_id = create_user(db_engine, email="dev-tasks@dashnode.io", role="developer")
 
-    mgr_id = create_user(db_engine, email="lead-mgr@dashnode.io", role="manager")
-    login_as(client, db_engine, email="lead@dashnode.io", role="admin")
-
-    # Create project
     proj_resp = client.post(
         "/api/v1/projects",
         json={
@@ -27,6 +33,11 @@ def test_tasks_crud_flow(client: TestClient, db_engine: Engine) -> None:
     )
     assert proj_resp.status_code == 201
     proj_id = proj_resp.json()["id"]
+    member_resp = client.post(
+        f"/api/v1/projects/{proj_id}/members",
+        json={"user_id": dev_id},
+    )
+    assert member_resp.status_code == 201, member_resp.text
 
     # Create task
     task_payload = {
@@ -54,14 +65,14 @@ def test_tasks_crud_flow(client: TestClient, db_engine: Engine) -> None:
     assert len(tasks) >= 1
     assert any(t["id"] == task_id for t in tasks)
 
-    # Update status to in-progress
+    assign_resp = client.patch(
+        f"/api/v1/tasks/{task_id}/assign",
+        json={"assignee_id": dev_id},
+    )
+    assert assign_resp.status_code == 200
+    assert assign_resp.json()["assignee_id"] == dev_id
+
+    switch_user(client, "dev-tasks@dashnode.io")
     status_resp = client.patch(f"/api/v1/tasks/{task_id}/status", json={"status": "in-progress"})
     assert status_resp.status_code == 200
     assert status_resp.json()["status"] == "in-progress"
-
-    # Assign task
-    assign_resp = client.patch(
-        f"/api/v1/tasks/{task_id}/assign", json={"assignee_id": "dev-user-99"}
-    )
-    assert assign_resp.status_code == 200
-    assert assign_resp.json()["assignee_id"] == "dev-user-99"

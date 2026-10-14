@@ -1,6 +1,6 @@
 """Manager-scoped developer invites and extended profile JSON.
 
-Revision ID: 008_manager_developers_and_profile_details
+Revision ID: 008_mgr_dev_profile
 Revises: 007_meeting_fields_and_responses
 Create Date: 2026-10-14 05:30:00.000000
 """
@@ -10,7 +10,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "008_manager_developers_and_profile_details"
+revision: str = "008_mgr_dev_profile"
 down_revision: str | None = "007_meeting_fields_and_responses"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

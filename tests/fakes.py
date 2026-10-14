@@ -255,10 +255,14 @@ class FakeTransactionalEmailSender:
 
 
 class FakeProjectOwnershipQuery:
-    def __init__(self, owns: bool = False) -> None:
+    def __init__(self, owns: bool = False, project_count: int = 0) -> None:
         self.owns = owns
+        self.project_count = project_count
         self.checked: list[str] = []
 
     def user_owns_projects(self, user_id: str) -> bool:
         self.checked.append(user_id)
         return self.owns
+
+    def count_active_projects(self) -> int:
+        return self.project_count

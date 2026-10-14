@@ -41,6 +41,7 @@ from app.modules.availability.domain.rules import (
     validate_search_criteria,
 )
 from app.shared.application.identity import CurrentUser
+from app.shared.application.operational_access import deny_admin_operational_access
 from app.shared.application.ports import Clock, IdGenerator, UnitOfWork
 from app.shared.domain.authorization import AccessDeniedError
 from app.shared.domain.errors import AppError, ErrorKind
@@ -83,6 +84,7 @@ class SaveUserAvailabilityUseCase:
         self._uow = uow
 
     def execute(self, actor: CurrentUser, cmd: SaveAvailabilityCommand) -> MessageResponse:
+        deny_admin_operational_access(actor)
         now = self._clock.now()
         normalized_incoming = _dto_slots_to_domain(cmd.slots)
 
@@ -158,8 +160,8 @@ class GetTeamAvailabilityUseCase:
         self._team_lookup = team_lookup
 
     def execute(self, actor: CurrentUser, week_start_date: str) -> TeamAvailabilityResponse:
-        # Developer is strictly forbidden
-        if actor.role not in ("admin", "manager"):
+        deny_admin_operational_access(actor)
+        if actor.role != "manager":
             raise AccessDeniedError()
 
         visible_users = self._team_lookup.get_visible_users(actor.id, actor.role)
@@ -200,7 +202,8 @@ class SearchMeetingSlotsUseCase:
     def execute(
         self, actor: CurrentUser, cmd: SearchMeetingSlotsCommand
     ) -> SearchMeetingSlotsResponse:
-        if actor.role not in ("admin", "manager"):
+        deny_admin_operational_access(actor)
+        if actor.role != "manager":
             raise AccessDeniedError()
 
         errors = validate_search_criteria(
@@ -434,7 +437,8 @@ class CreateMeetingUseCase:
         self._user_lookup = user_lookup
 
     def execute(self, actor: CurrentUser, cmd: CreateMeetingCommand) -> MeetingDTO:
-        if actor.role not in ("admin", "manager"):
+        deny_admin_operational_access(actor)
+        if actor.role != "manager":
             raise AccessDeniedError()
 
         # Title validation: obligatorio, max 100 caracteres
@@ -554,9 +558,8 @@ class ListMeetingsUseCase:
         date_to: str | None = None,
         filter_type: str | None = None,
     ) -> list[MeetingDTO]:
-        if actor.role == "admin":
-            meetings = self._repo.list_all_meetings()
-        elif actor.role == "manager":
+        deny_admin_operational_access(actor)
+        if actor.role == "manager":
             managed_pids = (
                 self._project_lookup.get_managed_project_ids(actor.id)
                 if self._project_lookup
@@ -633,13 +636,12 @@ class GetMeetingDetailUseCase:
         self._clock = clock
 
     def execute(self, actor: CurrentUser, meeting_id: str) -> MeetingDTO:
+        deny_admin_operational_access(actor)
         meeting = self._repo.get_meeting_by_id(meeting_id)
         if meeting is None:
             raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
 
-        if actor.role == "admin":
-            pass
-        elif actor.role == "manager":
+        if actor.role == "manager":
             managed_pids = (
                 self._project_lookup.get_managed_project_ids(actor.id)
                 if self._project_lookup
@@ -680,6 +682,7 @@ class CancelMeetingUseCase:
         self._notification_sender = notification_sender
 
     def execute(self, actor: CurrentUser, meeting_id: str) -> MeetingDTO:
+        deny_admin_operational_access(actor)
         meeting = self._repo.get_meeting_by_id(meeting_id)
         if meeting is None:
             raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
@@ -724,6 +727,7 @@ class RespondMeetingUseCase:
         self._user_lookup = user_lookup
 
     def execute(self, actor: CurrentUser, meeting_id: str, response: str) -> MeetingDTO:
+        deny_admin_operational_access(actor)
         meeting = self._repo.get_meeting_by_id(meeting_id)
         if meeting is None:
             raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
@@ -791,13 +795,12 @@ class UpdateMeetingSummaryUseCase:
         summary: str | None,
         minutes_url: str | None,
     ) -> MeetingDTO:
+        deny_admin_operational_access(actor)
         meeting = self._repo.get_meeting_by_id(meeting_id)
         if meeting is None:
             raise AppError("MEETING_NOT_FOUND", messages.MEETING_NOT_FOUND, ErrorKind.NOT_FOUND)
 
-        if actor.role == "admin":
-            pass
-        elif actor.role == "manager":
+        if actor.role == "manager":
             managed_pids = (
                 self._project_lookup.get_managed_project_ids(actor.id)
                 if self._project_lookup

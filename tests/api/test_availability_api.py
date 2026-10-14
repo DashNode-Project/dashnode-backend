@@ -71,11 +71,10 @@ def test_availability_team_permissions(client: TestClient, db_engine: Engine) ->
     assert res_mgr.status_code == 200
     assert "users" in res_mgr.json()
 
-    # Admin -> 200
     login_as(client, db_engine, email="adm@dashnode.local", role="admin")
     res_adm = client.get("/api/v1/availability/team?week=2026-10-12")
-    assert res_adm.status_code == 200
-    assert "users" in res_adm.json()
+    assert res_adm.status_code == 403
+    assert res_adm.json()["error"]["code"] == "ACCESS_DENIED"
 
 
 def test_search_meeting_slots_and_create_meeting(client: TestClient, db_engine: Engine) -> None:

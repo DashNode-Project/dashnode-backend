@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.config import settings
 from app.modules.auth.application.dtos import (
+    AdminDashboardSummaryDTO,
     AdminUserSummaryDTO,
     CompletePasswordResetCommand,
     CreateUserByAdminCommand,
@@ -36,11 +37,13 @@ from app.modules.auth.application.user_administration_use_cases import (
     InviteDeveloperByManagerUseCase,
     ListActiveManagersUseCase,
     ListActiveUsersUseCase,
+    GetAdminDashboardSummaryUseCase,
     ListAdminUsersUseCase,
     ListManagerDevelopersUseCase,
     ReactivateDeveloperByManagerUseCase,
 )
 from app.orchestration.auth_container import (
+    get_admin_dashboard_summary_use_case,
     get_admin_request_password_reset_use_case,
     get_complete_password_reset_use_case,
     get_create_user_by_admin_use_case,
@@ -165,6 +168,18 @@ def confirm_password_reset(
     use_case: CompletePasswordResetUseCase = Depends(get_complete_password_reset_use_case),
 ) -> MessageResponse:
     return use_case.execute(cmd)
+
+
+@router.get(
+    "/admin/dashboard-summary",
+    response_model=AdminDashboardSummaryDTO,
+    summary="Métricas de inicio del administrador",
+)
+def admin_dashboard_summary(
+    current_user: CurrentUser = Depends(require_admin),
+    use_case: GetAdminDashboardSummaryUseCase = Depends(get_admin_dashboard_summary_use_case),
+) -> AdminDashboardSummaryDTO:
+    return use_case.execute(actor_id=current_user.id)
 
 
 @router.get(

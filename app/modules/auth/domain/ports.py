@@ -97,6 +97,8 @@ class ProjectOwnershipQuery(Protocol):
 
     def user_owns_projects(self, user_id: str) -> bool: ...
 
+    def count_active_projects(self) -> int: ...
+
 
 class TransactionalEmailSender(Protocol):
     """Sends password/activation links. Must not log message bodies with secrets."""

@@ -52,11 +52,11 @@ def _setup_project_with_members(
 
 
 def test_hu_38_managed_projects_list(client: TestClient, db_engine: Engine) -> None:
-    login_as(client, db_engine, email="admin_ep05@dashnode.io", role="admin")
+    create_user(db_engine, email="admin_ep05@dashnode.io", role="admin")
     mgr_id = create_user(db_engine, email="mgr_ep05@dashnode.io", role="manager")
     dev_id = create_user(db_engine, email="dev_ep05@dashnode.io", role="developer")
 
-    # Admin creates project managed by mgr
+    switch_user(client, "mgr_ep05@dashnode.io")
     p1 = _setup_project_with_members(client, mgr_id, [dev_id], "Proyecto 1")
 
     # Developer gets 403 on managed projects
@@ -71,11 +71,11 @@ def test_hu_38_managed_projects_list(client: TestClient, db_engine: Engine) -> N
     projs_mgr = res_mgr.json()
     assert any(p["id"] == p1 for p in projs_mgr)
 
-    # Admin sees all projects
+    # Admin is scoped to user administration only (403 on scheduling projects)
     switch_user(client, "admin_ep05@dashnode.io")
     res_adm = client.get("/api/v1/availability/projects")
-    assert res_adm.status_code == 200
-    assert any(p["id"] == p1 for p in res_adm.json())
+    assert res_adm.status_code == 403
+    assert res_adm.json()["error"]["code"] == "ACCESS_DENIED"
 
 
 def test_hu_38_create_meeting_validations(client: TestClient, db_engine: Engine) -> None:
@@ -262,16 +262,14 @@ def test_hu_39_meetings_list_role_scoping(client: TestClient, db_engine: Engine)
     assert res_dev2.status_code == 200
     assert not any(m["id"] == m1_id for m in res_dev2.json())
 
-    # admin sees m1
     switch_user(client, "admin_scope@dashnode.io")
     res_admin = client.get("/api/v1/availability/meetings")
-    assert res_admin.status_code == 200
-    assert any(m["id"] == m1_id for m in res_admin.json())
+    assert res_admin.status_code == 403
+    assert res_admin.json()["error"]["code"] == "ACCESS_DENIED"
 
 
 def test_hu_39_filter_upcoming_and_past(client: TestClient, db_engine: Engine) -> None:
-    login_as(client, db_engine, email="admin_filter@dashnode.io", role="admin")
-    mgr_id = create_user(db_engine, email="mgr_filter@dashnode.io", role="manager")
+    mgr_id = login_as(client, db_engine, email="mgr_filter@dashnode.io", role="manager")
     dev_id = create_user(db_engine, email="dev_filter@dashnode.io", role="developer")
     p_id = _setup_project_with_members(client, mgr_id, [dev_id], "P Filter")
 
@@ -660,8 +658,7 @@ def test_hu_45_cancel_meeting_and_notifications_and_rn_age_05(
     switch_user(client, "admin_hu45@dashnode.io")
     res_admin_cancel = client.post(f"/api/v1/availability/meetings/{m_id}/cancel")
     assert res_admin_cancel.status_code == 403
-    assert res_admin_cancel.json()["error"]["code"] == "ONLY_CREATOR_CAN_CANCEL"
-    assert res_admin_cancel.json()["error"]["message"] == messages.ONLY_CREATOR_CAN_CANCEL
+    assert res_admin_cancel.json()["error"]["code"] == "ACCESS_DENIED"
 
     # Other manager cannot cancel (403)
     switch_user(client, "other_mgr_hu45@dashnode.io")
@@ -826,7 +823,6 @@ def test_hu_46_meeting_summary_validations_and_lifecycle(
     assert view_data["minutes_url"] == "https://docs.google.com/document/d/acta-final-123"
     assert view_data["status"] == "completed"
 
-    # Admin can also update summary and minutes URL
     switch_user(client, "admin_hu46@dashnode.io")
     res_admin_update = client.post(
         f"/api/v1/availability/meetings/{past_id}/summary",
@@ -835,5 +831,5 @@ def test_hu_46_meeting_summary_validations_and_lifecycle(
             "minutes_url": "https://notion.so/acta-admin",
         },
     )
-    assert res_admin_update.status_code == 200
-    assert res_admin_update.json()["summary"] == "Resumen actualizado por administrador."
+    assert res_admin_update.status_code == 403
+    assert res_admin_update.json()["error"]["code"] == "ACCESS_DENIED"

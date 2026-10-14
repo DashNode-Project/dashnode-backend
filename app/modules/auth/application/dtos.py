@@ -113,6 +113,10 @@ class AdminUserSummaryDTO(BaseModel):
     is_active: bool
 
 
+class AdminDashboardSummaryDTO(BaseModel):
+    project_count: int
+
+
 class CreateUserByAdminCommand(BaseModel):
     name: str = Field(default="", max_length=1000)
     email: str = Field(default="", max_length=1000)

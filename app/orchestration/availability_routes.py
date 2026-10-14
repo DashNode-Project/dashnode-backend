@@ -36,7 +36,7 @@ from app.orchestration.meeting_adapters import (
     SqlAlchemyProjectLookup,
     SqlAlchemyUserLookup,
 )
-from app.orchestration.security import get_current_user, require_admin_or_manager
+from app.orchestration.security import get_current_user, require_manager, require_non_admin
 from app.orchestration.team_members_lookup import SqlAlchemyTeamMembersLookup
 from app.shared.application.identity import CurrentUser
 from app.shared.infrastructure.clock import SystemClock
@@ -61,7 +61,7 @@ def _get_current_week_monday() -> str:
 )
 def get_my_availability(
     week: str | None = Query(default=None, description="Lunes de la semana (YYYY-MM-DD)"),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_non_admin),
     db: Session = Depends(get_db_session),
 ) -> UserAvailabilityResponse:
     target_week = week or _get_current_week_monday()
@@ -78,7 +78,7 @@ def get_my_availability(
 )
 def save_my_availability(
     cmd: SaveAvailabilityCommand,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_non_admin),
     db: Session = Depends(get_db_session),
 ) -> MessageResponse:
     repo = SqlAlchemyAvailabilityRepository(session=db)
@@ -111,7 +111,7 @@ def get_team_availability(
 )
 def search_meeting_slots(
     cmd: SearchMeetingSlotsCommand,
-    current_user: CurrentUser = Depends(require_admin_or_manager),
+    current_user: CurrentUser = Depends(require_manager),
     db: Session = Depends(get_db_session),
 ) -> SearchMeetingSlotsResponse:
     repo = SqlAlchemyAvailabilityRepository(session=db)
@@ -125,7 +125,7 @@ def search_meeting_slots(
     summary="Listar proyectos gestionados por el usuario para agendamiento",
 )
 def list_managed_projects(
-    current_user: CurrentUser = Depends(require_admin_or_manager),
+    current_user: CurrentUser = Depends(require_manager),
     db: Session = Depends(get_db_session),
 ) -> list[ProjectManagedDTO]:
     lookup = SqlAlchemyProjectLookup(session=db)
@@ -150,7 +150,7 @@ def list_managed_projects(
 )
 def create_meeting(
     cmd: CreateMeetingCommand,
-    current_user: CurrentUser = Depends(require_admin_or_manager),
+    current_user: CurrentUser = Depends(require_manager),
     db: Session = Depends(get_db_session),
 ) -> MeetingDTO:
     repo = SqlAlchemyAvailabilityRepository(session=db)
