@@ -197,5 +197,11 @@ Frontend: `/disponibilidad` (pestañas «Mi disponibilidad», «Equipo», «Agen
 - **Directorio `demo/`:** Preservado íntegramente sin modificaciones.
 - **Git Commit / Push:** Omitidos estrictamente conforme a las restricciones de la solicitud.
 
+---
+
+## EP-06 — Backlog TAR (HU_DN_04_47 … HU_DN_04_55)
+
+Integración verificada mediante `tests/api/test_backlog_api.py` (permisos, literales, Fibonacci, asignación a miembros, horas). Frontend consume los mismos endpoints en `ProjectBacklogTab`.
+
 
 

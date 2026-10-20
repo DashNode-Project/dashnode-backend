@@ -79,3 +79,18 @@ tests/
   api/test_meetings_ep05_api.py
 ```
 
+## EP-06 — Backlog TAR (HU_DN_04_47 … HU_DN_04_55)
+
+```
+app/modules/backlog/
+  domain/          entities (Epic, UserStory, StoryTask), messages (literales HU), rules, ports (BacklogRepository)
+  application/     access.py (ProjectContext ports), use_cases (CRUD épica/HU/tarea, Fibonacci, horas, asignación)
+  infrastructure/  models (epics, user_stories, story_tasks), repositories
+app/orchestration/
+  backlog_routes.py      GET /projects/{id}/backlog, POST epics, PATCH epics, user-stories, story-points, story-tasks
+  backlog_adapters.py      ProjectLookup + ActiveMemberLookup (BR-4)
+migrations/versions/009_ep06_backlog_tar.py
+tests/api/test_backlog_api.py
+tests/unit/test_backlog_rules.py
+```
+

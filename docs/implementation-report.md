@@ -229,4 +229,15 @@ Validación local:
   - Creador o Administrador pueden registrar o editar; los datos quedan visibles para todos los participantes.
 - **Frontend:** Modal con validación en tiempo real y contador de caracteres (0/2000), toast de confirmación `"Resumen y acta guardados correctamente."`.
 
+---
+
+## EP-06 — Backlog TAR (HU_DN_04_47 … HU_DN_04_55)
+
+**Estado:** COMPLETED (implementación) | **Pruebas locales:** NOT_RUN (venv/docker sin `.env` generado en agente)
+
+### Backend
+- Módulo `app/modules/backlog`, migración `009_ep06_backlog_tar`, rutas `orchestration/backlog_routes.py`.
+- Casos de uso con permisos Admin/Gerente (épica, HU, puntos) y miembros del proyecto (tareas, horas, asignación).
+- Tests: `tests/api/test_backlog_api.py`, `tests/unit/test_backlog_rules.py`.
+
 
