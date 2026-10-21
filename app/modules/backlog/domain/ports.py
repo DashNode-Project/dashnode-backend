@@ -1,5 +1,7 @@
 """Repository ports for backlog module."""
 
+from datetime import datetime
+from decimal import Decimal
 from typing import Protocol
 
 from app.modules.backlog.domain.entities import Epic, StoryTask, UserStory
@@ -39,3 +41,27 @@ class BacklogRepository(Protocol):
     def list_tasks_by_story(self, user_story_id: str) -> list[StoryTask]: ...
 
     def list_tasks_by_project(self, project_id: str) -> list[StoryTask]: ...
+
+    def list_tasks_for_assignee(self, assignee_id: str) -> list[StoryTask]: ...
+
+    def add_time_log(
+        self,
+        *,
+        log_id: str,
+        task_id: str,
+        user_id: str,
+        hours: Decimal,
+        comment: str | None,
+        when: datetime,
+    ) -> None: ...
+
+    def add_status_history(
+        self,
+        *,
+        history_id: str,
+        task_id: str,
+        user_id: str,
+        previous_status: str,
+        new_status: str,
+        when: datetime,
+    ) -> None: ...

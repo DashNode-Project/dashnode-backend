@@ -41,6 +41,7 @@ class UserStoryDTO(BaseModel):
     sort_order: int
     created_at: datetime
     updated_at: datetime
+    label: str = ""
 
 
 class StoryTaskDTO(BaseModel):
@@ -55,6 +56,8 @@ class StoryTaskDTO(BaseModel):
     status: str
     assignee_id: str | None
     estimated_hours: Decimal | None
+    logged_hours: Decimal = Decimal("0")
+    label: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -72,6 +75,41 @@ class UserStoryWithTasksDTO(BaseModel):
 class BacklogTreeDTO(BaseModel):
     epics: list[EpicWithStoriesDTO]
     tasks_by_story: dict[str, list[StoryTaskDTO]]
+    message: str | None = None
+
+
+class LogTaskHoursCommand(BaseModel):
+    hours_spent: Decimal
+    comment: str | None = Field(default=None, max_length=500)
+
+
+class LogTaskHoursResponse(BaseModel):
+    message: str
+    total_logged_hours: Decimal
+
+
+class ChangeTaskStatusCommand(BaseModel):
+    status: str = Field(max_length=32)
+
+
+class ChangeTaskStatusResponse(BaseModel):
+    message: str
+    status: str
+
+
+class MyTaskItemDTO(BaseModel):
+    id: str
+    name: str
+    project: dict[str, str]
+    user_story: dict[str, str]
+    status: str
+    estimated_hours: Decimal | None
+    logged_hours: Decimal
+
+
+class MyTasksResponse(BaseModel):
+    tasks: list[MyTaskItemDTO]
+    message: str | None = None
 
 
 class CreateEpicCommand(BaseModel):

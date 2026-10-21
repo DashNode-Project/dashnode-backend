@@ -12,9 +12,16 @@ from app.modules.backlog.domain.entities import (
     StoryTaskStatus,
     StoryTaskType,
     UserStory,
+    parse_story_task_status,
 )
 from app.modules.backlog.domain.ports import BacklogRepository
-from app.modules.backlog.infrastructure.models import EpicModel, StoryTaskModel, UserStoryModel
+from app.modules.backlog.infrastructure.models import (
+    EpicModel,
+    StoryTaskModel,
+    TaskStatusHistoryModel,
+    TaskTimeLogModel,
+    UserStoryModel,
+)
 
 
 class SqlAlchemyBacklogRepository(BacklogRepository):
@@ -52,11 +59,14 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
             created_by=model.created_by,
             created_at=model.created_at,
             updated_at=model.updated_at,
+            label=model.label or "",
         )
 
     @staticmethod
     def _task_to_domain(model: StoryTaskModel) -> StoryTask:
         hours = model.estimated_hours
+        parsed = parse_story_task_status(model.status) or StoryTaskStatus.TODO
+        logged = model.logged_hours if model.logged_hours is not None else Decimal("0")
         return StoryTask(
             id=model.id,
             user_story_id=model.user_story_id,
@@ -64,12 +74,14 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
             name=model.name,
             task_type=StoryTaskType(model.task_type),
             notes=model.notes,
-            status=StoryTaskStatus(model.status),
+            status=parsed,
             assignee_id=model.assignee_id,
             estimated_hours=Decimal(hours) if hours is not None else None,
             created_by=model.created_by,
             created_at=model.created_at,
             updated_at=model.updated_at,
+            logged_hours=Decimal(logged),
+            label=model.label or "",
         )
 
     def save_epic(self, epic: Epic) -> None:
@@ -188,6 +200,8 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
                 status=task.status.value,
                 assignee_id=task.assignee_id,
                 estimated_hours=task.estimated_hours,
+                logged_hours=task.logged_hours,
+                label=task.label,
                 created_by=task.created_by,
                 created_at=task.created_at,
                 updated_at=task.updated_at,
@@ -203,6 +217,9 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
         model.notes = task.notes
         model.assignee_id = task.assignee_id
         model.estimated_hours = task.estimated_hours
+        model.status = task.status.value
+        model.logged_hours = task.logged_hours
+        model.label = task.label
         model.updated_at = task.updated_at
 
     def delete_story_task(self, task_id: str) -> None:
@@ -223,3 +240,53 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
     def list_tasks_by_project(self, project_id: str) -> list[StoryTask]:
         stmt = select(StoryTaskModel).where(StoryTaskModel.project_id == project_id)
         return [self._task_to_domain(row) for row in self._session.scalars(stmt).all()]
+
+    def list_tasks_for_assignee(self, assignee_id: str) -> list[StoryTask]:
+        stmt = (
+            select(StoryTaskModel)
+            .where(StoryTaskModel.assignee_id == assignee_id)
+            .order_by(StoryTaskModel.updated_at.desc())
+        )
+        return [self._task_to_domain(row) for row in self._session.scalars(stmt).all()]
+
+    def add_time_log(
+        self,
+        *,
+        log_id: str,
+        task_id: str,
+        user_id: str,
+        hours: Decimal,
+        comment: str | None,
+        when,
+    ) -> None:
+        self._session.add(
+            TaskTimeLogModel(
+                id=log_id,
+                task_id=task_id,
+                user_id=user_id,
+                hours_spent=hours,
+                comment=comment,
+                created_at=when,
+            )
+        )
+
+    def add_status_history(
+        self,
+        *,
+        history_id: str,
+        task_id: str,
+        user_id: str,
+        previous_status: str,
+        new_status: str,
+        when,
+    ) -> None:
+        self._session.add(
+            TaskStatusHistoryModel(
+                id=history_id,
+                task_id=task_id,
+                user_id=user_id,
+                previous_status=previous_status,
+                new_status=new_status,
+                changed_at=when,
+            )
+        )

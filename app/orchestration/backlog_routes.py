@@ -1,17 +1,22 @@
 """Backlog HTTP routes (EP-06)."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.modules.backlog.application.dtos import (
     AssignStoryPointsCommand,
     AssignStoryTaskCommand,
     BacklogTreeDTO,
+    ChangeTaskStatusCommand,
+    ChangeTaskStatusResponse,
     CreateEpicCommand,
     CreateStoryTaskCommand,
     CreateUserStoryCommand,
     EpicDTO,
+    LogTaskHoursCommand,
+    LogTaskHoursResponse,
     MessageResponse,
+    MyTasksResponse,
     StoryTaskDTO,
     UpdateEpicCommand,
     UpdateEstimatedHoursCommand,
@@ -19,9 +24,15 @@ from app.modules.backlog.application.dtos import (
     UpdateUserStoryCommand,
     UserStoryDTO,
 )
+from app.modules.backlog.application.task_flow import (
+    ChangeStoryTaskStatusUseCase,
+    ListMyTasksUseCase,
+    LogStoryTaskHoursUseCase,
+)
 from app.modules.backlog.application.use_cases import (
     AssignStoryPointsUseCase,
     AssignStoryTaskUseCase,
+    BacklogFilters,
     CreateEpicUseCase,
     CreateStoryTaskUseCase,
     CreateUserStoryUseCase,
@@ -91,6 +102,10 @@ class TaskHoursResponse(StoryTaskDTO):
 )
 def get_project_backlog(
     project_id: str,
+    q: str | None = Query(default=None, max_length=200),
+    priority: str | None = Query(default=None, max_length=32),
+    assigned_to: str | None = Query(default=None, alias="assignedTo", max_length=36),
+    label: str | None = Query(default=None, max_length=80),
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> BacklogTreeDTO:
@@ -98,7 +113,32 @@ def get_project_backlog(
         backlog=SqlAlchemyBacklogRepository(db),
         projects=SqlAlchemyProjectLookup(db),
     )
-    return use_case.execute(project_id, current_user)
+    return use_case.execute(
+        project_id,
+        current_user,
+        BacklogFilters(q=q, priority=priority, assigned_to=assigned_to, label=label),
+    )
+
+
+@router.get("/projects/{project_id}/backlog/tree", response_model=BacklogTreeDTO)
+def get_project_backlog_tree(
+    project_id: str,
+    q: str | None = Query(default=None, max_length=200),
+    priority: str | None = Query(default=None, max_length=32),
+    assigned_to: str | None = Query(default=None, alias="assignedTo", max_length=36),
+    label: str | None = Query(default=None, max_length=80),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> BacklogTreeDTO:
+    use_case = GetProjectBacklogUseCase(
+        backlog=SqlAlchemyBacklogRepository(db),
+        projects=SqlAlchemyProjectLookup(db),
+    )
+    return use_case.execute(
+        project_id,
+        current_user,
+        BacklogFilters(q=q, priority=priority, assigned_to=assigned_to, label=label),
+    )
 
 
 @router.post(
@@ -303,3 +343,60 @@ def update_estimated_hours(
     )
     dto, msg = use_case.execute(task_id, cmd, current_user)
     return TaskHoursResponse(**dto.model_dump(), message=msg.message)
+
+
+@router.post(
+    "/projects/{project_id}/tasks/{task_id}/time-logs",
+    response_model=LogTaskHoursResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def log_task_hours(
+    project_id: str,
+    task_id: str,
+    cmd: LogTaskHoursCommand,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> LogTaskHoursResponse:
+    use_case = LogStoryTaskHoursUseCase(
+        backlog=SqlAlchemyBacklogRepository(db),
+        projects=SqlAlchemyProjectLookup(db),
+        id_gen=_id_gen,
+        clock=_clock,
+        uow=SqlAlchemyUnitOfWork(db),
+    )
+    return use_case.execute(project_id, task_id, cmd, current_user)
+
+
+@router.patch(
+    "/projects/{project_id}/tasks/{task_id}/status",
+    response_model=ChangeTaskStatusResponse,
+)
+def change_task_status(
+    project_id: str,
+    task_id: str,
+    cmd: ChangeTaskStatusCommand,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> ChangeTaskStatusResponse:
+    use_case = ChangeStoryTaskStatusUseCase(
+        backlog=SqlAlchemyBacklogRepository(db),
+        projects=SqlAlchemyProjectLookup(db),
+        id_gen=_id_gen,
+        clock=_clock,
+        uow=SqlAlchemyUnitOfWork(db),
+    )
+    return use_case.execute(project_id, task_id, cmd, current_user)
+
+
+@router.get("/users/me/tasks", response_model=MyTasksResponse)
+def list_my_tasks(
+    project_id: str | None = Query(default=None, alias="projectId", max_length=36),
+    status_filter: str | None = Query(default=None, alias="status", max_length=32),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> MyTasksResponse:
+    use_case = ListMyTasksUseCase(
+        backlog=SqlAlchemyBacklogRepository(db),
+        projects=SqlAlchemyProjectLookup(db),
+    )
+    return use_case.execute(current_user, project_id=project_id, status=status_filter)

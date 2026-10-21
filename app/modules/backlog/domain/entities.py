@@ -27,7 +27,32 @@ class StoryTaskType(StrEnum):
 
 
 class StoryTaskStatus(StrEnum):
-    TODO = "todo"
+    TODO = "TODO"
+    IN_PROGRESS = "IN_PROGRESS"
+    CODE_REVIEW = "CODE_REVIEW"
+    TESTING = "TESTING"
+    CORRECTION = "CORRECTION"
+    DONE = "DONE"
+
+
+MANUAL_TASK_STATUSES = frozenset(
+    {
+        StoryTaskStatus.TODO,
+        StoryTaskStatus.IN_PROGRESS,
+        StoryTaskStatus.CODE_REVIEW,
+        StoryTaskStatus.TESTING,
+        StoryTaskStatus.DONE,
+    }
+)
+
+
+def parse_story_task_status(raw: str) -> StoryTaskStatus | None:
+    alias = {"todo": StoryTaskStatus.TODO.value}
+    normalized = alias.get(raw, raw)
+    try:
+        return StoryTaskStatus(normalized)
+    except ValueError:
+        return None
 
 
 @dataclass
@@ -59,6 +84,7 @@ class UserStory:
     created_by: str
     created_at: datetime
     updated_at: datetime
+    label: str = ""
 
 
 @dataclass
@@ -75,3 +101,5 @@ class StoryTask:
     created_by: str
     created_at: datetime
     updated_at: datetime
+    logged_hours: Decimal = Decimal("0")
+    label: str = ""

@@ -1,5 +1,6 @@
 """Backlog use cases (EP-06)."""
 
+from dataclasses import dataclass
 from decimal import Decimal
 
 from app.modules.backlog.application.access import (
@@ -53,7 +54,12 @@ from app.shared.domain.errors import AppError, ErrorKind
 
 
 def _validation_error(fields: dict[str, str]) -> AppError:
-    return AppError("BACKLOG_VALIDATION", "La solicitud no es válida.", ErrorKind.VALIDATION, fields)
+    return AppError(
+        "BACKLOG_VALIDATION",
+        "La solicitud no es válida.",
+        ErrorKind.VALIDATION,
+        fields,
+    )
 
 
 def _require_project(projects: ProjectLookupPort, project_id: str):
@@ -91,6 +97,7 @@ def _story_dto(story: UserStory) -> UserStoryDTO:
         sort_order=story.sort_order,
         created_at=story.created_at,
         updated_at=story.updated_at,
+        label=story.label,
     )
 
 
@@ -105,9 +112,35 @@ def _task_dto(task: StoryTask) -> StoryTaskDTO:
         status=task.status.value,
         assignee_id=task.assignee_id,
         estimated_hours=task.estimated_hours,
+        logged_hours=task.logged_hours,
+        label=task.label,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
+
+
+_PRIORITY = {
+    "CRITICAL": MoscowPriority.MUST_HAVE,
+    "HIGH": MoscowPriority.SHOULD_HAVE,
+    "MEDIUM": MoscowPriority.COULD_HAVE,
+    "LOW": MoscowPriority.WONT_HAVE,
+    "must_have": MoscowPriority.MUST_HAVE,
+    "should_have": MoscowPriority.SHOULD_HAVE,
+    "could_have": MoscowPriority.COULD_HAVE,
+    "wont_have": MoscowPriority.WONT_HAVE,
+}
+
+
+@dataclass
+class BacklogFilters:
+    q: str | None = None
+    priority: str | None = None
+    assigned_to: str | None = None
+    label: str | None = None
+
+
+def _contains(haystack: str, needle: str) -> bool:
+    return needle.casefold() in haystack.casefold()
 
 
 class GetProjectBacklogUseCase:
@@ -115,27 +148,93 @@ class GetProjectBacklogUseCase:
         self._backlog = backlog
         self._projects = projects
 
-    def execute(self, project_id: str, actor: CurrentUser) -> BacklogTreeDTO:
+    def execute(
+        self,
+        project_id: str,
+        actor: CurrentUser,
+        filters: BacklogFilters | None = None,
+    ) -> BacklogTreeDTO:
         project = _require_project(self._projects, project_id)
         if not can_view_backlog(actor, project, self._projects):
             raise AccessDeniedError()
 
+        query = filters or BacklogFilters()
         epics = self._backlog.list_epics_by_project(project_id)
         stories = self._backlog.list_stories_by_project(project_id)
         tasks = self._backlog.list_tasks_by_project(project_id)
-        tasks_by_story: dict[str, list[StoryTaskDTO]] = {}
+        if actor.role == "developer":
+            tasks = [task for task in tasks if task.assignee_id == actor.id]
+
+        needle = (query.q or "").strip()
+        priority = _PRIORITY.get((query.priority or "").strip())
+        label = (query.label or "").strip().casefold()
+        assignee = (query.assigned_to or "").strip()
+
+        def task_ok(task: StoryTask, story: UserStory) -> bool:
+            if assignee == "unassigned" and task.assignee_id is not None:
+                return False
+            if assignee and assignee != "unassigned" and task.assignee_id != assignee:
+                return False
+            if label and task.label.casefold() != label and story.label.casefold() != label:
+                return False
+            if not needle:
+                return True
+            return (
+                _contains(task.name, needle)
+                or _contains(task.notes, needle)
+                or _contains(story.title, needle)
+            )
+
+        def story_ok(story: UserStory) -> bool:
+            if priority is not None and story.moscow_priority != priority:
+                return False
+            if label and story.label.casefold() != label:
+                return False
+            if not needle:
+                return True
+            return _contains(story.title, needle) or _contains(story.reason, needle)
+
+        filtered_tasks: list[StoryTask] = []
+        stories_by_id = {story.id: story for story in stories}
         for task in tasks:
+            parent = stories_by_id.get(task.user_story_id)
+            if parent is None:
+                continue
+            if priority is not None and parent.moscow_priority != priority:
+                continue
+            if task_ok(task, parent):
+                filtered_tasks.append(task)
+
+        task_story_ids = {task.user_story_id for task in filtered_tasks}
+        visible_stories = [
+            story for story in stories if story_ok(story) or story.id in task_story_ids
+        ]
+        if priority is not None:
+            visible_stories = [s for s in visible_stories if s.moscow_priority == priority]
+        story_ids = {story.id for story in visible_stories}
+        filtered_tasks = [task for task in filtered_tasks if task.user_story_id in story_ids]
+
+        tasks_by_story: dict[str, list[StoryTaskDTO]] = {}
+        for task in filtered_tasks:
             tasks_by_story.setdefault(task.user_story_id, []).append(_task_dto(task))
 
         stories_by_epic: dict[str, list[UserStoryDTO]] = {}
-        for story in stories:
+        for story in visible_stories:
             stories_by_epic.setdefault(story.epic_id, []).append(_story_dto(story))
 
-        epic_rows = [
-            EpicWithStoriesDTO(epic=_epic_dto(epic), stories=stories_by_epic.get(epic.id, []))
-            for epic in epics
-        ]
-        return BacklogTreeDTO(epics=epic_rows, tasks_by_story=tasks_by_story)
+        epic_rows = []
+        for epic in epics:
+            nested = stories_by_epic.get(epic.id, [])
+            epic_match = bool(needle) and _contains(epic.name, needle)
+            unfiltered = not any((needle, priority, label, assignee))
+            if nested or epic_match or unfiltered:
+                epic_rows.append(EpicWithStoriesDTO(epic=_epic_dto(epic), stories=nested))
+
+        filters_on = any((needle, query.priority, assignee, label))
+        message = None
+        if not epic_rows:
+            message = messages.BACKLOG_FILTER_EMPTY if filters_on else messages.BACKLOG_EMPTY
+        return BacklogTreeDTO(epics=epic_rows, tasks_by_story=tasks_by_story, message=message)
 
 
 class CreateEpicUseCase:
@@ -436,7 +535,9 @@ class UpdateStoryTaskUseCase:
     ) -> tuple[StoryTaskDTO, MessageResponse]:
         task = self._backlog.get_story_task(task_id)
         if task is None:
-            raise AppError("STORY_TASK_NOT_FOUND", messages.STORY_TASK_NOT_FOUND, ErrorKind.NOT_FOUND)
+            raise AppError(
+                "STORY_TASK_NOT_FOUND", messages.STORY_TASK_NOT_FOUND, ErrorKind.NOT_FOUND
+            )
         project = _require_project(self._projects, task.project_id)
         if not can_manage_story_tasks(actor, project, self._projects):
             raise AccessDeniedError()
@@ -471,7 +572,9 @@ class DeleteStoryTaskUseCase:
     def execute(self, task_id: str, actor: CurrentUser) -> MessageResponse:
         task = self._backlog.get_story_task(task_id)
         if task is None:
-            raise AppError("STORY_TASK_NOT_FOUND", messages.STORY_TASK_NOT_FOUND, ErrorKind.NOT_FOUND)
+            raise AppError(
+                "STORY_TASK_NOT_FOUND", messages.STORY_TASK_NOT_FOUND, ErrorKind.NOT_FOUND
+            )
         project = _require_project(self._projects, task.project_id)
         if not can_manage_story_tasks(actor, project, self._projects):
             raise AccessDeniedError()
@@ -502,19 +605,22 @@ class AssignStoryTaskUseCase:
     ) -> tuple[StoryTaskDTO, MessageResponse]:
         task = self._backlog.get_story_task(task_id)
         if task is None:
-            raise AppError("STORY_TASK_NOT_FOUND", messages.STORY_TASK_NOT_FOUND, ErrorKind.NOT_FOUND)
+            raise AppError(
+                "STORY_TASK_NOT_FOUND", messages.STORY_TASK_NOT_FOUND, ErrorKind.NOT_FOUND
+            )
         project = _require_project(self._projects, task.project_id)
         if not can_manage_story_tasks(actor, project, self._projects):
             raise AccessDeniedError()
 
-        if cmd.assignee_id is not None:
-            if not self._members.is_active_project_member(task.project_id, cmd.assignee_id):
-                raise AppError(
-                    "ASSIGNEE_NOT_IN_PROJECT",
-                    messages.ASSIGNEE_NOT_IN_PROJECT,
-                    ErrorKind.VALIDATION,
-                    {"assignee_id": messages.ASSIGNEE_NOT_IN_PROJECT},
-                )
+        if cmd.assignee_id is not None and not self._members.is_active_project_member(
+            task.project_id, cmd.assignee_id
+        ):
+            raise AppError(
+                "ASSIGNEE_NOT_IN_PROJECT",
+                messages.ASSIGNEE_NOT_IN_PROJECT,
+                ErrorKind.VALIDATION,
+                {"assignee_id": messages.ASSIGNEE_NOT_IN_PROJECT},
+            )
 
         now = self._clock.now()
         task.assignee_id = cmd.assignee_id
@@ -543,7 +649,9 @@ class UpdateStoryTaskEstimatedHoursUseCase:
     ) -> tuple[StoryTaskDTO, MessageResponse]:
         task = self._backlog.get_story_task(task_id)
         if task is None:
-            raise AppError("STORY_TASK_NOT_FOUND", messages.STORY_TASK_NOT_FOUND, ErrorKind.NOT_FOUND)
+            raise AppError(
+                "STORY_TASK_NOT_FOUND", messages.STORY_TASK_NOT_FOUND, ErrorKind.NOT_FOUND
+            )
         project = _require_project(self._projects, task.project_id)
         if not can_manage_story_tasks(actor, project, self._projects):
             raise AccessDeniedError()

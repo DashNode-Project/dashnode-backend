@@ -240,4 +240,16 @@ Validación local:
 - Casos de uso con permisos Admin/Gerente (épica, HU, puntos) y miembros del proyecto (tareas, horas, asignación).
 - Tests: `tests/api/test_backlog_api.py`, `tests/unit/test_backlog_rules.py`.
 
+## EP-06 — HU_DN_04_56 … HU_DN_04_61
+
+**Estado:** COMPLETED
+**Fecha:** 2026-10-20
+**Evidencia:** `pytest tests/ --ignore=tests/integration` → 306 passed. `ruff check .` limpio.
+
+- Horas: suma en la misma transacción que `task_time_logs`.
+- Estado: historial en `task_status_history`; Corrección rechazada en cambios manuales.
+- Gerente con tareas asignadas sigue creando épicas (HU_DN_04_58).
+- Árbol filtra en memoria con parámetros; el desarrollador solo recibe sus tareas.
+- Invitación: contraseña aleatoria no reusable, código Argon2, enlace de un solo uso, vigencia 24 h, máximo 3 renovaciones, rechazo visible y borrado a los 3 días.
+
 

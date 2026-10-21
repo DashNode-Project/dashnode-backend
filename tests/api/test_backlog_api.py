@@ -151,3 +151,94 @@ def test_epic_and_story_flow(client: TestClient, db_engine: Engine) -> None:
     deleted = client.delete(f"/api/v1/story-tasks/{dev_task_id}")
     assert deleted.status_code == 200
     assert deleted.json()["message"] == "Tarea eliminada correctamente."
+
+
+def test_time_status_filters_and_my_tasks(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="mgr-time@dashnode.io", role="manager")
+    dev_id = create_user(db_engine, email="dev-time@dashnode.io", role="developer")
+    other_id = create_user(db_engine, email="other-time@dashnode.io", role="developer")
+    proj_id = _create_project(client, db_engine, mgr_id)
+    assert (
+        client.post(f"/api/v1/projects/{proj_id}/members", json={"user_id": dev_id}).status_code
+        == 201
+    )
+    assert (
+        client.post(f"/api/v1/projects/{proj_id}/members", json={"user_id": other_id}).status_code
+        == 201
+    )
+    epic = client.post(f"/api/v1/projects/{proj_id}/epics", json={"name": "EP", "description": ""})
+    story = client.post(
+        f"/api/v1/epics/{epic.json()['id']}/user-stories",
+        json={
+            "title": "Historia",
+            "user_role": "Dev",
+            "reason": "para entregar",
+            "moscow_priority": "must_have",
+        },
+    )
+    story_id = story.json()["id"]
+    mine = client.post(
+        f"/api/v1/user-stories/{story_id}/tasks",
+        json={"name": "Tarea mia", "task_type": "backend", "notes": "auth"},
+    )
+    theirs = client.post(
+        f"/api/v1/user-stories/{story_id}/tasks",
+        json={"name": "Tarea ajena", "task_type": "qa", "notes": ""},
+    )
+    task_id = mine.json()["id"]
+    other_task = theirs.json()["id"]
+    client.patch(f"/api/v1/story-tasks/{task_id}/assignee", json={"assignee_id": dev_id})
+    client.patch(f"/api/v1/story-tasks/{other_task}/assignee", json={"assignee_id": other_id})
+
+    logged = client.post(
+        f"/api/v1/projects/{proj_id}/tasks/{task_id}/time-logs",
+        json={"hours_spent": "1.50", "comment": "avance"},
+    )
+    assert logged.status_code == 201
+    assert logged.json()["message"] == "Horas registradas correctamente."
+    assert logged.json()["total_logged_hours"] == "1.50"
+
+    invalid = client.post(
+        f"/api/v1/projects/{proj_id}/tasks/{task_id}/time-logs",
+        json={"hours_spent": "0"},
+    )
+    assert invalid.status_code == 400
+    assert invalid.json()["error"]["message"] == "Las horas invertidas deben ser mayores a 0."
+
+    switch_user(client, "dev-time@dashnode.io")
+    denied = client.patch(
+        f"/api/v1/projects/{proj_id}/tasks/{other_task}/status",
+        json={"status": "IN_PROGRESS"},
+    )
+    assert denied.status_code == 403
+    assert (
+        denied.json()["error"]["message"] == "Solo puede cambiar el estado de sus propias tareas."
+    )
+
+    ok = client.patch(
+        f"/api/v1/projects/{proj_id}/tasks/{task_id}/status",
+        json={"status": "IN_PROGRESS"},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["message"] == "Estado de la tarea actualizado."
+
+    blocked = client.patch(
+        f"/api/v1/projects/{proj_id}/tasks/{task_id}/status",
+        json={"status": "CORRECTION"},
+    )
+    assert blocked.status_code == 400
+
+    tree = client.get(f"/api/v1/projects/{proj_id}/backlog/tree")
+    tasks = tree.json()["tasks_by_story"][story_id]
+    assert [row["id"] for row in tasks] == [task_id]
+
+    mine_list = client.get("/api/v1/users/me/tasks")
+    assert mine_list.status_code == 200
+    assert mine_list.json()["tasks"][0]["name"] == "Tarea mia"
+    assert "other" not in mine_list.text
+
+    switch_user(client, "mgr-time@dashnode.io")
+    still = client.post(
+        f"/api/v1/projects/{proj_id}/epics", json={"name": "Otra", "description": ""}
+    )
+    assert still.status_code == 201

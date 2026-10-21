@@ -28,3 +28,22 @@ ESTIMATED_HOURS_SAVED = "Horas estimadas registradas correctamente."
 EPIC_NOT_FOUND = "Épica no encontrada."
 STORY_NOT_FOUND = "Historia de usuario no encontrada."
 STORY_TASK_NOT_FOUND = "Tarea no encontrada."
+
+HOURS_MUST_BE_POSITIVE = "Las horas invertidas deben ser mayores a 0."
+HOURS_MAX_PER_ENTRY = "Las horas invertidas no pueden superar 24 en un solo registro."
+HOURS_DECIMALS = "Las horas invertidas aceptan como máximo 2 decimales."
+HOURS_COMMENT_TOO_LONG = "El comentario no puede superar los 500 caracteres."
+HOURS_LOGGED = "Horas registradas correctamente."
+NOT_PROJECT_MEMBER = "Acceso denegado. No es miembro activo del proyecto."
+
+TASK_STATUS_INVALID = "El estado indicado no es válido."
+TASK_STATUS_UPDATED = "Estado de la tarea actualizado."
+TASK_STATUS_OWN_ONLY = "Solo puede cambiar el estado de sus propias tareas."
+TASK_STATUS_CORRECTION = "El estado Corrección solo cambia al reportar o resolver un fix."
+
+BACKLOG_EMPTY = "El backlog no tiene elementos."
+BACKLOG_FILTER_EMPTY = "No se encontraron elementos con los filtros aplicados."
+BACKLOG_LOAD_FAILED = "No fue posible cargar la información. Intente nuevamente."
+
+MY_TASKS_EMPTY = "No tiene tareas asignadas actualmente."
+MY_TASKS_FILTER_EMPTY = "No se encontraron tareas con los filtros aplicados."

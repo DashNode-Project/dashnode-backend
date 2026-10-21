@@ -3,7 +3,11 @@
 from decimal import Decimal
 
 from app.modules.backlog.domain import messages
-from app.modules.backlog.domain.entities import FIBONACCI_STORY_POINTS, MoscowPriority, StoryTaskType
+from app.modules.backlog.domain.entities import (
+    FIBONACCI_STORY_POINTS,
+    MoscowPriority,
+    StoryTaskType,
+)
 
 
 def validate_epic_name(name: str) -> dict[str, str]:

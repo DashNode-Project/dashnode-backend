@@ -782,4 +782,19 @@ Lote Sprint 4 / MVP 2 recibido 2026-10-20. Implementación en rama `feature/ep-0
 | HU_DN_04_52 | COMPLETED |
 | HU_DN_04_53 | COMPLETED |
 | HU_DN_04_54 | COMPLETED |
-| HU_DN_04_55 | COMPLETED |
+| HU_DN_04_55 | COMPLETED |
+
+## EP-06 — Backlog TAR (HU_DN_04_56 … HU_DN_04_61)
+
+Recibidas 2026-10-20. Registro de horas, estado de tarea, permisos de gerente, árbol filtrado y Mis tareas.
+
+| ID | Estado |
+|---|---|
+| HU_DN_04_56 | COMPLETED |
+| HU_DN_04_57 | COMPLETED |
+| HU_DN_04_58 | COMPLETED |
+| HU_DN_04_59 | COMPLETED |
+| HU_DN_04_60 | COMPLETED |
+| HU_DN_04_61 | COMPLETED |
+
+La invitación de desarrollador ya no entrega una contraseña en claro. El correo lleva enlace y código de 6 dígitos; la cuenta permanece inactiva hasta autorizar, verificar el código y definir la contraseña.
