@@ -104,9 +104,9 @@ class StoryTask:
     status: StoryTaskStatus
     assignee_id: str | None
     estimated_hours: Decimal | None
-    story_points: int | None = None
     created_by: str
     created_at: datetime
     updated_at: datetime
+    story_points: int | None = None
     logged_hours: Decimal = Decimal("0")
     label: str = ""
