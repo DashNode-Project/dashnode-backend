@@ -3,7 +3,7 @@ Integration and API tests for EP-05: Agendamiento y reuniones.
 Covers HU_DN_03_37, HU_DN_03_38, HU_DN_03_39, HU_DN_03_40, HU_DN_03_41.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -17,7 +17,7 @@ from tests.support import DEFAULT_PASSWORD, create_user, login_as
 
 
 def _date_offset(days: int) -> str:
-    return (date.today() + timedelta(days=days)).isoformat()
+    return (datetime.now(UTC).date() + timedelta(days=days)).isoformat()
 
 
 def switch_user(client: TestClient, email: str) -> None:
