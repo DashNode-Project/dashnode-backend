@@ -1,5 +1,6 @@
 """SQLAlchemy backlog repository."""
 
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import delete, func, select
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.backlog.domain.entities import (
     Epic,
+    EstimationMode,
     MoscowPriority,
     StoryTask,
     StoryTaskStatus,
@@ -54,6 +56,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
             acceptance_criteria=model.acceptance_criteria,
             moscow_priority=MoscowPriority(model.moscow_priority),
             story_points=model.story_points,
+            estimation_mode=EstimationMode(model.estimation_mode),
             sprint_id=model.sprint_id,
             sort_order=model.sort_order,
             created_by=model.created_by,
@@ -77,6 +80,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
             status=parsed,
             assignee_id=model.assignee_id,
             estimated_hours=Decimal(hours) if hours is not None else None,
+            story_points=model.story_points,
             created_by=model.created_by,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -140,6 +144,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
                 acceptance_criteria=story.acceptance_criteria,
                 moscow_priority=story.moscow_priority.value,
                 story_points=story.story_points,
+                estimation_mode=story.estimation_mode.value,
                 sprint_id=story.sprint_id,
                 sort_order=story.sort_order,
                 created_by=story.created_by,
@@ -159,6 +164,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
         model.acceptance_criteria = story.acceptance_criteria
         model.moscow_priority = story.moscow_priority.value
         model.story_points = story.story_points
+        model.estimation_mode = story.estimation_mode.value
         model.updated_at = story.updated_at
 
     def get_user_story(self, story_id: str) -> UserStory | None:
@@ -200,6 +206,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
                 status=task.status.value,
                 assignee_id=task.assignee_id,
                 estimated_hours=task.estimated_hours,
+                story_points=task.story_points,
                 logged_hours=task.logged_hours,
                 label=task.label,
                 created_by=task.created_by,
@@ -217,6 +224,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
         model.notes = task.notes
         model.assignee_id = task.assignee_id
         model.estimated_hours = task.estimated_hours
+        model.story_points = task.story_points
         model.status = task.status.value
         model.logged_hours = task.logged_hours
         model.label = task.label
@@ -257,7 +265,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
         user_id: str,
         hours: Decimal,
         comment: str | None,
-        when,
+        when: datetime,
     ) -> None:
         self._session.add(
             TaskTimeLogModel(
@@ -278,7 +286,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
         user_id: str,
         previous_status: str,
         new_status: str,
-        when,
+        when: datetime,
     ) -> None:
         self._session.add(
             TaskStatusHistoryModel(

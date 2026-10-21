@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from app.modules.backlog.application.access import (
+    ProjectContext,
     can_manage_backlog_structure,
     can_manage_story_tasks,
     can_view_backlog,
@@ -11,6 +12,7 @@ from app.modules.backlog.application.access import (
 from app.modules.backlog.application.dtos import (
     AssignStoryPointsCommand,
     AssignStoryTaskCommand,
+    AssignTaskStoryPointsCommand,
     BacklogTreeDTO,
     CreateEpicCommand,
     CreateStoryTaskCommand,
@@ -29,6 +31,7 @@ from app.modules.backlog.application.ports import ActiveMemberLookupPort, Projec
 from app.modules.backlog.domain import messages
 from app.modules.backlog.domain.entities import (
     Epic,
+    EstimationMode,
     MoscowPriority,
     StoryTask,
     StoryTaskStatus,
@@ -62,7 +65,7 @@ def _validation_error(fields: dict[str, str]) -> AppError:
     )
 
 
-def _require_project(projects: ProjectLookupPort, project_id: str):
+def _require_project(projects: ProjectLookupPort, project_id: str) -> ProjectContext:
     project = projects.get_project(project_id)
     if project is None:
         raise AppError("PROJECT_NOT_FOUND", "Proyecto no encontrado.", ErrorKind.NOT_FOUND)
@@ -93,6 +96,7 @@ def _story_dto(story: UserStory) -> UserStoryDTO:
         acceptance_criteria=story.acceptance_criteria,
         moscow_priority=story.moscow_priority,
         story_points=story.story_points,
+        estimation_mode=story.estimation_mode,
         sprint_id=story.sprint_id,
         sort_order=story.sort_order,
         created_at=story.created_at,
@@ -112,6 +116,7 @@ def _task_dto(task: StoryTask) -> StoryTaskDTO:
         status=task.status.value,
         assignee_id=task.assignee_id,
         estimated_hours=task.estimated_hours,
+        story_points=task.story_points,
         logged_hours=task.logged_hours,
         label=task.label,
         created_at=task.created_at,
@@ -368,6 +373,7 @@ class CreateUserStoryUseCase:
             acceptance_criteria=(cmd.acceptance_criteria or "").strip(),
             moscow_priority=cmd.moscow_priority,
             story_points=None,
+            estimation_mode=cmd.estimation_mode,
             sprint_id=None,
             sort_order=self._backlog.next_story_sort_order(epic_id),
             created_by=actor.id,
@@ -451,6 +457,9 @@ class AssignStoryPointsUseCase:
         if not can_manage_backlog_structure(actor, project):
             raise AccessDeniedError()
 
+        if story.estimation_mode == EstimationMode.TASK:
+            raise _validation_error({"story_points": messages.STORY_POINTS_BY_TASK_MODE})
+
         fields = validate_story_points(cmd.story_points)
         if fields:
             raise _validation_error(fields)
@@ -462,6 +471,50 @@ class AssignStoryPointsUseCase:
             self._backlog.update_user_story(story)
             self._uow.commit()
         return _story_dto(story), MessageResponse(message=messages.STORY_POINTS_ASSIGNED)
+
+
+class AssignTaskStoryPointsUseCase:
+    def __init__(
+        self,
+        backlog: BacklogRepository,
+        projects: ProjectLookupPort,
+        clock: Clock,
+        uow: UnitOfWork,
+    ) -> None:
+        self._backlog = backlog
+        self._projects = projects
+        self._clock = clock
+        self._uow = uow
+
+    def execute(
+        self, task_id: str, cmd: AssignTaskStoryPointsCommand, actor: CurrentUser
+    ) -> tuple[StoryTaskDTO, MessageResponse]:
+        task = self._backlog.get_story_task(task_id)
+        if task is None:
+            raise AppError(
+                "STORY_TASK_NOT_FOUND", messages.STORY_TASK_NOT_FOUND, ErrorKind.NOT_FOUND
+            )
+        story = self._backlog.get_user_story(task.user_story_id)
+        if story is None:
+            raise AppError("STORY_NOT_FOUND", messages.STORY_NOT_FOUND, ErrorKind.NOT_FOUND)
+        project = _require_project(self._projects, task.project_id)
+        if not can_manage_backlog_structure(actor, project):
+            raise AccessDeniedError()
+
+        if story.estimation_mode == EstimationMode.STORY:
+            raise _validation_error({"story_points": messages.TASK_POINTS_BY_STORY_MODE})
+
+        fields = validate_story_points(cmd.story_points)
+        if fields:
+            raise _validation_error(fields)
+
+        now = self._clock.now()
+        task.story_points = cmd.story_points
+        task.updated_at = now
+        with self._uow:
+            self._backlog.update_story_task(task)
+            self._uow.commit()
+        return _task_dto(task), MessageResponse(message=messages.STORY_POINTS_ASSIGNED)
 
 
 class CreateStoryTaskUseCase:

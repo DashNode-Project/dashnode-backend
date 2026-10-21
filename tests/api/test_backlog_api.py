@@ -26,7 +26,8 @@ def _create_project(client: TestClient, db_engine: Engine, mgr_id: str) -> str:
         },
     )
     assert resp.status_code == 201
-    return resp.json()["id"]
+    project_id: str = resp.json()["id"]
+    return project_id
 
 
 def test_epic_and_story_flow(client: TestClient, db_engine: Engine) -> None:

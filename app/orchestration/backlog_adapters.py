@@ -3,6 +3,7 @@
 from sqlalchemy.orm import Session
 
 from app.modules.auth.infrastructure.repositories import SqlAlchemyUserRepository
+from app.modules.backlog.application.access import ProjectContext
 from app.modules.backlog.application.ports import ActiveMemberLookupPort, ProjectLookupPort
 from app.modules.projects.infrastructure.repositories import SqlAlchemyProjectRepository
 
@@ -11,7 +12,7 @@ class SqlAlchemyProjectLookup(ProjectLookupPort):
     def __init__(self, session: Session) -> None:
         self._projects = SqlAlchemyProjectRepository(session)
 
-    def get_project(self, project_id: str):
+    def get_project(self, project_id: str) -> ProjectContext | None:
         return self._projects.get_by_id(project_id)
 
     def is_member(self, project_id: str, user_id: str) -> bool:
@@ -25,7 +26,7 @@ class SqlAlchemyActiveMemberLookup(ActiveMemberLookupPort):
 
     def is_active_project_member(self, project_id: str, user_id: str) -> bool:
         user = self._users.get_by_id(user_id)
-        if user is None or not user.is_active:
+        if user is None or not user.is_active or user.role == "admin":
             return False
         project = self._projects.get_by_id(project_id)
         if project is None:
