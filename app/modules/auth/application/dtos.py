@@ -138,10 +138,21 @@ class InviteDeveloperCommand(BaseModel):
     role: str | None = Field(default=None, max_length=50)
 
 
+class InvitationDecisionCommand(BaseModel):
+    token: str = Field(default="", max_length=500)
+    decision: str = Field(default="", max_length=20)
+
+
+class ActivateInvitationCommand(BaseModel):
+    token: str = Field(default="", max_length=500)
+    code: str = Field(default="", max_length=12)
+    password: str = Field(default="", max_length=200)
+    confirm_password: str = Field(default="", max_length=200)
+
+
 class InviteDeveloperResponse(BaseModel):
     message: str
     user_id: str
-    initial_password: str
 
 
 class ManagerDeveloperSummaryDTO(BaseModel):

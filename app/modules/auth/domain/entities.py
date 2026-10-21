@@ -30,10 +30,16 @@ class User:
     invited_by_user_id: str | None = None
     invitation_accepted_at: datetime | None = None
     profile_details: dict[str, Any] = field(default_factory=dict)
+    invitation_status: str = "accepted"
+    invitation_expires_at: datetime | None = None
+    invitation_rejected_at: datetime | None = None
+    invitation_renewal_count: int = 0
+    invitation_code_hash: str | None = None
+    invitation_code_attempts: int = 0
 
     def can_authenticate(self) -> bool:
         """Determines if the user account is allowed to log in."""
-        return self.is_active
+        return self.is_active and self.invitation_status == "accepted"
 
     def deactivate(self, when: datetime) -> None:
         """Deactivates user account."""
@@ -81,6 +87,7 @@ class CredentialTokenPurpose(StrEnum):
 
     RESET_CREDENTIAL = "password_reset"
     ACTIVATION = "activation"
+    DEVELOPER_INVITE = "developer_invite"
 
 
 @dataclass

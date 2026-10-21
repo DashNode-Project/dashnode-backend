@@ -8,10 +8,18 @@ Complies strictly with BR-1 (no direct DB/infrastructure imports).
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.config import settings
+from app.modules.auth.application.developer_invitation_use_cases import (
+    ActivateDeveloperInvitationUseCase,
+    DecideDeveloperInvitationUseCase,
+    DeleteInvitedDeveloperByAdminUseCase,
+    RenewDeveloperInvitationUseCase,
+)
 from app.modules.auth.application.dtos import (
+    ActivateInvitationCommand,
     AdminUserSummaryDTO,
     CompletePasswordResetCommand,
     CreateUserByAdminCommand,
+    InvitationDecisionCommand,
     InviteDeveloperCommand,
     InviteDeveloperResponse,
     LoginCommand,
@@ -41,10 +49,13 @@ from app.modules.auth.application.user_administration_use_cases import (
     ReactivateDeveloperByManagerUseCase,
 )
 from app.orchestration.auth_container import (
+    get_activate_invitation_use_case,
     get_admin_request_password_reset_use_case,
     get_complete_password_reset_use_case,
     get_create_user_by_admin_use_case,
     get_deactivate_developer_by_manager_use_case,
+    get_decide_invitation_use_case,
+    get_delete_invited_developer_use_case,
     get_invite_developer_use_case,
     get_list_active_managers_use_case,
     get_list_active_users_use_case,
@@ -54,6 +65,7 @@ from app.orchestration.auth_container import (
     get_logout_use_case,
     get_reactivate_developer_by_manager_use_case,
     get_register_manager_use_case,
+    get_renew_invitation_use_case,
     get_request_password_reset_use_case,
 )
 from app.orchestration.security import (
@@ -281,6 +293,43 @@ def reactivate_manager_developer(
     response_model=MessageResponse,
     summary="Enviar restablecimiento al correo del usuario (solo Administrador)",
 )
+@router.post("/invitations/decision", response_model=MessageResponse)
+def decide_developer_invitation(
+    cmd: InvitationDecisionCommand,
+    use_case: DecideDeveloperInvitationUseCase = Depends(get_decide_invitation_use_case),
+) -> MessageResponse:
+    return use_case.execute(cmd)
+
+
+@router.post("/invitations/activate", response_model=MessageResponse)
+def activate_developer_invitation(
+    cmd: ActivateInvitationCommand,
+    use_case: ActivateDeveloperInvitationUseCase = Depends(get_activate_invitation_use_case),
+) -> MessageResponse:
+    return use_case.execute(cmd)
+
+
+@router.post(
+    "/manager/developers/{user_id}/invitation/renew",
+    response_model=MessageResponse,
+)
+def renew_developer_invitation(
+    user_id: str,
+    current_user: CurrentUser = Depends(require_manager),
+    use_case: RenewDeveloperInvitationUseCase = Depends(get_renew_invitation_use_case),
+) -> MessageResponse:
+    return use_case.execute(actor_id=current_user.id, target_user_id=user_id)
+
+
+@router.delete("/admin/users/{user_id}/invitation", response_model=MessageResponse)
+def delete_invited_developer(
+    user_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+    use_case: DeleteInvitedDeveloperByAdminUseCase = Depends(get_delete_invited_developer_use_case),
+) -> MessageResponse:
+    return use_case.execute(actor_id=current_user.id, target_user_id=user_id)
+
+
 def admin_request_password_reset(
     user_id: str,
     current_user: CurrentUser = Depends(require_admin),
