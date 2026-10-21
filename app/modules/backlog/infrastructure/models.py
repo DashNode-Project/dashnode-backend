@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Integer, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.database import Base
@@ -35,7 +35,9 @@ class UserStoryModel(Base):
     acceptance_criteria: Mapped[str] = mapped_column(String(8000), default="", nullable=False)
     moscow_priority: Mapped[str] = mapped_column(String(20), nullable=False)
     story_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    estimation_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="story")
+    estimation_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="story", server_default="story"
+    )
     sprint_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by: Mapped[str] = mapped_column(String(36), nullable=False)
@@ -70,8 +72,13 @@ class TaskTimeLogModel(Base):
     __tablename__ = "task_time_logs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    task_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
-    user_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+    task_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("story_tasks.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
     hours_spent: Mapped[Decimal] = mapped_column(Numeric(4, 2), nullable=False)
     comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -81,7 +88,12 @@ class TaskStatusHistoryModel(Base):
     __tablename__ = "task_status_history"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    task_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+    task_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("story_tasks.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
     user_id: Mapped[str] = mapped_column(String(36), nullable=False)
     previous_status: Mapped[str] = mapped_column(String(50), nullable=False)
     new_status: Mapped[str] = mapped_column(String(50), nullable=False)
