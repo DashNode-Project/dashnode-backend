@@ -8,6 +8,11 @@ from enum import StrEnum
 FIBONACCI_STORY_POINTS = frozenset({1, 2, 3, 5, 8, 13, 21})
 
 
+class EstimationMode(StrEnum):
+    STORY = "story"
+    TASK = "task"
+
+
 class MoscowPriority(StrEnum):
     MUST_HAVE = "must_have"
     SHOULD_HAVE = "should_have"
@@ -79,6 +84,7 @@ class UserStory:
     acceptance_criteria: str
     moscow_priority: MoscowPriority
     story_points: int | None
+    estimation_mode: EstimationMode
     sprint_id: str | None
     sort_order: int
     created_by: str
@@ -98,6 +104,7 @@ class StoryTask:
     status: StoryTaskStatus
     assignee_id: str | None
     estimated_hours: Decimal | None
+    story_points: int | None = None
     created_by: str
     created_at: datetime
     updated_at: datetime

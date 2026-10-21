@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.backlog.domain.entities import MoscowPriority, StoryTaskType
+from app.modules.backlog.domain.entities import EstimationMode, MoscowPriority, StoryTaskType
 
 
 class MessageResponse(BaseModel):
@@ -37,6 +37,7 @@ class UserStoryDTO(BaseModel):
     acceptance_criteria: str
     moscow_priority: MoscowPriority
     story_points: int | None
+    estimation_mode: EstimationMode
     sprint_id: str | None
     sort_order: int
     created_at: datetime
@@ -56,6 +57,7 @@ class StoryTaskDTO(BaseModel):
     status: str
     assignee_id: str | None
     estimated_hours: Decimal | None
+    story_points: int | None = None
     logged_hours: Decimal = Decimal("0")
     label: str = ""
     created_at: datetime
@@ -130,6 +132,7 @@ class CreateUserStoryCommand(BaseModel):
     reason: str = Field(max_length=2000)
     acceptance_criteria: str = Field(default="", max_length=8000)
     moscow_priority: MoscowPriority = MoscowPriority.MUST_HAVE
+    estimation_mode: EstimationMode = EstimationMode.STORY
     epic_id: str | None = Field(default=None, max_length=36)
 
 
@@ -143,6 +146,10 @@ class UpdateUserStoryCommand(BaseModel):
 
 
 class AssignStoryPointsCommand(BaseModel):
+    story_points: int | None = None
+
+
+class AssignTaskStoryPointsCommand(BaseModel):
     story_points: int | None = None
 
 

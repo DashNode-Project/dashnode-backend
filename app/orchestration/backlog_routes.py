@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.modules.backlog.application.dtos import (
     AssignStoryPointsCommand,
     AssignStoryTaskCommand,
+    AssignTaskStoryPointsCommand,
     BacklogTreeDTO,
     ChangeTaskStatusCommand,
     ChangeTaskStatusResponse,
@@ -32,6 +33,7 @@ from app.modules.backlog.application.task_flow import (
 from app.modules.backlog.application.use_cases import (
     AssignStoryPointsUseCase,
     AssignStoryTaskUseCase,
+    AssignTaskStoryPointsUseCase,
     BacklogFilters,
     CreateEpicUseCase,
     CreateStoryTaskUseCase,
@@ -92,6 +94,10 @@ class TaskAssignResponse(StoryTaskDTO):
 
 
 class TaskHoursResponse(StoryTaskDTO):
+    message: str
+
+
+class TaskStoryPointsResponse(StoryTaskDTO):
     message: str
 
 
@@ -323,6 +329,26 @@ def assign_story_task(
     )
     dto, msg = use_case.execute(task_id, cmd, current_user)
     return TaskAssignResponse(**dto.model_dump(), message=msg.message)
+
+
+@router.patch(
+    "/story-tasks/{task_id}/story-points",
+    response_model=TaskStoryPointsResponse,
+)
+def assign_task_story_points(
+    task_id: str,
+    cmd: AssignTaskStoryPointsCommand,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> TaskStoryPointsResponse:
+    use_case = AssignTaskStoryPointsUseCase(
+        backlog=SqlAlchemyBacklogRepository(db),
+        projects=SqlAlchemyProjectLookup(db),
+        clock=_clock,
+        uow=SqlAlchemyUnitOfWork(db),
+    )
+    dto, msg = use_case.execute(task_id, cmd, current_user)
+    return TaskStoryPointsResponse(**dto.model_dump(), message=msg.message)
 
 
 @router.patch(

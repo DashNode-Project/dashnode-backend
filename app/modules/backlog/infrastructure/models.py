@@ -35,6 +35,7 @@ class UserStoryModel(Base):
     acceptance_criteria: Mapped[str] = mapped_column(String(8000), default="", nullable=False)
     moscow_priority: Mapped[str] = mapped_column(String(20), nullable=False)
     story_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimation_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="story")
     sprint_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by: Mapped[str] = mapped_column(String(36), nullable=False)
@@ -55,6 +56,7 @@ class StoryTaskModel(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="TODO")
     assignee_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
     estimated_hours: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    story_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     logged_hours: Mapped[Decimal] = mapped_column(
         Numeric(8, 2), nullable=False, default=Decimal("0"), server_default="0"
     )

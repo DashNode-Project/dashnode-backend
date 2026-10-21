@@ -12,6 +12,12 @@ STORY_UPDATED = "Historia de usuario actualizada correctamente."
 
 STORY_POINTS_ASSIGNED = "Puntos de historia asignados correctamente."
 INVALID_STORY_POINTS = "Los puntos de historia deben pertenecer a la escala Fibonacci."
+STORY_POINTS_BY_TASK_MODE = (
+    "Esta historia estima por tarea; asigne puntos en cada tarea, no en la historia."
+)
+TASK_POINTS_BY_STORY_MODE = (
+    "Esta historia estima por historia; no puede asignar puntos a tareas individuales."
+)
 
 TASK_NAME_REQUIRED = "El nombre de la tarea es obligatorio."
 TASK_ADDED = "Tarea agregada correctamente."
