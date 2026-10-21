@@ -96,11 +96,12 @@ def test_manager_invite_forces_developer_and_rejects_manager_role() -> None:
     repo = FakeUserRepository()
     mgr = make_user(user_id="mgr-1", email="mgr@x.com", role=UserRole.MANAGER)
     repo.save(mgr)
+    mailer = FakeTransactionalEmailSender()
     use_case = InviteDeveloperByManagerUseCase(
         user_repo=repo,
         token_repo=FakePasswordCredentialTokenRepository(),
         tokens=FakeSessionTokenService(),
-        mailer=FakeTransactionalEmailSender(),
+        mailer=mailer,
         hasher=FakePasswordHasher(),
         id_gen=FakeIdGenerator(),
         clock=FakeClock(),
@@ -111,12 +112,16 @@ def test_manager_invite_forces_developer_and_rejects_manager_role() -> None:
         actor_id="mgr-1",
         cmd=InviteDeveloperCommand(name="Dev", email="d@empresa.com"),
     )
-    assert result.message == messages.INVITE_DEVELOPER_WITH_PASSWORD
-    assert result.initial_password == "dev_cambiar_contrasena"
+    assert result.message == messages.INVITE_DEVELOPER_SUCCESS
+    assert not hasattr(result, "initial_password") or "initial_password" not in result.model_dump()
     created = repo.get_by_email("d@empresa.com")
     assert created is not None
     assert created.role == UserRole.DEVELOPER
+    assert created.is_active is False
+    assert created.invitation_status == "pending"
     assert created.invited_by_user_id == "mgr-1"
+    assert mailer.sent
+    assert "dev_cambiar_contrasena" not in mailer.sent[0][1]
 
     with pytest.raises(AccessDeniedError):
         use_case.execute(

@@ -51,6 +51,12 @@ class SqlAlchemyUserRepository(UserRepository):
             invited_by_user_id=model.invited_by_user_id,
             invitation_accepted_at=model.invitation_accepted_at,
             profile_details=dict(model.profile_details or {}),
+            invitation_status=model.invitation_status or "accepted",
+            invitation_expires_at=model.invitation_expires_at,
+            invitation_rejected_at=model.invitation_rejected_at,
+            invitation_renewal_count=model.invitation_renewal_count or 0,
+            invitation_code_hash=model.invitation_code_hash,
+            invitation_code_attempts=model.invitation_code_attempts or 0,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -81,6 +87,12 @@ class SqlAlchemyUserRepository(UserRepository):
             invited_by_user_id=user.invited_by_user_id,
             invitation_accepted_at=user.invitation_accepted_at,
             profile_details=user.profile_details or {},
+            invitation_status=user.invitation_status,
+            invitation_expires_at=user.invitation_expires_at,
+            invitation_rejected_at=user.invitation_rejected_at,
+            invitation_renewal_count=user.invitation_renewal_count,
+            invitation_code_hash=user.invitation_code_hash,
+            invitation_code_attempts=user.invitation_code_attempts,
             created_at=user.created_at,
             updated_at=user.updated_at,
         )
@@ -103,6 +115,12 @@ class SqlAlchemyUserRepository(UserRepository):
             model.avatar_key = user.avatar_key
             model.invited_by_user_id = user.invited_by_user_id
             model.invitation_accepted_at = user.invitation_accepted_at
+            model.invitation_status = user.invitation_status
+            model.invitation_expires_at = user.invitation_expires_at
+            model.invitation_rejected_at = user.invitation_rejected_at
+            model.invitation_renewal_count = user.invitation_renewal_count
+            model.invitation_code_hash = user.invitation_code_hash
+            model.invitation_code_attempts = user.invitation_code_attempts
             model.profile_details = user.profile_details or {}
             model.updated_at = user.updated_at
 
@@ -115,6 +133,19 @@ class SqlAlchemyUserRepository(UserRepository):
             )
             .order_by(UserModel.name, UserModel.email)
         )
+        return [self._to_domain(model) for model in self._session.execute(stmt).scalars()]
+
+    def delete(self, user_id: str) -> None:
+        self._session.execute(
+            delete(PasswordCredentialTokenModel).where(
+                PasswordCredentialTokenModel.user_id == user_id
+            )
+        )
+        self._session.execute(delete(SessionModel).where(SessionModel.user_id == user_id))
+        self._session.execute(delete(UserModel).where(UserModel.id == user_id))
+
+    def list_invitation_housekeeping(self) -> list[User]:
+        stmt = select(UserModel).where(UserModel.invitation_status.in_(("pending", "rejected")))
         return [self._to_domain(model) for model in self._session.execute(stmt).scalars()]
 
     def list_all(self) -> list[User]:

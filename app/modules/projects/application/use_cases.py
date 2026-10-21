@@ -4,6 +4,8 @@ Use cases for Project management (EP-03).
 @origin [SAD-Propuesto]
 """
 
+from datetime import datetime
+
 from app.modules.projects.application.access import (
     can_create_project,
     can_manage_project,
@@ -419,20 +421,32 @@ class ListProjectMembersUseCase:
         if not can_view_project(actor, project, self._repo):
             raise AccessDeniedError()
 
+        hide_admin = actor.role != "admin"
+        seen: set[str] = set()
         rows: list[ProjectMemberDTO] = []
-        for member in self._repo.get_members(project_id):
-            profile = self._users.get_member_profile(member.user_id)
+
+        def append_user(user_id: str, joined_at: datetime) -> None:
+            if user_id in seen:
+                return
+            profile = self._users.get_member_profile(user_id)
             if profile is None:
-                continue
+                return
+            if hide_admin and profile.role == "admin":
+                return
+            seen.add(user_id)
             rows.append(
                 ProjectMemberDTO(
-                    user_id=member.user_id,
+                    user_id=user_id,
                     name=profile.name,
                     email=profile.email,
                     role=profile.role,
-                    joined_at=member.joined_at,
+                    joined_at=joined_at,
                 )
             )
+
+        append_user(project.manager_id, project.created_at)
+        for member in self._repo.get_members(project_id):
+            append_user(member.user_id, member.joined_at)
         return rows
 
 

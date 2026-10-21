@@ -3,7 +3,7 @@ Integration and API tests for EP-05: Agendamiento y reuniones.
 Covers HU_DN_03_37, HU_DN_03_38, HU_DN_03_39, HU_DN_03_40, HU_DN_03_41.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -14,6 +14,10 @@ from app.modules.availability.domain import messages
 from app.modules.availability.infrastructure.models import MeetingModel, MeetingParticipantModel
 from app.modules.notifications.infrastructure.models import NotificationModel
 from tests.support import DEFAULT_PASSWORD, create_user, login_as
+
+
+def _date_offset(days: int) -> str:
+    return (datetime.now(UTC).date() + timedelta(days=days)).isoformat()
 
 
 def switch_user(client: TestClient, email: str) -> None:
@@ -139,7 +143,7 @@ def test_hu_38_create_meeting_validations(client: TestClient, db_engine: Engine)
         "title": "Daily Standup",
         "type": "Daily",
         "project_id": p_id,
-        "date": "2026-10-15",
+        "date": _date_offset(14),
         "start_time": "09:00",
         "end_time": "09:30",
         "duration": 30,
@@ -207,7 +211,7 @@ def test_hu_38_successful_meeting_creation_and_notifications(
         "title": "Sprint Review Epica 05",
         "type": "Review",
         "project_id": p_id,
-        "date": "2026-10-16",
+        "date": _date_offset(14),
         "start_time": "14:00",
         "end_time": "15:00",
         "duration": 60,
@@ -250,7 +254,7 @@ def test_hu_38_concurrent_meeting_conflict(client: TestClient, db_engine: Engine
             "title": "Reunión 1",
             "type": "General",
             "project_id": p_id,
-            "date": "2026-10-17",
+            "date": _date_offset(21),
             "start_time": "10:00",
             "end_time": "11:00",
             "duration": 60,
@@ -267,7 +271,7 @@ def test_hu_38_concurrent_meeting_conflict(client: TestClient, db_engine: Engine
             "title": "Reunión Traslapada",
             "type": "General",
             "project_id": p_id,
-            "date": "2026-10-17",
+            "date": _date_offset(21),
             "start_time": "10:30",
             "end_time": "11:30",
             "duration": 60,
@@ -298,7 +302,7 @@ def test_hu_39_meetings_list_role_scoping(client: TestClient, db_engine: Engine)
             "title": "Meeting P1 Dev1",
             "type": "Planning",
             "project_id": p1_id,
-            "date": "2026-10-20",
+            "date": _date_offset(30),
             "start_time": "09:00",
             "end_time": "10:00",
             "duration": 60,
@@ -339,7 +343,7 @@ def test_hu_39_filter_upcoming_and_past(client: TestClient, db_engine: Engine) -
             "title": "Futura",
             "type": "Retro",
             "project_id": p_id,
-            "date": "2026-12-01",
+            "date": _date_offset(45),
             "start_time": "10:00",
             "end_time": "11:00",
             "duration": 60,
@@ -394,7 +398,7 @@ def test_hu_41_meeting_detail_and_access_control(client: TestClient, db_engine: 
             "title": "Detalle Sync",
             "type": "Planning",
             "project_id": p_id,
-            "date": "2026-10-25",
+            "date": _date_offset(25),
             "start_time": "11:00",
             "end_time": "12:00",
             "duration": 60,
@@ -432,7 +436,7 @@ def test_hu_41_participant_respond_meeting(client: TestClient, db_engine: Engine
             "title": "Respuesta Test",
             "type": "General",
             "project_id": p_id,
-            "date": "2026-10-26",
+            "date": _date_offset(26),
             "start_time": "15:00",
             "end_time": "16:00",
             "duration": 60,
@@ -533,7 +537,7 @@ def test_hu_42_meeting_detail_and_google_calendar_data(
             "title": "Sprint Review con Cliente",
             "type": "Review",
             "project_id": p_id,
-            "date": "2026-11-20",
+            "date": _date_offset(40),
             "start_time": "10:00",
             "end_time": "11:00",
             "duration": 60,
@@ -550,7 +554,7 @@ def test_hu_42_meeting_detail_and_google_calendar_data(
     assert res_det.status_code == 200
     data = res_det.json()
     assert data["title"] == "Sprint Review con Cliente"
-    assert data["date"] == "2026-11-20"
+    assert data["date"] == _date_offset(40)
     assert data["start_time"] == "10:00"
     assert data["end_time"] == "11:00"
     assert data["duration"] == 60
@@ -586,7 +590,7 @@ def test_hu_44_respond_meeting_lifecycle_and_constraints(
             "title": "Architecture Sync",
             "type": "General",
             "project_id": p_id,
-            "date": "2026-11-25",
+            "date": _date_offset(50),
             "start_time": "14:00",
             "end_time": "15:00",
             "duration": 60,
@@ -688,7 +692,7 @@ def test_hu_45_cancel_meeting_and_notifications_and_rn_age_05(
             "title": "Release Planning",
             "type": "Planning",
             "project_id": p_id,
-            "date": "2026-11-28",
+            "date": _date_offset(55),
             "start_time": "16:00",
             "end_time": "17:00",
             "duration": 60,
@@ -772,7 +776,7 @@ def test_hu_46_meeting_summary_validations_and_lifecycle(
             "title": "Futura para Acta",
             "type": "General",
             "project_id": p_id,
-            "date": "2026-12-15",
+            "date": _date_offset(60),
             "start_time": "10:00",
             "end_time": "11:00",
             "duration": 60,
@@ -892,7 +896,7 @@ def test_meeting_update_delete_restore_lifecycle(client: TestClient, db_engine: 
             "title": "Original",
             "type": "Planning",
             "project_id": p_id,
-            "date": "2026-12-20",
+            "date": _date_offset(65),
             "start_time": "10:00",
             "end_time": "11:00",
             "duration": 60,

@@ -47,8 +47,9 @@ def test_manager_invite_developer(client: TestClient, db_engine: Engine) -> None
     )
     assert response.status_code == 201
     body = response.json()
-    assert body["message"] == messages.INVITE_DEVELOPER_WITH_PASSWORD
-    assert body["initial_password"] == "nuevo_dev_cambiar_contrasena"
+    assert body["message"] == messages.INVITE_DEVELOPER_SUCCESS
+    assert "initial_password" not in body
+    assert "password" not in body
     assert body["user_id"]
 
 

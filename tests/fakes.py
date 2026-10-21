@@ -71,6 +71,16 @@ class FakeUserRepository:
         ]
         return sorted(users, key=lambda u: (u.name, u.email))
 
+    def delete(self, user_id: str) -> None:
+        user = self.users_by_id.pop(user_id, None)
+        if user is not None:
+            self.users_by_email.pop(user.email, None)
+
+    def list_invitation_housekeeping(self) -> list[User]:
+        return [
+            u for u in self.users_by_id.values() if u.invitation_status in ("pending", "rejected")
+        ]
+
 
 class FakeClock:
     def __init__(self, fixed_now: datetime = T0) -> None:
@@ -252,6 +262,15 @@ class FakeTransactionalEmailSender:
 
             raise EmailSendFailedError()
         self.sent.append((to_email, activation_url))
+
+    def send_developer_invitation(
+        self, *, to_email: str, invitation_url: str, verification_code: str
+    ) -> None:
+        if self.fail:
+            from app.modules.auth.domain.errors import EmailSendFailedError
+
+            raise EmailSendFailedError()
+        self.sent.append((to_email, f"{invitation_url}|{verification_code}"))
 
 
 class FakeProjectOwnershipQuery:
