@@ -197,5 +197,15 @@ Frontend: `/disponibilidad` (pestañas «Mi disponibilidad», «Equipo», «Agen
 - **Directorio `demo/`:** Preservado íntegramente sin modificaciones.
 - **Git Commit / Push:** Omitidos estrictamente conforme a las restricciones de la solicitud.
 
+---
+
+## EP-06 — Backlog TAR (HU_DN_04_47 … HU_DN_04_55)
+
+Integración verificada mediante `tests/api/test_backlog_api.py` (permisos, literales, Fibonacci, asignación a miembros, horas). Frontend consume los mismos endpoints en `ProjectBacklogTab`.
+
+## HU_DN_04_56 … HU_DN_04_61
+
+Login local verificado (HTTP 200) contra Postgres de Docker después de que el host remoto no resolvía DNS. SMTP: sesión autenticada (`smtp_ok`) sin enviar un mensaje de prueba. El front usa el proxy `/api` hacia `127.0.0.1:8000`.
+
 
 

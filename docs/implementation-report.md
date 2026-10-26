@@ -229,4 +229,27 @@ Validación local:
   - Creador o Administrador pueden registrar o editar; los datos quedan visibles para todos los participantes.
 - **Frontend:** Modal con validación en tiempo real y contador de caracteres (0/2000), toast de confirmación `"Resumen y acta guardados correctamente."`.
 
+---
+
+## EP-06 — Backlog TAR (HU_DN_04_47 … HU_DN_04_55)
+
+**Estado:** COMPLETED (implementación) | **Pruebas locales:** NOT_RUN (venv/docker sin `.env` generado en agente)
+
+### Backend
+- Módulo `app/modules/backlog`, migración `009_ep06_backlog_tar`, rutas `orchestration/backlog_routes.py`.
+- Casos de uso con permisos Admin/Gerente (épica, HU, puntos) y miembros del proyecto (tareas, horas, asignación).
+- Tests: `tests/api/test_backlog_api.py`, `tests/unit/test_backlog_rules.py`.
+
+## EP-06 — HU_DN_04_56 … HU_DN_04_61
+
+**Estado:** COMPLETED
+**Fecha:** 2026-10-20
+**Evidencia:** `pytest tests/ --ignore=tests/integration` → 306 passed. `ruff check .` limpio.
+
+- Horas: suma en la misma transacción que `task_time_logs`.
+- Estado: historial en `task_status_history`; Corrección rechazada en cambios manuales.
+- Gerente con tareas asignadas sigue creando épicas (HU_DN_04_58).
+- Árbol filtra en memoria con parámetros; el desarrollador solo recibe sus tareas.
+- Invitación: contraseña aleatoria no reusable, código Argon2, enlace de un solo uso, vigencia 24 h, máximo 3 renovaciones, rechazo visible y borrado a los 3 días.
+
 

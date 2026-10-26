@@ -31,6 +31,7 @@ from app.modules.auth.domain.ports import (
 )
 from app.modules.auth.domain.rules import is_valid_email, normalize_email
 from app.shared.application.ports import Clock, IdGenerator, PasswordHasher, UnitOfWork
+from app.shared.domain.errors import AppError, ErrorKind
 
 
 class LoginUseCase:
@@ -106,6 +107,12 @@ class LoginUseCase:
             raise InvalidCredentialsError
         if not self._hasher.verify(cmd.password, user.hashed_password):
             raise InvalidCredentialsError
+        if user.invitation_status == "pending":
+            raise AppError("INVITATION_PENDING", messages.INVITATION_PENDING, ErrorKind.FORBIDDEN)
+        if user.invitation_status == "rejected":
+            raise AppError(
+                "INVITATION_REJECTED", messages.INVITATION_REJECTED_LOGIN, ErrorKind.FORBIDDEN
+            )
         if not user.can_authenticate():
             with self._uow:
                 self._attempts.clear_for(email)  # credentials were right: not a guess

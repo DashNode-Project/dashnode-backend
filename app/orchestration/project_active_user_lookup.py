@@ -26,9 +26,11 @@ class SqlAlchemyActiveUserLookup(ActiveUserLookup):
             user_id=user.id,
             name=user.name,
             email=user.email,
-            role=user.role,
+            role=user.role.value,
         )
 
     def list_active_users(self, *, query: str = "") -> list[MemberProfile]:
         rows = self._users.list_active_users(name_contains=query or None)
-        return [MemberProfile(user_id=u.id, name=u.name, email=u.email, role=u.role) for u in rows]
+        return [
+            MemberProfile(user_id=u.id, name=u.name, email=u.email, role=u.role.value) for u in rows
+        ]

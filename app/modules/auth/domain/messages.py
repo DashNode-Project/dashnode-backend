@@ -52,6 +52,18 @@ INVITE_DEVELOPER_WITH_PASSWORD = (
     "Desarrollador creado. Comunica la contraseña inicial al usuario; "
     "debe cambiarla en su primer acceso."
 )
+INVITATION_PENDING = "Su cuenta aún no está activa. Revise el correo de invitación."
+INVITATION_REJECTED_LOGIN = "La creación de esta cuenta fue rechazada."
+INVITATION_REJECTED = (
+    "La creación de la cuenta fue rechazada. El administrador puede ver la solicitud suspendida."
+)
+INVITATION_CONTINUE = "Continúe con el código de verificación enviado a su correo."
+INVITATION_CODE_INVALID = "El código de verificación no es válido."
+INVITATION_EXPIRED = "La solicitud de creación expiró. El gerente puede renovarla."
+INVITATION_ACTIVATED = "Su cuenta ha sido activada. Ya puede iniciar sesión."
+INVITATION_RENEWED = "Se renovó la solicitud de creación por 24 horas."
+INVITATION_REMOVED = "La solicitud superó el número de intentos y el usuario fue eliminado."
+INVITATION_STILL_VALID = "La solicitud sigue vigente. Espere a que expire para renovarla."
 USER_UPDATED = "Usuario actualizado correctamente."
 MANAGER_ROLE_CHANGE_BLOCKED = (
     "No puede cambiar el rol de un Gerente responsable de proyectos. "

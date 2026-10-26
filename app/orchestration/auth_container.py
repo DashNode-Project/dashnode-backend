@@ -10,6 +10,12 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.modules.auth.application.developer_invitation_use_cases import (
+    ActivateDeveloperInvitationUseCase,
+    DecideDeveloperInvitationUseCase,
+    DeleteInvitedDeveloperByAdminUseCase,
+    RenewDeveloperInvitationUseCase,
+)
 from app.modules.auth.application.dtos import SecurityPolicy
 from app.modules.auth.application.password_reset_use_cases import (
     AdminRequestPasswordResetUseCase,
@@ -204,7 +210,10 @@ def get_invite_developer_use_case(db: Session = Depends(get_db)) -> InviteDevelo
 def get_list_manager_developers_use_case(
     db: Session = Depends(get_db),
 ) -> ListManagerDevelopersUseCase:
-    return ListManagerDevelopersUseCase(user_repo=SqlAlchemyUserRepository(session=db))
+    return ListManagerDevelopersUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        clock=clock,
+    )
 
 
 def get_deactivate_developer_by_manager_use_case(
@@ -222,6 +231,57 @@ def get_reactivate_developer_by_manager_use_case(
     db: Session = Depends(get_db),
 ) -> ReactivateDeveloperByManagerUseCase:
     return ReactivateDeveloperByManagerUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+    )
+
+
+def get_decide_invitation_use_case(
+    db: Session = Depends(get_db),
+) -> DecideDeveloperInvitationUseCase:
+    return DecideDeveloperInvitationUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        token_repo=SqlAlchemyPasswordCredentialTokenRepository(session=db),
+        tokens=session_tokens,
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+    )
+
+
+def get_activate_invitation_use_case(
+    db: Session = Depends(get_db),
+) -> ActivateDeveloperInvitationUseCase:
+    return ActivateDeveloperInvitationUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        token_repo=SqlAlchemyPasswordCredentialTokenRepository(session=db),
+        tokens=session_tokens,
+        hasher=password_hasher,
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+    )
+
+
+def get_renew_invitation_use_case(
+    db: Session = Depends(get_db),
+) -> RenewDeveloperInvitationUseCase:
+    return RenewDeveloperInvitationUseCase(
+        user_repo=SqlAlchemyUserRepository(session=db),
+        token_repo=SqlAlchemyPasswordCredentialTokenRepository(session=db),
+        tokens=session_tokens,
+        mailer=get_transactional_email_sender(),
+        hasher=password_hasher,
+        id_gen=id_generator,
+        clock=clock,
+        uow=SqlAlchemyUnitOfWork(session=db),
+        policy=credential_token_policy(),
+    )
+
+
+def get_delete_invited_developer_use_case(
+    db: Session = Depends(get_db),
+) -> DeleteInvitedDeveloperByAdminUseCase:
+    return DeleteInvitedDeveloperByAdminUseCase(
         user_repo=SqlAlchemyUserRepository(session=db),
         clock=clock,
         uow=SqlAlchemyUnitOfWork(session=db),

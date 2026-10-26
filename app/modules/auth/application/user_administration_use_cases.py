@@ -16,7 +16,6 @@ from app.modules.auth.application.dtos import (
 from app.modules.auth.application.mappers import to_user_dto
 from app.modules.auth.application.password_reset_use_cases import CredentialTokenPolicy
 from app.modules.auth.domain import messages
-from app.modules.auth.domain.developer_credentials import default_developer_password_from_name
 from app.modules.auth.domain.entities import (
     CredentialTokenPurpose,
     PasswordCredentialToken,
@@ -25,6 +24,7 @@ from app.modules.auth.domain.entities import (
 )
 from app.modules.auth.domain.errors import (
     EmailAlreadyRegisteredError,
+    EmailSendFailedError,
     ManagerRoleChangeBlockedError,
     UserAdministrationValidationError,
 )
@@ -218,46 +218,81 @@ class InviteDeveloperByManagerUseCase(_ActivationMailMixin):
             raise EmailAlreadyRegisteredError()
 
         now = self._clock.now()
-        initial_password = default_developer_password_from_name(clean_name)
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        placeholder = secrets.token_urlsafe(48)
         user = User(
             id=self._id_gen.generate(),
             email=clean_email,
-            hashed_password=self._hasher.hash(initial_password),
+            hashed_password=self._hasher.hash(placeholder),
             name=clean_name,
             role=UserRole.DEVELOPER,
-            is_active=True,
+            is_active=False,
             invited_by_user_id=actor_id,
             invitation_accepted_at=None,
+            invitation_status="pending",
+            invitation_expires_at=now + self._policy.activation_ttl,
+            invitation_renewal_count=1,
+            invitation_code_hash=self._hasher.hash(code),
+            invitation_code_attempts=0,
             created_at=now,
             updated_at=now,
         )
+        raw = self._tokens.new_token()
+        token = PasswordCredentialToken(
+            id=self._id_gen.generate(),
+            user_id=user.id,
+            token_hash=self._tokens.digest(raw),
+            purpose=CredentialTokenPurpose.DEVELOPER_INVITE,
+            created_at=now,
+            expires_at=now + self._policy.activation_ttl,
+        )
         with self._uow:
             self._users.save(user)
+            self._tokens_repo.add(token)
             self._uow.commit()
 
+        invitation_url = f"{self._policy.frontend_base_url.rstrip('/')}/invitacion?token={raw}"
+        try:
+            self._mailer.send_developer_invitation(
+                to_email=user.email,
+                invitation_url=invitation_url,
+                verification_code=code,
+            )
+        except EmailSendFailedError:
+            with self._uow:
+                self._users.delete(user.id)
+                self._uow.commit()
+            raise
+
         return InviteDeveloperResponse(
-            message=messages.INVITE_DEVELOPER_WITH_PASSWORD,
+            message=messages.INVITE_DEVELOPER_SUCCESS,
             user_id=user.id,
-            initial_password=initial_password,
         )
 
 
 class ListManagerDevelopersUseCase:
     """Developers invited by the acting manager (scoped list)."""
 
-    def __init__(self, user_repo: UserRepository) -> None:
+    def __init__(self, user_repo: UserRepository, clock: Clock) -> None:
         self._users = user_repo
+        self._clock = clock
 
     def execute(self, *, actor_id: str) -> list[ManagerDeveloperSummaryDTO]:
         actor = self._users.get_by_id(actor_id)
         if actor is None or actor.role != UserRole.MANAGER:
             raise AccessDeniedError()
 
+        now = self._clock.now()
         rows = self._users.list_developers_invited_by(actor_id)
         result: list[ManagerDeveloperSummaryDTO] = []
         for user in rows:
-            if user.invitation_accepted_at is None:
-                status = "pending"
+            if user.invitation_status == "rejected":
+                status = "rejected"
+            elif user.invitation_status == "pending":
+                expired = (
+                    user.invitation_expires_at is not None and user.invitation_expires_at <= now
+                )
+                status = "expired" if expired else "pending"
             elif user.is_active:
                 status = "active"
             else:
