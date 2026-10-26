@@ -1,6 +1,6 @@
 """SQLAlchemy backlog repository."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import delete, func, select
@@ -299,3 +299,22 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
                 changed_at=when,
             )
         )
+
+    def latest_done_date_by_task(self, project_id: str) -> dict[str, date]:
+        stmt = (
+            select(
+                TaskStatusHistoryModel.task_id,
+                func.max(TaskStatusHistoryModel.changed_at),
+            )
+            .join(StoryTaskModel, StoryTaskModel.id == TaskStatusHistoryModel.task_id)
+            .where(
+                StoryTaskModel.project_id == project_id,
+                TaskStatusHistoryModel.new_status == StoryTaskStatus.DONE.value,
+            )
+            .group_by(TaskStatusHistoryModel.task_id)
+        )
+        result: dict[str, date] = {}
+        for task_id, changed_at in self._session.execute(stmt):
+            if changed_at is not None:
+                result[str(task_id)] = changed_at.date()
+        return result
