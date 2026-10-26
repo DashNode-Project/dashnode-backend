@@ -99,3 +99,21 @@ HU_DN_04_56–61: `task_time_logs`, `task_status_history`, `logged_hours`, `POST
 
 Invitación de desarrollador: `users.invitation_status`, código hasheado, `POST /auth/invitations/decision`, `POST /auth/invitations/activate`, renovación y borrado administrativo. El API no devuelve contraseñas.
 
+## EP-07 — Sprints SPR (HU_DN_05_63 … HU_DN_05_67)
+
+```
+app/modules/sprints/
+  domain/          Sprint, SprintStatus, messages, rules, SprintRepository port
+  application/     access (admin/manager), metrics (puntos y progreso), use_cases
+  infrastructure/  SprintModel, SqlAlchemySprintRepository
+app/orchestration/sprint_routes.py
+  POST   /projects/{id}/sprints
+  GET    /projects/{id}/sprints
+  GET    /projects/{id}/sprints/current
+  POST   /projects/{id}/sprints/{sprintId}/start
+  PATCH  /projects/{id}/user-stories/{storyId}/sprint
+migrations/versions/012_ep07_sprints.py   (índice único ACTIVE por proyecto)
+tests/api/test_sprints_api.py
+tests/unit/test_sprint_rules.py
+```
+
