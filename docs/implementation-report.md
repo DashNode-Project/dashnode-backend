@@ -252,4 +252,32 @@ Validación local:
 - Árbol filtra en memoria con parámetros; el desarrollador solo recibe sus tareas.
 - Invitación: contraseña aleatoria no reusable, código Argon2, enlace de un solo uso, vigencia 24 h, máximo 3 renovaciones, rechazo visible y borrado a los 3 días.
 
+---
+
+## EP-07 — Sprints SPR (HU_DN_05_68 … HU_DN_05_71)
+
+**Estado:** COMPLETED | **Rama:** `feature/ep-07-sprints`
+
+### HU_DN_05_68 — Burndown
+- `app/modules/sprints/application/burndown.py`: línea ideal (lineal) y real (puntos restantes por día según cierre DONE en tareas).
+- `latest_done_date_by_task` en backlog (histórico `task_status_history`).
+- `GET /projects/{id}/sprints/{sprintId}/burndown` → `{ ideal_line, actual_line }`.
+- Tests: `tests/unit/test_burndown.py`, `tests/api/test_sprints_api.py::test_hu_68_burndown_chart`.
+
+### HU_DN_05_69 / HU_DN_05_70 — Cierre y reubicación
+- `CloseSprintUseCase`: solo sprint `ACTIVE`; `closed_at`; estado `CLOSED`.
+- Payload: `incomplete_stories_destination: BACKLOG` o `incomplete_stories_action: MOVE_TO_SPRINT` + `target_sprint_id`.
+- Inmutabilidad: asignación rechazada en sprints `CLOSED` (403).
+- Tests: cierre con backlog, inmutabilidad post-cierre.
+
+### HU_DN_05_71 — Historial
+- `GET /projects/{id}/sprints/history` (ruta antes de `{sprint_id}`): sprints `CLOSED` ordenados por `end_date` desc, puntos comprometidos/completados y % cumplimiento.
+- Test: `test_hu_71_sprint_history`.
+
+### Fix esquema (CI)
+- Índice parcial `unique_active_sprint_per_project` declarado en ORM (`postgresql_where` / `sqlite_where`) alineado con migración 012.
+- Migración `013_ep07_sprint_closed_at.py`.
+
+**Evidencia:** `pytest` 316+ passed (SQLite/API); `test_migrated_schema_matches_orm_models` OK con Postgres local (Docker 5434).
+
 

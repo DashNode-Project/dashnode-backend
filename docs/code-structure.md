@@ -117,3 +117,21 @@ tests/api/test_sprints_api.py
 tests/unit/test_sprint_rules.py
 ```
 
+## EP-07 — Sprints SPR (HU_DN_05_68 … HU_DN_05_71)
+
+```
+app/modules/sprints/application/burndown.py     líneas ideal/real por día
+app/modules/backlog/infrastructure/repositories.py
+  latest_done_date_by_task(project_id)            histórico DONE por tarea
+app/orchestration/sprint_routes.py
+  GET    /projects/{id}/sprints/history
+  GET    /projects/{id}/sprints/{sprintId}/burndown
+  POST   /projects/{id}/sprints/{sprintId}/close
+migrations/versions/013_ep07_sprint_closed_at.py
+app/modules/sprints/infrastructure/models.py    índice parcial unique_active_sprint_per_project (ORM)
+tests/unit/test_burndown.py
+tests/api/test_sprints_api.py                   HU 68–71
+```
+
+Cierre (`CLOSED` + `closed_at`): historias incompletas → backlog (`sprint_id` NULL) o sprint planificado; sprint cerrado inmutable para asignaciones.
+
