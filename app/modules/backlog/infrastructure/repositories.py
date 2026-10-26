@@ -165,6 +165,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
         model.moscow_priority = story.moscow_priority.value
         model.story_points = story.story_points
         model.estimation_mode = story.estimation_mode.value
+        model.sprint_id = story.sprint_id
         model.updated_at = story.updated_at
 
     def get_user_story(self, story_id: str) -> UserStory | None:
