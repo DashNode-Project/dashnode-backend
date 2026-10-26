@@ -67,3 +67,40 @@ class SprintListResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str = Field(default="")
+
+
+class BurndownPointDTO(BaseModel):
+    date: str
+    points: int
+
+
+class SprintBurndownResponse(BaseModel):
+    ideal_line: list[BurndownPointDTO]
+    actual_line: list[BurndownPointDTO]
+
+
+class CloseSprintCommand(BaseModel):
+    incomplete_stories_destination: str | None = None
+    incomplete_stories_action: str | None = None
+    target_sprint_id: str | None = None
+
+
+class CloseSprintResponse(BaseModel):
+    message: str
+    status: SprintStatus
+    moved_stories_count: int = 0
+
+
+class SprintHistoryItemDTO(BaseModel):
+    sprint_id: str
+    name: str
+    start_date: date
+    end_date: date
+    committed_points: int
+    completed_points: int
+    fulfillment_percentage: float
+
+
+class SprintHistoryResponse(BaseModel):
+    history: list[SprintHistoryItemDTO]
+    message: str | None = None

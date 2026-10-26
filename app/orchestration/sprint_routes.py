@@ -7,16 +7,23 @@ from app.modules.backlog.infrastructure.repositories import SqlAlchemyBacklogRep
 from app.modules.sprints.application.dtos import (
     AssignStoryToSprintCommand,
     AssignStoryToSprintResponse,
+    CloseSprintCommand,
+    CloseSprintResponse,
     CreateSprintCommand,
     CreateSprintResponse,
     CurrentSprintResponse,
+    SprintBurndownResponse,
+    SprintHistoryResponse,
     SprintListResponse,
     StartSprintResponse,
 )
 from app.modules.sprints.application.use_cases import (
     AssignUserStoryToSprintUseCase,
+    CloseSprintUseCase,
     CreateSprintUseCase,
     GetCurrentSprintUseCase,
+    GetSprintBurndownUseCase,
+    GetSprintHistoryUseCase,
     ListProjectSprintsUseCase,
     StartSprintUseCase,
 )
@@ -79,6 +86,18 @@ def list_sprints(
     return use_case.execute(project_id, actor)
 
 
+@router.get("/projects/{project_id}/sprints/history", response_model=SprintHistoryResponse)
+def sprint_history(
+    project_id: str,
+    actor: CurrentUser = Depends(get_current_user),
+    sprints: SqlAlchemySprintRepository = Depends(_sprint_repo),
+    backlog: SqlAlchemyBacklogRepository = Depends(_backlog_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+) -> SprintHistoryResponse:
+    use_case = GetSprintHistoryUseCase(sprints, backlog, projects)
+    return use_case.execute(project_id, actor)
+
+
 @router.get("/projects/{project_id}/sprints/current", response_model=CurrentSprintResponse)
 def get_current_sprint(
     project_id: str,
@@ -89,6 +108,46 @@ def get_current_sprint(
 ) -> CurrentSprintResponse:
     use_case = GetCurrentSprintUseCase(sprints, backlog, projects, _clock)
     return use_case.execute(project_id, actor)
+
+
+@router.get(
+    "/projects/{project_id}/sprints/{sprint_id}/burndown",
+    response_model=SprintBurndownResponse,
+)
+def sprint_burndown(
+    project_id: str,
+    sprint_id: str,
+    actor: CurrentUser = Depends(get_current_user),
+    sprints: SqlAlchemySprintRepository = Depends(_sprint_repo),
+    backlog: SqlAlchemyBacklogRepository = Depends(_backlog_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+) -> SprintBurndownResponse:
+    use_case = GetSprintBurndownUseCase(sprints, backlog, projects)
+    return use_case.execute(project_id, sprint_id, actor)
+
+
+@router.post(
+    "/projects/{project_id}/sprints/{sprint_id}/close",
+    response_model=CloseSprintResponse,
+)
+def close_sprint(
+    project_id: str,
+    sprint_id: str,
+    body: CloseSprintCommand,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    sprints: SqlAlchemySprintRepository = Depends(_sprint_repo),
+    backlog: SqlAlchemyBacklogRepository = Depends(_backlog_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+) -> CloseSprintResponse:
+    use_case = CloseSprintUseCase(
+        sprints=sprints,
+        backlog=backlog,
+        projects=projects,
+        clock=_clock,
+        uow=SqlAlchemyUnitOfWork(db),
+    )
+    return use_case.execute(project_id, sprint_id, body, actor)
 
 
 @router.post(

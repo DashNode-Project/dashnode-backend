@@ -14,3 +14,9 @@ SPRINT_ALREADY_ACTIVE = (
 )
 SPRINT_STARTED = "Sprint iniciado correctamente."
 NO_ACTIVE_SPRINT = "No hay ningún sprint activo en este proyecto."
+SPRINT_CLOSED_OK = "Sprint finalizado correctamente."
+INCOMPLETE_DESTINATION_REQUIRED = "Debe especificar el destino de las historias incompletas."
+INCOMPLETE_STORIES_MOVED = "Historias incompletas movidas correctamente."
+NO_CLOSED_SPRINTS = "No hay sprints finalizados en este proyecto."
+SPRINT_NOT_ACTIVE = "Solo se puede finalizar un sprint en ejecución."
+SPRINT_IMMUTABLE = "No se pueden modificar las historias de un sprint cerrado."

@@ -214,3 +214,76 @@ def test_hu_67_current_sprint_metrics(client: TestClient, db_engine: Engine) -> 
     dev_view = client.get(f"/api/v1/projects/{project_id}/sprints/current")
     assert dev_view.status_code == 200
     assert dev_view.json()["sprint"]["total_points"] == 8
+
+
+def test_hu_68_burndown_chart(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="mgr-spr68@dashnode.io", role="manager")
+    project_id = _create_project(client, mgr_id)
+    sprint_id = _create_sprint(client, project_id)
+    _, story_id = _create_epic_and_story(client, project_id)
+    client.patch(f"/api/v1/user-stories/{story_id}/story-points", json={"story_points": 8})
+    client.patch(
+        f"/api/v1/projects/{project_id}/user-stories/{story_id}/sprint",
+        json={"sprint_id": sprint_id},
+    )
+
+    res = client.get(f"/api/v1/projects/{project_id}/sprints/{sprint_id}/burndown")
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body["ideal_line"]) >= 2
+    assert body["ideal_line"][0]["points"] == 8
+    assert body["actual_line"][0]["points"] == 8
+
+
+def test_hu_69_70_close_sprint_with_backlog(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="mgr-spr69@dashnode.io", role="manager")
+    project_id = _create_project(client, mgr_id)
+    sprint_id = _create_sprint(client, project_id)
+    _, story_id = _create_epic_and_story(client, project_id)
+    client.patch(
+        f"/api/v1/projects/{project_id}/user-stories/{story_id}/sprint",
+        json={"sprint_id": sprint_id},
+    )
+    client.post(f"/api/v1/projects/{project_id}/sprints/{sprint_id}/start")
+
+    close = client.post(
+        f"/api/v1/projects/{project_id}/sprints/{sprint_id}/close",
+        json={"incomplete_stories_destination": "BACKLOG"},
+    )
+    assert close.status_code == 200
+    assert close.json()["message"] == sprint_messages.SPRINT_CLOSED_OK
+    assert close.json()["status"] == "CLOSED"
+
+    assign = client.patch(
+        f"/api/v1/projects/{project_id}/user-stories/{story_id}/sprint",
+        json={"sprint_id": sprint_id},
+    )
+    assert assign.status_code == 403
+
+
+def test_hu_71_sprint_history(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="mgr-spr71@dashnode.io", role="manager")
+    project_id = _create_project(client, mgr_id)
+
+    empty = client.get(f"/api/v1/projects/{project_id}/sprints/history")
+    assert empty.status_code == 200
+    assert empty.json()["history"] == []
+    assert empty.json()["message"] == sprint_messages.NO_CLOSED_SPRINTS
+
+    sprint_id = _create_sprint(client, project_id)
+    _, story_id = _create_epic_and_story(client, project_id)
+    client.patch(
+        f"/api/v1/projects/{project_id}/user-stories/{story_id}/sprint",
+        json={"sprint_id": sprint_id},
+    )
+    client.post(f"/api/v1/projects/{project_id}/sprints/{sprint_id}/start")
+    client.post(
+        f"/api/v1/projects/{project_id}/sprints/{sprint_id}/close",
+        json={"incomplete_stories_destination": "BACKLOG"},
+    )
+
+    history = client.get(f"/api/v1/projects/{project_id}/sprints/history")
+    assert history.status_code == 200
+    items = history.json()["history"]
+    assert len(items) == 1
+    assert items[0]["name"] == "Sprint 1"
