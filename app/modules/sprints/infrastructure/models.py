@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, String
+from sqlalchemy import Date, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.database import Base
@@ -10,6 +10,15 @@ from app.shared.infrastructure.database import Base
 
 class SprintModel(Base):
     __tablename__ = "sprints"
+    __table_args__ = (
+        Index(
+            "unique_active_sprint_per_project",
+            "project_id",
+            unique=True,
+            sqlite_where=text("status = 'ACTIVE'"),
+            postgresql_where=text("status = 'ACTIVE'"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str] = mapped_column(
@@ -23,3 +32,4 @@ class SprintModel(Base):
         String(20), nullable=False, default="PLANNING", server_default="PLANNING"
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

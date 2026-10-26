@@ -23,6 +23,7 @@ class SqlAlchemySprintRepository:
             end_date=model.end_date,
             status=SprintStatus(model.status),
             created_at=model.created_at,
+            closed_at=model.closed_at,
         )
 
     def save(self, sprint: Sprint) -> None:
@@ -48,6 +49,7 @@ class SqlAlchemySprintRepository:
         model.start_date = sprint.start_date
         model.end_date = sprint.end_date
         model.status = sprint.status.value
+        model.closed_at = sprint.closed_at
 
     def get_by_id(self, sprint_id: str) -> Sprint | None:
         model = self._session.get(SprintModel, sprint_id)
@@ -97,3 +99,14 @@ class SqlAlchemySprintRepository:
         model = self._session.get(SprintModel, sprint_id)
         if model:
             model.status = status.value
+
+    def list_closed_by_project(self, project_id: str) -> list[Sprint]:
+        stmt = (
+            select(SprintModel)
+            .where(
+                SprintModel.project_id == project_id,
+                SprintModel.status == SprintStatus.CLOSED.value,
+            )
+            .order_by(SprintModel.end_date.desc())
+        )
+        return [self._to_domain(row) for row in self._session.scalars(stmt)]

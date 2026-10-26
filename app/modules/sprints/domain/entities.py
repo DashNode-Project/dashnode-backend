@@ -21,3 +21,4 @@ class Sprint:
     end_date: date
     status: SprintStatus
     created_at: datetime
+    closed_at: datetime | None = None
