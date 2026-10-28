@@ -903,4 +903,120 @@ La invitación de desarrollador ya no entrega una contraseña en claro. El corre
 
 **Fecha recepción:** 2026-10-28  
 **Estado:** COMPLETED
+
+---
+
+## Épica 09: Documentación y base de conocimiento
+
+### HU_DN_06_77 — Registrar una entrada de documentación en un proyecto
+**Como** Administrador, Gerente o Desarrollador  
+**Quiero** Registrar una entrada de documentación en un proyecto  
+**Para** dejar el conocimiento del proyecto disponible, previa aprobación
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento” del proyecto, botón “Nueva entrada”.
+2. Campos: El formulario contiene:
+   2.1 Título: texto, obligatorio, longitud máxima 100 caracteres. Si está vacío: 'El título es obligatorio.'
+   2.2 Categoría: lista desplegable obligatoria con Técnica, Funcional, Reunión, General y Prompt. Si falta: 'Seleccione una categoría.'
+   2.3 Objetivo: texto, opcional.
+   2.4 Etiquetas: texto, opcionales.
+   2.5 Contenido: texto propio.
+   2.6 Enlace externo: URL con formato válido. Si no es válida: 'El enlace no tiene un formato de URL válido.'
+   2.7 Botón “Registrar entrada” y botón “Cancelar”.
+3. Validación: Debe existir contenido de texto o enlace externo; si faltan ambos: 'Ingrese contenido o un enlace externo.'
+4. Restricción: No se almacenan archivos, solo texto y/o enlace (S-07); el sistema avisa que la visibilidad en DashNode no controla los permisos del recurso externo (RN-DOC-03); todo texto se escapa al mostrarse (RNF-SEG-10).
+5. Éxito: 'Entrada registrada correctamente. Quedó pendiente de aprobación.'; la entrada queda en estado Pendiente y no es visible para otros desarrolladores hasta ser aprobada (RN-DOC-05).
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_78 — Editar una entrada de documentación
+**Como** autor de la entrada, Administrador o Gerente  
+**Quiero** Editar una entrada de documentación  
+**Para** corregir o completar la información registrada
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento”, acción “Editar” de la entrada.
+2. Campos: El formulario contiene:
+   2.1 Los mismos campos y reglas de HU_DN_06_77, precargados.
+   2.2 Botón “Guardar cambios” y botón “Cancelar”.
+3. Validación: El autor edita sus entradas Pendientes o Rechazadas; el Administrador y el Gerente editan cualquier entrada del proyecto.
+4. Restricción: Un Desarrollador no edita entradas ajenas ni aprobadas y recibe acceso denegado. Al editar una entrada ya aprobada, esta vuelve al estado Pendiente y deja de ser visible para el Desarrollador hasta que otro aprobador la apruebe de nuevo.
+5. Éxito: 'Entrada actualizada correctamente.'
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_79 — Eliminar una entrada de documentación
+**Como** Administrador o Gerente  
+**Quiero** Eliminar una entrada de documentación  
+**Para** retirar entradas erróneas u obsoletas de la base de conocimiento
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento”, acción “Eliminar” de la entrada.
+2. Campos: Diálogo de confirmación:
+   2.1 Mensaje: '¿Está seguro de que desea eliminar esta entrada?'
+   2.2 Botón “Confirmar” y botón “Cancelar”.
+3. Validación: Sin confirmación no se elimina.
+4. Restricción: Solo Administrador y Gerente eliminan entradas; el Desarrollador recibe acceso denegado. El borrado es lógico: la entrada deja de listarse y consultarse, pero se conserva en base de datos.
+5. Éxito: 'Entrada eliminada correctamente.' y deja de listarse.
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_80 — Consultar el listado de entradas de documentación del proyecto
+**Como** Administrador, Gerente o Desarrollador  
+**Quiero** Consultar el listado de entradas de documentación del proyecto  
+**Para** encontrar la información documentada del proyecto
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento” del proyecto.
+2. Campos: El listado muestra por entrada:
+   2.1 Título, categoría, objetivo, estado de aprobación (Pendiente, Aprobada o Rechazada) y enlace.
+   2.2 Las entradas ancladas aparecen destacadas al inicio.
+3. Validación: El Administrador y el Gerente ven todas las entradas del proyecto; el Desarrollador, solo las aprobadas con visibilidad habilitada y las propias.
+4. Restricción: Una entrada restringida o no aprobada no aparece al Desarrollador (RN-DOC-02).
+5. Éxito: Se listan las entradas permitidas; sin entradas: 'No hay entradas de documentación.' con la acción sugerida “Nueva entrada”.
+6. Fallo técnico: Si la información no puede cargarse se muestra 'No fue posible cargar la información. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_81 — Recibir acceso denegado al consultar directamente una entrada restringida o no aprobada
+**Como** Desarrollador  
+**Quiero** Recibir acceso denegado al consultar directamente una entrada restringida o no aprobada  
+**Para** que la información no autorizada no se exponga aunque conozca su identificador
+**Criterios de aceptación:**
+1. Dónde: Solicitud directa de una entrada por su identificador o ruta.
+2. Campos: No aplica captura de datos; la acción no requiere formulario.
+3. Validación: Si la entrada está restringida o no aprobada y no es del solicitante, el servidor deniega la consulta.
+4. Restricción: La respuesta no incluye contenido ni enlace externo; el autor conserva acceso a sus propias entradas (RN-DOC-02).
+5. Éxito: Se muestra 'No tiene acceso a esta entrada.'
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+## Estado de implementación — EP-09 Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_81)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_06_77 | Implementado | `POST /api/v1/projects/{projectId}/documentation`, validaciones de título (<= 100), categoría (Técnica, Funcional, Reunión, General, Prompt), contenido o URL obligatorios, formato URL válido, estado inicial `PENDING`, aviso de recurso externo (RN-DOC-03). Tests: `test_hu_77_*`, `test_validate_optional_url`. |
+| HU_DN_06_78 | Implementado | `PUT /api/v1/projects/{projectId}/documentation/{id}`, permisos de autor en estado PENDING/REJECTED, Gerente y Admin en cualquier estado, transición de APPROVED a PENDING al editar (RN-DOC-05). Tests: `test_hu_78_*`, `test_documentation_can_edit_rules`. |
+| HU_DN_06_79 | Implementado | `DELETE /api/v1/projects/{projectId}/documentation/{id}`, borrado lógico (`is_deleted = True`), solo Gerente y Admin, confirmación con texto literal. Tests: `test_hu_79_*`, `test_documentation_can_delete_rules`. |
+| HU_DN_06_80 | Implementado | `GET /api/v1/projects/{projectId}/documentation`, listado ordenado con entradas ancladas (`is_pinned`) al inicio, alcance por rol (Admin/Gerente ven todas; Desarrolladores solo aprobadas y propias), filtros de búsqueda y categoría, estado vacío con mensaje literal. Tests: `test_hu_80_*`, `test_documentation_can_view_rules`. |
+| HU_DN_06_81 | Implementado | `GET /api/v1/projects/{projectId}/documentation/{id}`, rechazo 403 Forbidden con mensaje exacto `'No tiene acceso a esta entrada.'` para entradas restringidas/no aprobadas de otros usuarios. Tests: `test_hu_81_*`. |
+
+Mensajes literales en `app/modules/documentation/domain/messages.py`. Migración `015_ep09_documentation_entries.py`. Rutas HTTP en `app/orchestration/documentation_routes.py`.
+
+
 

@@ -262,5 +262,47 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | Frontend | `npm run test:coverage` | 310 pruebas pasadas en 40 suites (cobertura funciones: 79.61% > 78%) | APROBADO |
 | Frontend | `scan-secrets.mjs` | 0 secretos en 188 archivos inspeccionados | APROBADO |
 
+---
+
+## EP-09 — Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_81)
+
+**Ramas:** `feature/ep-09-documentation-doc` (backend + frontend).  
+**Ruta SPA:** `/proyectos/:projectId/conocimiento` en `ProjectWorkspaceLayout`.
+
+### Contrato de Integración y Endpoints
+
+| Método | Ruta | Rol | Propósito | Códigos / Mensajes |
+|---|---|---|---|---|
+| `POST` | `/api/v1/projects/{project_id}/documentation` | Auth (Admin, Gerente, Dev) | Registrar nueva entrada en estado PENDING | 201 Created: `'Entrada registrada correctamente. Quedó pendiente de aprobación.'`; 400 si faltan título, categoría o contenido/URL |
+| `PUT` | `/api/v1/projects/{project_id}/documentation/{id}` | Autor (PENDING/REJECTED), Admin, Gerente | Editar entrada existente; si estaba APPROVED vuelve a PENDING (RN-DOC-05) | 200 OK: `'Entrada actualizada correctamente.'`; 403 Forbidden para Dev ajeno o aprobada |
+| `DELETE` | `/api/v1/projects/{project_id}/documentation/{id}` | Admin, Gerente | Borrado lógico de entrada de documentación | 200 OK: `'Entrada eliminada correctamente.'`; 403 Forbidden para Desarrollador |
+| `GET` | `/api/v1/projects/{project_id}/documentation` | Auth (Admin, Gerente, Dev) | Listar entradas visibles del proyecto con entradas ancladas al inicio | 200 OK: lista de entradas (Dev solo aprobadas y propias); si vacío: `'No hay entradas de documentación.'` |
+| `GET` | `/api/v1/projects/{project_id}/documentation/{id}` | Auth | Consulta directa por identificador | 200 OK; 403 Forbidden con `'No tiene acceso a esta entrada.'` si no es autor o entrada restringida |
+
+### Matriz de Trazabilidad y Verificación E2E
+
+| Historia de Usuario | Frontend | Backend | Reglas y Criterios Verificados |
+|---|---|---|---|
+| **HU_DN_06_77** | Botón "Nueva entrada", modal `DocumentationModal`, validaciones locales, aviso RN-DOC-03 | `CreateDocumentationEntryUseCase`, `POST /projects/{id}/documentation` | Título obligatorio (<= 100 caracteres), categoría obligatoria (Técnica, Funcional, Reunión, General, Prompt), contenido o URL obligatorios, validación de URL, aviso de recurso externo (RN-DOC-03), estado inicial PENDING. Toast: `'Entrada registrada correctamente. Quedó pendiente de aprobación.'`. |
+| **HU_DN_06_78** | Botón Editar en tarjeta (según `can_edit`), modal con datos precargados, aviso de reinicio de estado | `UpdateDocumentationEntryUseCase`, `PUT /projects/{id}/documentation/{id}` | Autor edita solo en PENDING/REJECTED; Admin/Gerente editan en cualquier estado. Si estaba APPROVED, regresa a PENDING (RN-DOC-05). Toast: `'Entrada actualizada correctamente.'`. |
+| **HU_DN_06_79** | Botón Eliminar en tarjeta (según `can_delete`), modal `DeleteDocumentationModal` | `DeleteDocumentationEntryUseCase`, `DELETE /projects/{id}/documentation/{id}` | Diálogo de confirmación con texto exacto: `'¿Está seguro de que desea eliminar esta entrada?'`. Borrado lógico (`is_deleted = True`), solo Gerente/Admin. Toast: `'Entrada eliminada correctamente.'`. |
+| **HU_DN_06_80** | Pestaña `ProjectKnowledgeTab`, grid de tarjetas, barra de filtros y búsqueda | `ListDocumentationEntriesUseCase`, `GET /projects/{id}/documentation` | Entradas ancladas (`is_pinned`) al inicio. Alcance de rol: Admin/Gerente ven todas; Desarrolladores solo aprobadas y propias. Filtros por búsqueda, categoría y estado. Estado vacío con `'No hay entradas de documentación.'`. |
+| **HU_DN_06_81** | Manejo de error 403 Forbidden con toast y banner seguro | `GetDocumentationEntryUseCase`, `GET /projects/{id}/documentation/{id}` | Rechazo 403 con mensaje literal: `'No tiene acceso a esta entrada.'` ante consulta directa de entradas no autorizadas. |
+
+### Resumen de Quality Gates
+
+| Repositorio | Verificación | Resultado | Estado |
+|---|---|---|---|
+| Backend | `pytest` | 343 pruebas pasadas (0 fallos) | APROBADO |
+| Backend | `ruff check .` | 0 errores | APROBADO |
+| Backend | `ruff format --check .` | 100% formateado | APROBADO |
+| Backend | `scan_secrets.py` | 0 secretos | APROBADO |
+| Frontend | `npm run typecheck` | 0 errores TypeScript | APROBADO |
+| Frontend | `npm run lint` | 0 errores / 0 advertencias ESLint | APROBADO |
+| Frontend | `npm run format:check` | 100% código formateado con Prettier | APROBADO |
+| Frontend | `npm run test:coverage` | Cobertura global aprobada (funciones > 78%, líneas > 85%) | APROBADO |
+| Frontend | `scan-secrets.mjs` | 0 secretos en 197 archivos | APROBADO |
+
+
 
 

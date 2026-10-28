@@ -322,5 +322,43 @@ Validación local:
   - `ruff format --check .`: 253 archivos formateados correctamente.
   - `import-linter`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
 
+---
+
+## Épica 09: Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_81)
+
+### Análisis del Orquestador (Modo Lote / Épica)
+- **Fecha:** 2026-10-28
+- **Clasificación del lote:** FULL_STACK
+- **Complejidad:** MODERATE (Score: 78/100)
+- **Project Mode:** EXTEND_EXISTING
+- **Ramas:** `feature/ep-09-documentation-doc` (backend y frontend)
+
+### Implementación Backend
+- **Migración de esquema:** `migrations/versions/015_ep09_documentation_entries.py`
+  - Tabla `documentation_entries`: `id` (VARCHAR 36 PK), `project_id` (VARCHAR 36 FK a projects), `author_id` (VARCHAR 36 FK a users), `title` (VARCHAR 100), `category` (VARCHAR 20), `objective` (TEXT NULL), `tags` (TEXT NULL), `content` (TEXT NULL), `external_url` (VARCHAR 2048 NULL), `approval_status` (VARCHAR 20 DEFAULT 'PENDING'), `is_pinned` (BOOLEAN DEFAULT FALSE), `is_deleted` (BOOLEAN DEFAULT FALSE), `created_at` (TIMESTAMP), `updated_at` (TIMESTAMP).
+  - Índices para `(project_id, is_deleted)`, `(author_id)`, `(approval_status)`.
+- **Módulo Documentation:**
+  - `app/modules/documentation/domain/entities.py`: Entidad `DocumentationEntry`, enums `DocumentationCategory`, `DocumentationApprovalStatus`, y métodos de negocio `can_view`, `can_edit`, `can_delete`.
+  - `app/modules/documentation/domain/messages.py`: Mensajes de validación de dominio literales.
+  - `app/modules/documentation/domain/ports.py`: Protocolo `DocumentationRepository`.
+  - `app/modules/documentation/infrastructure/models.py`: Modelo SQLAlchemy `DocumentationEntryModel`.
+  - `app/modules/documentation/infrastructure/repositories.py`: Adaptador `SqlAlchemyDocumentationRepository`.
+  - `app/modules/documentation/application/dtos.py`: `CreateDocumentationCommand`, `UpdateDocumentationCommand`, `DocumentationEntryDTO`, `DocumentationListResponse`, `DocumentationOperationResponse`, y validador `is_valid_url`.
+  - `app/modules/documentation/application/use_cases.py`: Casos de uso `CreateDocumentationEntryUseCase`, `UpdateDocumentationEntryUseCase`, `DeleteDocumentationEntryUseCase`, `ListDocumentationEntriesUseCase`, `GetDocumentationEntryUseCase`.
+- **Rutas de Orquestación:**
+  - `app/orchestration/documentation_routes.py`: Endpoints REST bajo `/api/v1/projects/{project_id}/documentation`.
+  - Registro en `app/main.py`.
+  - Aislamiento modular verificado en `pyproject.toml` (contrato BR-4).
+
+### Pruebas y Quality Gates Backend
+- **Pruebas unitarias:** `tests/unit/test_documentation_rules.py` (4 tests: permisos de visualización, edición, eliminación y validación de URLs).
+- **Pruebas de API:** `tests/api/test_documentation_api.py` (5 tests cubriendo HU_DN_06_77 a HU_DN_06_81).
+- **Resultados de Calidad:**
+  - `pytest -q`: 343 pruebas pasadas (0 fallos).
+  - `ruff check .`: 0 errores.
+  - `ruff format --check .`: código limpio.
+  - `scan_secrets.py`: 0 secretos detectados.
+
+
 
 

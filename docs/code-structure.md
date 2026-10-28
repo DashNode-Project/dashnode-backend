@@ -151,3 +151,22 @@ tests/unit/test_kanban_rules.py
 tests/api/test_kanban_api.py
 ```
 
+## EP-09 — Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_81)
+
+```
+app/modules/documentation/
+  domain/          entities (DocumentationEntry, DocumentationCategory, DocumentationApprovalStatus), messages, ports
+  application/     dtos (CreateDocumentationCommand, UpdateDocumentationCommand, DocumentationEntryDTO), use_cases
+  infrastructure/  models (DocumentationEntryModel), repositories (SqlAlchemyDocumentationRepository)
+app/orchestration/documentation_routes.py
+  POST   /projects/{id}/documentation              (HU_DN_06_77)
+  PUT    /projects/{id}/documentation/{id}         (HU_DN_06_78)
+  DELETE /projects/{id}/documentation/{id}         (HU_DN_06_79)
+  GET    /projects/{id}/documentation              (HU_DN_06_80)
+  GET    /projects/{id}/documentation/{id}         (HU_DN_06_81)
+migrations/versions/015_ep09_documentation_entries.py
+tests/unit/test_documentation_rules.py
+tests/api/test_documentation_api.py
+```
+
+
