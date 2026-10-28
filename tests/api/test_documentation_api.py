@@ -1,0 +1,331 @@
+"""API tests for Documentation and Knowledge Base (HU_DN_06_77 .. HU_DN_06_81)."""
+
+from fastapi.testclient import TestClient
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
+
+from app.modules.documentation.domain import messages
+from app.modules.documentation.infrastructure.models import DocumentationEntryModel
+from tests.support import DEFAULT_PASSWORD, create_user, login_as
+
+
+def _switch_user(client: TestClient, email: str) -> None:
+    client.cookies.clear()
+    res = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": DEFAULT_PASSWORD},
+    )
+    assert res.status_code == 200, res.text
+
+
+def _setup_project_with_members(client: TestClient, db_engine: Engine) -> tuple[str, str, str, str]:
+    """Returns (project_id, mgr_id, dev1_id, dev2_id)."""
+    mgr_id = login_as(client, db_engine, email="mgr-doc@dashnode.io", role="manager")
+    dev1_id = create_user(db_engine, email="dev1-doc@dashnode.io", role="developer")
+    dev2_id = create_user(db_engine, email="dev2-doc@dashnode.io", role="developer")
+
+    resp = client.post(
+        "/api/v1/projects",
+        json={
+            "name": "Documentation Project",
+            "description": "EP-09",
+            "priority": "alta",
+            "manager_id": mgr_id,
+        },
+    )
+    assert resp.status_code == 201
+    project_id = str(resp.json()["id"])
+
+    client.post(f"/api/v1/projects/{project_id}/members", json={"user_id": dev1_id})
+    client.post(f"/api/v1/projects/{project_id}/members", json={"user_id": dev2_id})
+
+    return project_id, mgr_id, dev1_id, dev2_id
+
+
+def test_hu_77_create_documentation_entry_success_and_validations(
+    client: TestClient, db_engine: Engine
+) -> None:
+    project_id, _, dev1_id, _ = _setup_project_with_members(client, db_engine)
+    _switch_user(client, "dev1-doc@dashnode.io")
+
+    # 1. Validation: Title is required
+    res_no_title = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "",
+            "category": "Técnica",
+            "content": "Contenido válido",
+        },
+    )
+    assert res_no_title.status_code == 400
+    assert messages.TITLE_REQUIRED in res_no_title.text
+
+    # 2. Validation: Category is required
+    res_no_cat = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Guía de despliegue",
+            "category": "Invalida",
+            "content": "Contenido válido",
+        },
+    )
+    assert res_no_cat.status_code == 400
+    assert messages.CATEGORY_REQUIRED in res_no_cat.text
+
+    # 3. Validation: Missing both content and external_url
+    res_no_body = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Guía vacía",
+            "category": "Funcional",
+            "content": "",
+            "external_url": "",
+        },
+    )
+    assert res_no_body.status_code == 400
+    assert res_no_body.json()["error"]["message"] == messages.CONTENT_OR_URL_REQUIRED
+
+    # 4. Validation: Invalid URL format
+    res_bad_url = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Guía con enlace erróneo",
+            "category": "General",
+            "external_url": "ftp://bad-url",
+        },
+    )
+    assert res_bad_url.status_code == 400
+    assert messages.INVALID_URL in res_bad_url.text
+
+    # 5. Success: Register with text and valid URL
+    payload = {
+        "title": "Guía de integración con Backend",
+        "category": "Técnica",
+        "objective": "Documentar contratos de endpoints",
+        "tags": "fastapi, jwt, docs",
+        "content": "Pasos detallados para consumir los endpoints REST",
+        "external_url": "https://api.dashnode.io/docs",
+    }
+    res_success = client.post(f"/api/v1/projects/{project_id}/documentation", json=payload)
+    assert res_success.status_code == 201
+    data = res_success.json()
+    assert data["message"] == messages.ENTRY_CREATED
+    assert data["entry"]["title"] == payload["title"]
+    assert data["entry"]["category"] == "Técnica"
+    assert data["entry"]["approval_status"] == "PENDING"
+    assert data["entry"]["author_id"] == dev1_id
+
+
+def test_hu_78_update_documentation_entry_and_permissions(
+    client: TestClient, db_engine: Engine
+) -> None:
+    project_id, _, _dev1_id, _ = _setup_project_with_members(client, db_engine)
+    _switch_user(client, "dev1-doc@dashnode.io")
+
+    # Create entry as dev1
+    res_c = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Documento Inicial",
+            "category": "Prompt",
+            "content": "Prompt original",
+        },
+    )
+    assert res_c.status_code == 201
+    entry_id = res_c.json()["entry"]["id"]
+
+    # 1. Dev1 updates their own PENDING entry
+    res_u = client.put(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}",
+        json={
+            "title": "Documento Modificado",
+            "category": "Prompt",
+            "content": "Prompt actualizado y mejorado",
+        },
+    )
+    assert res_u.status_code == 200
+    assert res_u.json()["message"] == messages.ENTRY_UPDATED
+    assert res_u.json()["entry"]["title"] == "Documento Modificado"
+
+    # 2. Dev2 attempts to edit dev1's entry -> 403 Forbidden
+    _switch_user(client, "dev2-doc@dashnode.io")
+    res_u2 = client.put(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}",
+        json={
+            "title": "Intento de hack",
+            "category": "Prompt",
+            "content": "Hack",
+        },
+    )
+    assert res_u2.status_code == 403
+
+    # 3. Manager marks entry as APPROVED directly in DB
+    with Session(db_engine) as session:
+        model = session.get(DocumentationEntryModel, entry_id)
+        assert model is not None
+        model.approval_status = "APPROVED"
+        session.commit()
+
+    # 4. Dev1 attempts to edit their already APPROVED entry -> 403 Forbidden
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_dev_approved = client.put(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}",
+        json={
+            "title": "Modificar aprobada",
+            "category": "Prompt",
+            "content": "Modificado",
+        },
+    )
+    assert res_dev_approved.status_code == 403
+
+    # 5. Manager edits the APPROVED entry -> Success and resets status to PENDING (RN-DOC-05)
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_mgr_edit = client.put(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}",
+        json={
+            "title": "Revisión por Gerente",
+            "category": "Prompt",
+            "content": "Contenido corregido por Gerencia",
+        },
+    )
+    assert res_mgr_edit.status_code == 200
+    assert res_mgr_edit.json()["entry"]["approval_status"] == "PENDING"
+
+
+def test_hu_79_delete_documentation_entry_soft_delete(
+    client: TestClient, db_engine: Engine
+) -> None:
+    project_id, _, _, _ = _setup_project_with_members(client, db_engine)
+    _switch_user(client, "mgr-doc@dashnode.io")
+
+    res_c = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Entrada para Borrar",
+            "category": "General",
+            "content": "Texto a eliminar",
+        },
+    )
+    entry_id = res_c.json()["entry"]["id"]
+
+    # 1. Developer tries to delete -> 403 Forbidden
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_del_dev = client.delete(f"/api/v1/projects/{project_id}/documentation/{entry_id}")
+    assert res_del_dev.status_code == 403
+
+    # 2. Manager deletes -> 200 OK
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_del_mgr = client.delete(f"/api/v1/projects/{project_id}/documentation/{entry_id}")
+    assert res_del_mgr.status_code == 200
+    assert res_del_mgr.json()["message"] == messages.ENTRY_DELETED
+
+    # 3. Soft-deleted: Entry no longer listed
+    res_list = client.get(f"/api/v1/projects/{project_id}/documentation")
+    assert res_list.status_code == 200
+    assert len(res_list.json()["entries"]) == 0
+
+    # 4. In DB: row still exists with is_deleted = True
+    with Session(db_engine) as session:
+        row = session.get(DocumentationEntryModel, entry_id)
+        assert row is not None
+        assert row.is_deleted is True
+
+
+def test_hu_80_list_documentation_entries_role_scoping_and_pinning(
+    client: TestClient, db_engine: Engine
+) -> None:
+    project_id, _, _, _ = _setup_project_with_members(client, db_engine)
+
+    # Empty list state
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_empty = client.get(f"/api/v1/projects/{project_id}/documentation")
+    assert res_empty.status_code == 200
+    assert res_empty.json()["entries"] == []
+    assert res_empty.json()["message"] == messages.NO_ENTRIES
+
+    # Create 3 entries:
+    # Entry 1: Created by Dev 1 (PENDING)
+    _switch_user(client, "dev1-doc@dashnode.io")
+    e1 = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={"title": "Dev 1 Entry", "category": "Técnica", "content": "Text 1"},
+    ).json()["entry"]["id"]
+
+    # Entry 2: Created by Dev 2 (APPROVED)
+    _switch_user(client, "dev2-doc@dashnode.io")
+    e2 = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={"title": "Dev 2 Entry", "category": "Funcional", "content": "Text 2"},
+    ).json()["entry"]["id"]
+    with Session(db_engine) as session:
+        m2 = session.get(DocumentationEntryModel, e2)
+        assert m2 is not None
+        m2.approval_status = "APPROVED"
+        m2.is_pinned = True  # Pinned!
+        session.commit()
+
+    # Entry 3: Created by Dev 2 (PENDING)
+    e3 = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={"title": "Dev 2 Secret", "category": "Reunión", "content": "Text 3"},
+    ).json()["entry"]["id"]
+
+    # Manager sees ALL 3 entries
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_mgr = client.get(f"/api/v1/projects/{project_id}/documentation")
+    assert res_mgr.status_code == 200
+    mgr_ids = [e["id"] for e in res_mgr.json()["entries"]]
+    assert len(mgr_ids) == 3
+    # Pinned entry (e2) must be first
+    assert mgr_ids[0] == e2
+
+    # Dev 1 sees:
+    # - Their own entry (e1 - PENDING)
+    # - Approved entry (e2 - APPROVED)
+    # - BUT NOT Dev 2's unapproved entry (e3)
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_dev1 = client.get(f"/api/v1/projects/{project_id}/documentation")
+    assert res_dev1.status_code == 200
+    dev1_ids = [e["id"] for e in res_dev1.json()["entries"]]
+    assert e1 in dev1_ids
+    assert e2 in dev1_ids
+    assert e3 not in dev1_ids
+
+
+def test_hu_81_direct_access_control_denied(client: TestClient, db_engine: Engine) -> None:
+    project_id, _, _, _ = _setup_project_with_members(client, db_engine)
+
+    # Dev 2 creates a PENDING entry
+    _switch_user(client, "dev2-doc@dashnode.io")
+    res_e = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Borrador Confidencial",
+            "category": "Técnica",
+            "content": "Secretos de arquitectura",
+        },
+    )
+    entry_id = res_e.json()["entry"]["id"]
+
+    # 1. Dev 1 tries to access Dev 2's unapproved entry directly -> 403 Forbidden with exact message
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_denied = client.get(f"/api/v1/projects/{project_id}/documentation/{entry_id}")
+    assert res_denied.status_code == 403
+    assert res_denied.json()["error"]["message"] == messages.ENTRY_ACCESS_DENIED
+
+    # 2. Dev 2 (author) CAN access it directly
+    _switch_user(client, "dev2-doc@dashnode.io")
+    res_author = client.get(f"/api/v1/projects/{project_id}/documentation/{entry_id}")
+    assert res_author.status_code == 200
+    assert res_author.json()["title"] == "Borrador Confidencial"
+
+    # 3. Manager CAN access it directly
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_mgr = client.get(f"/api/v1/projects/{project_id}/documentation/{entry_id}")
+    assert res_mgr.status_code == 200
+
+    # 4. Non-existent entry -> 404 Not Found
+    res_404 = client.get(
+        f"/api/v1/projects/{project_id}/documentation/00000000-0000-0000-0000-000000000000"
+    )
+    assert res_404.status_code == 404
