@@ -7,7 +7,10 @@ from app.modules.documentation.application.dtos import (
     DocumentationEntryDTO,
     DocumentationListResponse,
     DocumentationOperationResponse,
+    RejectDocumentationCommand,
+    ResubmitDocumentationCommand,
     UpdateDocumentationCommand,
+    UpdateVisibilityCommand,
     is_valid_url,
 )
 from app.modules.documentation.domain import messages
@@ -97,10 +100,13 @@ def _entry_to_dto(
         if hasattr(entry.approval_status, "value")
         else str(entry.approval_status),
         is_pinned=entry.is_pinned,
+        is_visible_to_devs=entry.is_visible_to_devs,
+        rejection_reason=entry.rejection_reason,
         created_at=entry.created_at,
         updated_at=entry.updated_at,
         can_edit=entry.can_edit(actor.id, actor.role),
         can_delete=entry.can_delete(actor.role),
+        can_approve=entry.can_approve(actor.id, actor.role),
     )
 
 
@@ -364,3 +370,269 @@ class GetDocumentationEntryUseCase:
             raise AppError("ACCESS_DENIED", messages.ENTRY_ACCESS_DENIED, ErrorKind.FORBIDDEN)
 
         return _entry_to_dto(entry, actor, self._users)
+
+
+class ToggleDocumentationVisibilityUseCase:
+    def __init__(
+        self,
+        repo: DocumentationRepository,
+        uow: UnitOfWork,
+        id_gen: IdGenerator,
+        clock: Clock,
+        projects: ProjectLookupPort,
+        users: UserLookupPort,
+    ) -> None:
+        self._repo = repo
+        self._uow = uow
+        self._id_gen = id_gen
+        self._clock = clock
+        self._projects = projects
+        self._users = users
+
+    def execute(
+        self,
+        project_id: str,
+        entry_id: str,
+        cmd: UpdateVisibilityCommand,
+        actor: CurrentUser,
+    ) -> DocumentationOperationResponse:
+        _check_project_access(project_id, actor, self._projects)
+        entry = self._repo.get_by_id(entry_id)
+        if entry is None or entry.is_deleted or entry.project_id != project_id:
+            raise AppError("ENTRY_NOT_FOUND", messages.ENTRY_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if not entry.can_manage_visibility(actor.role):
+            raise AccessDeniedError()
+
+        if entry.approval_status != DocumentationApprovalStatus.APPROVED:
+            raise AppError(
+                "INVALID_OPERATION", messages.VISIBILITY_APPROVED_ONLY, ErrorKind.VALIDATION
+            )
+
+        now = self._clock.now()
+        entry.is_visible_to_devs = cmd.is_visible_to_devs
+        entry.updated_at = now
+
+        with self._uow:
+            self._repo.save(entry)
+            self._repo.log_audit(
+                audit_id=self._id_gen.generate(),
+                user_id=actor.id,
+                action="UPDATE_VISIBILITY",
+                resource_type="documentation_entry",
+                resource_id=entry.id,
+                when=now,
+            )
+            self._uow.commit()
+
+        return DocumentationOperationResponse(
+            message=messages.VISIBILITY_UPDATED,
+            entry=_entry_to_dto(entry, actor, self._users),
+        )
+
+
+class ListPendingDocumentationEntriesUseCase:
+    def __init__(
+        self,
+        repo: DocumentationRepository,
+        projects: ProjectLookupPort,
+        users: UserLookupPort,
+    ) -> None:
+        self._repo = repo
+        self._projects = projects
+        self._users = users
+
+    def execute(self, project_id: str, actor: CurrentUser) -> DocumentationListResponse:
+        _check_project_access(project_id, actor, self._projects)
+        if str(actor.role).lower() not in ("admin", "manager", "administrador", "gerente"):
+            raise AccessDeniedError()
+
+        entries = self._repo.list_pending_by_project(project_id)
+        dtos = [_entry_to_dto(e, actor, self._users) for e in entries]
+        msg = messages.NO_PENDING_ENTRIES if not dtos else None
+
+        return DocumentationListResponse(entries=dtos, message=msg)
+
+
+class ApproveDocumentationEntryUseCase:
+    def __init__(
+        self,
+        repo: DocumentationRepository,
+        uow: UnitOfWork,
+        id_gen: IdGenerator,
+        clock: Clock,
+        projects: ProjectLookupPort,
+        users: UserLookupPort,
+    ) -> None:
+        self._repo = repo
+        self._uow = uow
+        self._id_gen = id_gen
+        self._clock = clock
+        self._projects = projects
+        self._users = users
+
+    def execute(
+        self,
+        project_id: str,
+        entry_id: str,
+        actor: CurrentUser,
+    ) -> DocumentationOperationResponse:
+        _check_project_access(project_id, actor, self._projects)
+        entry = self._repo.get_by_id(entry_id)
+        if entry is None or entry.is_deleted or entry.project_id != project_id:
+            raise AppError("ENTRY_NOT_FOUND", messages.ENTRY_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if str(actor.role).lower() not in ("admin", "manager", "administrador", "gerente"):
+            raise AccessDeniedError()
+
+        if entry.approval_status != DocumentationApprovalStatus.PENDING:
+            raise AppError(
+                "INVALID_OPERATION", messages.ONLY_PENDING_CAN_BE_PROCESSED, ErrorKind.VALIDATION
+            )
+
+        if entry.author_id == actor.id:
+            raise AppError(
+                "CANNOT_APPROVE_OWN_ENTRY", messages.CANNOT_APPROVE_OWN_ENTRY, ErrorKind.FORBIDDEN
+            )
+
+        now = self._clock.now()
+        entry.approval_status = DocumentationApprovalStatus.APPROVED
+        entry.is_visible_to_devs = True
+        entry.updated_at = now
+
+        with self._uow:
+            self._repo.save(entry)
+            self._repo.log_audit(
+                audit_id=self._id_gen.generate(),
+                user_id=actor.id,
+                action="APPROVE",
+                resource_type="documentation_entry",
+                resource_id=entry.id,
+                when=now,
+            )
+            self._uow.commit()
+
+        return DocumentationOperationResponse(
+            message=messages.ENTRY_APPROVED,
+            entry=_entry_to_dto(entry, actor, self._users),
+        )
+
+
+class RejectDocumentationEntryUseCase:
+    def __init__(
+        self,
+        repo: DocumentationRepository,
+        uow: UnitOfWork,
+        id_gen: IdGenerator,
+        clock: Clock,
+        projects: ProjectLookupPort,
+        users: UserLookupPort,
+    ) -> None:
+        self._repo = repo
+        self._uow = uow
+        self._id_gen = id_gen
+        self._clock = clock
+        self._projects = projects
+        self._users = users
+
+    def execute(
+        self,
+        project_id: str,
+        entry_id: str,
+        cmd: RejectDocumentationCommand,
+        actor: CurrentUser,
+    ) -> DocumentationOperationResponse:
+        _check_project_access(project_id, actor, self._projects)
+        entry = self._repo.get_by_id(entry_id)
+        if entry is None or entry.is_deleted or entry.project_id != project_id:
+            raise AppError("ENTRY_NOT_FOUND", messages.ENTRY_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if str(actor.role).lower() not in ("admin", "manager", "administrador", "gerente"):
+            raise AccessDeniedError()
+
+        if entry.approval_status != DocumentationApprovalStatus.PENDING:
+            raise AppError(
+                "INVALID_OPERATION", messages.ONLY_PENDING_CAN_BE_PROCESSED, ErrorKind.VALIDATION
+            )
+
+        now = self._clock.now()
+        entry.approval_status = DocumentationApprovalStatus.REJECTED
+        entry.rejection_reason = cmd.rejection_reason.strip() if cmd.rejection_reason else None
+        entry.is_visible_to_devs = False
+        entry.updated_at = now
+
+        with self._uow:
+            self._repo.save(entry)
+            self._repo.log_audit(
+                audit_id=self._id_gen.generate(),
+                user_id=actor.id,
+                action="REJECT",
+                resource_type="documentation_entry",
+                resource_id=entry.id,
+                when=now,
+            )
+            self._uow.commit()
+
+        return DocumentationOperationResponse(
+            message=messages.ENTRY_REJECTED,
+            entry=_entry_to_dto(entry, actor, self._users),
+        )
+
+
+class ResubmitDocumentationEntryUseCase:
+    def __init__(
+        self,
+        repo: DocumentationRepository,
+        uow: UnitOfWork,
+        clock: Clock,
+        projects: ProjectLookupPort,
+        users: UserLookupPort,
+    ) -> None:
+        self._repo = repo
+        self._uow = uow
+        self._clock = clock
+        self._projects = projects
+        self._users = users
+
+    def execute(
+        self,
+        project_id: str,
+        entry_id: str,
+        cmd: ResubmitDocumentationCommand,
+        actor: CurrentUser,
+    ) -> DocumentationOperationResponse:
+        _check_project_access(project_id, actor, self._projects)
+        entry = self._repo.get_by_id(entry_id)
+        if entry is None or entry.is_deleted or entry.project_id != project_id:
+            raise AppError("ENTRY_NOT_FOUND", messages.ENTRY_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if entry.author_id != actor.id:
+            raise AccessDeniedError()
+
+        if entry.approval_status != DocumentationApprovalStatus.REJECTED:
+            raise AppError(
+                "ONLY_REJECTED_CAN_BE_RESUBMITTED",
+                messages.ONLY_REJECTED_CAN_BE_RESUBMITTED,
+                ErrorKind.VALIDATION,
+            )
+
+        _validate_documentation_input(cmd)
+
+        now = self._clock.now()
+        entry.title = cmd.title.strip()
+        entry.category = DocumentationCategory(cmd.category)
+        entry.objective = cmd.objective.strip() if cmd.objective else None
+        entry.tags = cmd.tags.strip() if cmd.tags else None
+        entry.content = cmd.content.strip() if cmd.content else None
+        entry.external_url = cmd.external_url.strip() if cmd.external_url else None
+        entry.approval_status = DocumentationApprovalStatus.PENDING
+        entry.updated_at = now
+
+        with self._uow:
+            self._repo.save(entry)
+            self._uow.commit()
+
+        return DocumentationOperationResponse(
+            message=messages.ENTRY_RESUBMITTED,
+            entry=_entry_to_dto(entry, actor, self._users),
+        )

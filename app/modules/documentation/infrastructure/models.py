@@ -26,6 +26,8 @@ class DocumentationEntryModel(Base):
     external_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     approval_status: Mapped[str] = mapped_column(String(20), default="PENDING", nullable=False)
     is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_visible_to_devs: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

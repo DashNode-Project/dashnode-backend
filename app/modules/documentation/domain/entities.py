@@ -32,9 +32,11 @@ class DocumentationEntry:
     external_url: str | None
     approval_status: DocumentationApprovalStatus
     is_pinned: bool
-    is_deleted: bool
-    created_at: datetime
-    updated_at: datetime
+    is_visible_to_devs: bool = True
+    rejection_reason: str | None = None
+    is_deleted: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     def can_view(self, user_id: str, user_role: str) -> bool:
         if self.is_deleted:
@@ -43,7 +45,9 @@ class DocumentationEntry:
             return True
         if self.author_id == user_id:
             return True
-        return self.approval_status == DocumentationApprovalStatus.APPROVED
+        if self.approval_status != DocumentationApprovalStatus.APPROVED:
+            return False
+        return self.is_visible_to_devs
 
     def can_edit(self, user_id: str, user_role: str) -> bool:
         if self.is_deleted:
@@ -59,3 +63,25 @@ class DocumentationEntry:
         if self.is_deleted:
             return False
         return str(user_role).lower() in ("admin", "manager", "administrador", "gerente")
+
+    def can_manage_visibility(self, user_role: str) -> bool:
+        return str(user_role).lower() in ("admin", "manager", "administrador", "gerente")
+
+    def can_approve(self, user_id: str, user_role: str) -> bool:
+        if str(user_role).lower() not in ("admin", "manager", "administrador", "gerente"):
+            return False
+        return (
+            self.author_id != user_id
+            and self.approval_status == DocumentationApprovalStatus.PENDING
+        )
+
+    def can_reject(self, user_role: str) -> bool:
+        if str(user_role).lower() not in ("admin", "manager", "administrador", "gerente"):
+            return False
+        return self.approval_status == DocumentationApprovalStatus.PENDING
+
+    def can_resubmit(self, user_id: str) -> bool:
+        return (
+            self.author_id == user_id
+            and self.approval_status == DocumentationApprovalStatus.REJECTED
+        )

@@ -329,3 +329,222 @@ def test_hu_81_direct_access_control_denied(client: TestClient, db_engine: Engin
         f"/api/v1/projects/{project_id}/documentation/00000000-0000-0000-0000-000000000000"
     )
     assert res_404.status_code == 404
+
+
+def test_hu_82_toggle_documentation_visibility(client: TestClient, db_engine: Engine) -> None:
+    project_id, _, _, _ = _setup_project_with_members(client, db_engine)
+    _switch_user(client, "mgr-doc@dashnode.io")
+
+    # Create and approve an entry
+    res_c = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Documento de Integración",
+            "category": "Funcional",
+            "content": "Contenido funcional",
+        },
+    )
+    entry_id = res_c.json()["entry"]["id"]
+
+    # Pending entry cannot be made visible to devs
+    res_err = client.patch(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}/visibility",
+        json={"is_visible_to_devs": True},
+    )
+    assert res_err.status_code == 400
+    assert res_err.json()["error"]["message"] == messages.VISIBILITY_APPROVED_ONLY
+
+    # Approve entry using direct DB or second manager
+    with Session(db_engine) as session:
+        m = session.get(DocumentationEntryModel, entry_id)
+        assert m is not None
+        m.approval_status = "APPROVED"
+        m.is_visible_to_devs = True
+        session.commit()
+
+    # Dev1 can see it
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_l1 = client.get(f"/api/v1/projects/{project_id}/documentation")
+    assert any(e["id"] == entry_id for e in res_l1.json()["entries"])
+
+    # Dev1 cannot toggle visibility -> 403
+    res_dev_toggle = client.patch(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}/visibility",
+        json={"is_visible_to_devs": False},
+    )
+    assert res_dev_toggle.status_code == 403
+
+    # Manager restricts visibility -> 200
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_toggle = client.patch(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}/visibility",
+        json={"is_visible_to_devs": False},
+    )
+    assert res_toggle.status_code == 200
+    assert res_toggle.json()["message"] == messages.VISIBILITY_UPDATED
+    assert res_toggle.json()["entry"]["is_visible_to_devs"] is False
+
+    # Dev1 can no longer see it
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_l2 = client.get(f"/api/v1/projects/{project_id}/documentation")
+    assert not any(e["id"] == entry_id for e in res_l2.json()["entries"])
+
+
+def test_hu_83_list_pending_approvals_queue(client: TestClient, db_engine: Engine) -> None:
+    project_id, _, _, _ = _setup_project_with_members(client, db_engine)
+    _switch_user(client, "dev1-doc@dashnode.io")
+
+    # Dev creates a pending entry
+    res_c = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Borrador de Tareas",
+            "category": "Técnica",
+            "content": "Contenido pendiente",
+        },
+    )
+    assert res_c.status_code == 201
+
+    # Dev cannot access pending queue -> 403
+    res_dev = client.get(f"/api/v1/projects/{project_id}/documentation/pending-approvals")
+    assert res_dev.status_code == 403
+
+    # Manager sees the pending entry
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_mgr = client.get(f"/api/v1/projects/{project_id}/documentation/pending-approvals")
+    assert res_mgr.status_code == 200
+    assert len(res_mgr.json()["entries"]) >= 1
+
+
+def test_hu_84_approve_documentation_entry_and_self_approval_restriction(
+    client: TestClient, db_engine: Engine
+) -> None:
+    project_id, _, _, _ = _setup_project_with_members(client, db_engine)
+
+    # 1. Manager creates an entry
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_mgr_doc = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Documento de Gerente",
+            "category": "General",
+            "content": "Notas de gestión",
+        },
+    )
+    mgr_entry_id = res_mgr_doc.json()["entry"]["id"]
+
+    # Manager tries to approve OWN entry -> 403 RN-DOC-01
+    res_self = client.post(f"/api/v1/projects/{project_id}/documentation/{mgr_entry_id}/approve")
+    assert res_self.status_code == 403
+    assert res_self.json()["error"]["message"] == messages.CANNOT_APPROVE_OWN_ENTRY
+
+    # 2. Dev creates an entry
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_dev_doc = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Documento de Dev",
+            "category": "Prompt",
+            "content": "Prompts de IA",
+        },
+    )
+    dev_entry_id = res_dev_doc.json()["entry"]["id"]
+
+    # Manager approves Dev's entry -> 200
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_app = client.post(f"/api/v1/projects/{project_id}/documentation/{dev_entry_id}/approve")
+    assert res_app.status_code == 200
+    assert res_app.json()["message"] == messages.ENTRY_APPROVED
+    assert res_app.json()["entry"]["approval_status"] == "APPROVED"
+    assert res_app.json()["entry"]["is_visible_to_devs"] is True
+
+
+def test_hu_85_reject_documentation_entry_with_feedback(
+    client: TestClient, db_engine: Engine
+) -> None:
+    project_id, _, _, _ = _setup_project_with_members(client, db_engine)
+
+    # Dev creates entry
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_c = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Propuesta Rechazable",
+            "category": "Técnica",
+            "content": "Contenido a mejorar",
+        },
+    )
+    entry_id = res_c.json()["entry"]["id"]
+
+    # Manager rejects it
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_rej = client.post(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}/reject",
+        json={"rejection_reason": "Falta detallar los casos de borde."},
+    )
+    assert res_rej.status_code == 200
+    assert res_rej.json()["message"] == messages.ENTRY_REJECTED
+    assert res_rej.json()["entry"]["approval_status"] == "REJECTED"
+    assert res_rej.json()["entry"]["rejection_reason"] == "Falta detallar los casos de borde."
+
+
+def test_hu_86_resubmit_rejected_entry(client: TestClient, db_engine: Engine) -> None:
+    project_id, _, _, _ = _setup_project_with_members(client, db_engine)
+
+    # Dev creates entry
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_c = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={
+            "title": "Propuesta Inicial",
+            "category": "Técnica",
+            "content": "Borrador 1",
+        },
+    )
+    entry_id = res_c.json()["entry"]["id"]
+
+    # Cannot resubmit when PENDING
+    res_invalid = client.post(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}/resubmit",
+        json={
+            "title": "Propuesta Corregida",
+            "category": "Técnica",
+            "content": "Borrador corregido",
+        },
+    )
+    assert res_invalid.status_code == 400
+    assert res_invalid.json()["error"]["message"] == messages.ONLY_REJECTED_CAN_BE_RESUBMITTED
+
+    # Manager rejects it
+    _switch_user(client, "mgr-doc@dashnode.io")
+    client.post(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}/reject",
+        json={"rejection_reason": "Corregir formato."},
+    )
+
+    # Dev2 cannot resubmit Dev1's rejected entry -> 403
+    _switch_user(client, "dev2-doc@dashnode.io")
+    res_dev2 = client.post(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}/resubmit",
+        json={
+            "title": "Intruso",
+            "category": "Técnica",
+            "content": "Intento no permitido",
+        },
+    )
+    assert res_dev2.status_code == 403
+
+    # Dev1 (author) resubmits it successfully -> 200
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_ok = client.post(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}/resubmit",
+        json={
+            "title": "Propuesta Final Corregida",
+            "category": "Técnica",
+            "content": "Contenido completo con casos de borde.",
+        },
+    )
+    assert res_ok.status_code == 200
+    assert res_ok.json()["message"] == messages.ENTRY_RESUBMITTED
+    assert res_ok.json()["entry"]["approval_status"] == "PENDING"
+    assert res_ok.json()["entry"]["rejection_reason"] == "Corregir formato."

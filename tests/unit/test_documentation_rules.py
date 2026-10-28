@@ -105,3 +105,40 @@ def test_validate_optional_url() -> None:
 
     with pytest.raises(ValueError, match=messages.INVALID_URL):
         validate_optional_url("ftp://unsupported-scheme.com")
+
+
+def test_documentation_visibility_and_approval_workflow_rules() -> None:
+    entry = _sample_entry(author_id="dev-1", status=DocumentationApprovalStatus.PENDING)
+
+    # Visibility for developers when restricted (HU_DN_06_82)
+    entry.approval_status = DocumentationApprovalStatus.APPROVED
+    entry.is_visible_to_devs = True
+    assert entry.can_view("dev-2", "developer") is True
+
+    entry.is_visible_to_devs = False
+    assert entry.can_view("dev-2", "developer") is False  # Restricted from other devs
+    assert entry.can_view("dev-1", "developer") is True  # Author can still view
+    assert entry.can_view("mgr-1", "manager") is True  # Manager can still view
+
+    # Visibility management
+    assert entry.can_manage_visibility("manager") is True
+    assert entry.can_manage_visibility("admin") is True
+    assert entry.can_manage_visibility("developer") is False
+
+    # Approval rules (HU_DN_06_84 & RN-DOC-01)
+    entry.approval_status = DocumentationApprovalStatus.PENDING
+    assert entry.can_approve("mgr-1", "manager") is True
+    assert entry.can_approve("adm-1", "admin") is True
+    assert entry.can_approve("dev-1", "manager") is False  # Cannot approve own entry
+    assert entry.can_approve("dev-2", "developer") is False
+
+    # Rejection rules (HU_DN_06_85)
+    assert entry.can_reject("manager") is True
+    assert entry.can_reject("admin") is True
+    assert entry.can_reject("developer") is False
+
+    # Resubmission rules (HU_DN_06_86)
+    assert entry.can_resubmit("dev-1") is False  # Not rejected yet
+    entry.approval_status = DocumentationApprovalStatus.REJECTED
+    assert entry.can_resubmit("dev-1") is True  # Author can resubmit rejected entry
+    assert entry.can_resubmit("dev-2") is False  # Non-author cannot resubmit

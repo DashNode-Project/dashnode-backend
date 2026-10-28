@@ -1,4 +1,4 @@
-"""SQLAlchemy repository implementation for Documentation and Knowledge Base (EP-09)."""
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,6 +29,8 @@ class SqlAlchemyDocumentationRepository(DocumentationRepository):
             external_url=model.external_url,
             approval_status=DocumentationApprovalStatus(model.approval_status),
             is_pinned=model.is_pinned,
+            is_visible_to_devs=model.is_visible_to_devs,
+            rejection_reason=model.rejection_reason,
             is_deleted=model.is_deleted,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -56,6 +58,8 @@ class SqlAlchemyDocumentationRepository(DocumentationRepository):
                 external_url=entry.external_url,
                 approval_status=status_val,
                 is_pinned=entry.is_pinned,
+                is_visible_to_devs=entry.is_visible_to_devs,
+                rejection_reason=entry.rejection_reason,
                 is_deleted=entry.is_deleted,
                 created_at=entry.created_at,
                 updated_at=entry.updated_at,
@@ -70,6 +74,8 @@ class SqlAlchemyDocumentationRepository(DocumentationRepository):
             model.external_url = entry.external_url
             model.approval_status = status_val
             model.is_pinned = entry.is_pinned
+            model.is_visible_to_devs = entry.is_visible_to_devs
+            model.rejection_reason = entry.rejection_reason
             model.is_deleted = entry.is_deleted
             model.updated_at = entry.updated_at
 
@@ -92,3 +98,48 @@ class SqlAlchemyDocumentationRepository(DocumentationRepository):
             )
         )
         return [self._to_domain(row) for row in self._session.scalars(stmt).all()]
+
+    def list_pending_by_project(self, project_id: str) -> list[DocumentationEntry]:
+        stmt = (
+            select(DocumentationEntryModel)
+            .where(
+                DocumentationEntryModel.project_id == project_id,
+                DocumentationEntryModel.is_deleted.is_(False),
+                DocumentationEntryModel.approval_status
+                == DocumentationApprovalStatus.PENDING.value,
+            )
+            .order_by(DocumentationEntryModel.created_at.desc())
+        )
+        return [self._to_domain(row) for row in self._session.scalars(stmt).all()]
+
+    def log_audit(
+        self,
+        *,
+        audit_id: str,
+        user_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        when: datetime,
+    ) -> None:
+        from sqlalchemy import DateTime, String, column, insert, table
+
+        audit_table = table(
+            "audit_logs",
+            column("id", String),
+            column("user_id", String),
+            column("action", String),
+            column("resource_type", String),
+            column("resource_id", String),
+            column("created_at", DateTime),
+        )
+        self._session.execute(
+            insert(audit_table).values(
+                id=audit_id,
+                user_id=user_id,
+                action=action,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                created_at=when,
+            )
+        )

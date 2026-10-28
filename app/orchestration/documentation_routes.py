@@ -9,13 +9,21 @@ from app.modules.documentation.application.dtos import (
     DocumentationEntryDTO,
     DocumentationListResponse,
     DocumentationOperationResponse,
+    RejectDocumentationCommand,
+    ResubmitDocumentationCommand,
     UpdateDocumentationCommand,
+    UpdateVisibilityCommand,
 )
 from app.modules.documentation.application.use_cases import (
+    ApproveDocumentationEntryUseCase,
     CreateDocumentationEntryUseCase,
     DeleteDocumentationEntryUseCase,
     GetDocumentationEntryUseCase,
     ListDocumentationEntriesUseCase,
+    ListPendingDocumentationEntriesUseCase,
+    RejectDocumentationEntryUseCase,
+    ResubmitDocumentationEntryUseCase,
+    ToggleDocumentationVisibilityUseCase,
     UpdateDocumentationEntryUseCase,
 )
 from app.modules.documentation.infrastructure.repositories import (
@@ -110,6 +118,25 @@ def list_documentation_entries(
 
 
 @router.get(
+    "/projects/{project_id}/documentation/pending-approvals",
+    response_model=DocumentationListResponse,
+)
+def list_pending_documentation_entries(
+    project_id: str,
+    actor: CurrentUser = Depends(get_current_user),
+    repo: SqlAlchemyDocumentationRepository = Depends(_doc_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+) -> DocumentationListResponse:
+    use_case = ListPendingDocumentationEntriesUseCase(
+        repo=repo,
+        projects=projects,
+        users=users,
+    )
+    return use_case.execute(project_id, actor)
+
+
+@router.get(
     "/projects/{project_id}/documentation/{entry_id}",
     response_model=DocumentationEntryDTO,
 )
@@ -172,3 +199,101 @@ def delete_documentation_entry(
         projects=projects,
     )
     return use_case.execute(project_id, entry_id, actor)
+
+
+@router.patch(
+    "/projects/{project_id}/documentation/{entry_id}/visibility",
+    response_model=DocumentationOperationResponse,
+)
+def toggle_documentation_visibility(
+    project_id: str,
+    entry_id: str,
+    cmd: UpdateVisibilityCommand,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    repo: SqlAlchemyDocumentationRepository = Depends(_doc_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+) -> DocumentationOperationResponse:
+    use_case = ToggleDocumentationVisibilityUseCase(
+        repo=repo,
+        uow=SqlAlchemyUnitOfWork(db),
+        id_gen=_id_gen,
+        clock=_clock,
+        projects=projects,
+        users=users,
+    )
+    return use_case.execute(project_id, entry_id, cmd, actor)
+
+
+@router.post(
+    "/projects/{project_id}/documentation/{entry_id}/approve",
+    response_model=DocumentationOperationResponse,
+)
+def approve_documentation_entry(
+    project_id: str,
+    entry_id: str,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    repo: SqlAlchemyDocumentationRepository = Depends(_doc_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+) -> DocumentationOperationResponse:
+    use_case = ApproveDocumentationEntryUseCase(
+        repo=repo,
+        uow=SqlAlchemyUnitOfWork(db),
+        id_gen=_id_gen,
+        clock=_clock,
+        projects=projects,
+        users=users,
+    )
+    return use_case.execute(project_id, entry_id, actor)
+
+
+@router.post(
+    "/projects/{project_id}/documentation/{entry_id}/reject",
+    response_model=DocumentationOperationResponse,
+)
+def reject_documentation_entry(
+    project_id: str,
+    entry_id: str,
+    cmd: RejectDocumentationCommand,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    repo: SqlAlchemyDocumentationRepository = Depends(_doc_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+) -> DocumentationOperationResponse:
+    use_case = RejectDocumentationEntryUseCase(
+        repo=repo,
+        uow=SqlAlchemyUnitOfWork(db),
+        id_gen=_id_gen,
+        clock=_clock,
+        projects=projects,
+        users=users,
+    )
+    return use_case.execute(project_id, entry_id, cmd, actor)
+
+
+@router.post(
+    "/projects/{project_id}/documentation/{entry_id}/resubmit",
+    response_model=DocumentationOperationResponse,
+)
+def resubmit_documentation_entry(
+    project_id: str,
+    entry_id: str,
+    cmd: ResubmitDocumentationCommand,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    repo: SqlAlchemyDocumentationRepository = Depends(_doc_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+) -> DocumentationOperationResponse:
+    use_case = ResubmitDocumentationEntryUseCase(
+        repo=repo,
+        uow=SqlAlchemyUnitOfWork(db),
+        clock=_clock,
+        projects=projects,
+        users=users,
+    )
+    return use_case.execute(project_id, entry_id, cmd, actor)

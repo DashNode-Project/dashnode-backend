@@ -75,10 +75,30 @@ class DocumentationEntryDTO(BaseModel):
     external_url: str | None = None
     approval_status: str
     is_pinned: bool
+    is_visible_to_devs: bool = True
+    rejection_reason: str | None = None
     created_at: datetime
     updated_at: datetime
     can_edit: bool = False
     can_delete: bool = False
+    can_approve: bool = False
+
+
+class UpdateVisibilityCommand(BaseModel):
+    is_visible_to_devs: bool
+
+
+class RejectDocumentationCommand(BaseModel):
+    rejection_reason: str | None = None
+
+
+class ResubmitDocumentationCommand(BaseModel):
+    title: str = ""
+    category: str = ""
+    objective: str | None = None
+    tags: str | None = None
+    content: str | None = None
+    external_url: str | None = None
 
 
 class DocumentationListResponse(BaseModel):
