@@ -151,22 +151,30 @@ tests/unit/test_kanban_rules.py
 tests/api/test_kanban_api.py
 ```
 
-## EP-09 — Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_81)
+## EP-09 — Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_86)
 
 ```
 app/modules/documentation/
-  domain/          entities (DocumentationEntry, DocumentationCategory, DocumentationApprovalStatus), messages, ports
-  application/     dtos (CreateDocumentationCommand, UpdateDocumentationCommand, DocumentationEntryDTO), use_cases
-  infrastructure/  models (DocumentationEntryModel), repositories (SqlAlchemyDocumentationRepository)
+  domain/          entities (DocumentationEntry, DocumentationCategory, DocumentationApprovalStatus, permission methods), messages, ports
+  application/     dtos (CreateDocumentationCommand, UpdateDocumentationCommand, UpdateVisibilityCommand, RejectDocumentationCommand, ResubmitDocumentationCommand, DocumentationEntryDTO), use_cases
+  infrastructure/  models (DocumentationEntryModel with is_visible_to_devs, rejection_reason), repositories (SqlAlchemyDocumentationRepository)
 app/orchestration/documentation_routes.py
-  POST   /projects/{id}/documentation              (HU_DN_06_77)
-  PUT    /projects/{id}/documentation/{id}         (HU_DN_06_78)
-  DELETE /projects/{id}/documentation/{id}         (HU_DN_06_79)
-  GET    /projects/{id}/documentation              (HU_DN_06_80)
-  GET    /projects/{id}/documentation/{id}         (HU_DN_06_81)
-migrations/versions/015_ep09_documentation_entries.py
+  POST   /projects/{id}/documentation                      (HU_DN_06_77)
+  PUT    /projects/{id}/documentation/{id}                 (HU_DN_06_78)
+  DELETE /projects/{id}/documentation/{id}                 (HU_DN_06_79)
+  GET    /projects/{id}/documentation                      (HU_DN_06_80)
+  GET    /projects/{id}/documentation/pending-approvals    (HU_DN_06_83)
+  GET    /projects/{id}/documentation/{id}                 (HU_DN_06_81)
+  PATCH  /projects/{id}/documentation/{id}/visibility      (HU_DN_06_82)
+  POST   /projects/{id}/documentation/{id}/approve         (HU_DN_06_84)
+  POST   /projects/{id}/documentation/{id}/reject          (HU_DN_06_85)
+  POST   /projects/{id}/documentation/{id}/resubmit        (HU_DN_06_86)
+migrations/versions/
+  015_ep09_documentation_entries.py
+  016_ep09_doc_approvals.py
 tests/unit/test_documentation_rules.py
 tests/api/test_documentation_api.py
 ```
+
 
 

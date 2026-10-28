@@ -277,7 +277,12 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | `PUT` | `/api/v1/projects/{project_id}/documentation/{id}` | Autor (PENDING/REJECTED), Admin, Gerente | Editar entrada existente; si estaba APPROVED vuelve a PENDING (RN-DOC-05) | 200 OK: `'Entrada actualizada correctamente.'`; 403 Forbidden para Dev ajeno o aprobada |
 | `DELETE` | `/api/v1/projects/{project_id}/documentation/{id}` | Admin, Gerente | Borrado lógico de entrada de documentación | 200 OK: `'Entrada eliminada correctamente.'`; 403 Forbidden para Desarrollador |
 | `GET` | `/api/v1/projects/{project_id}/documentation` | Auth (Admin, Gerente, Dev) | Listar entradas visibles del proyecto con entradas ancladas al inicio | 200 OK: lista de entradas (Dev solo aprobadas y propias); si vacío: `'No hay entradas de documentación.'` |
+| `GET` | `/api/v1/projects/{project_id}/documentation/pending-approvals` | Admin, Gerente | Consultar cola de aprobación de entradas pendientes | 200 OK: lista de pendientes; si vacío: `'No hay entradas pendientes de aprobación.'`; 403 Forbidden para Desarrollador |
 | `GET` | `/api/v1/projects/{project_id}/documentation/{id}` | Auth | Consulta directa por identificador | 200 OK; 403 Forbidden con `'No tiene acceso a esta entrada.'` si no es autor o entrada restringida |
+| `PATCH` | `/api/v1/projects/{project_id}/documentation/{id}/visibility` | Admin, Gerente | Alternar visibilidad para desarrolladores | 200 OK: `'Visibilidad actualizada correctamente.'`; 400 si no aprobada: `'Solo se puede cambiar la visibilidad de entradas aprobadas.'`; 403 Dev |
+| `POST` | `/api/v1/projects/{project_id}/documentation/{id}/approve` | Admin, Gerente | Aprobar entrada pendiente | 200 OK: `'Entrada aprobada correctamente.'`; 403 si autor intenta auto-aprobar: `'No puede aprobar su propia entrada.'` (RN-DOC-01) |
+| `POST` | `/api/v1/projects/{project_id}/documentation/{id}/reject` | Admin, Gerente | Rechazar entrada pendiente con motivo opcional | 200 OK: `'Entrada rechazada correctamente.'`; 400 si no pendiente; 403 Dev |
+| `POST` | `/api/v1/projects/{project_id}/documentation/{id}/resubmit` | Autor de entrada rechazada | Reenviar entrada rechazada a nueva revisión | 200 OK: `'Entrada reenviada a aprobación.'`; 400 si no rechazada: `'Solo se pueden reenviar entradas rechazadas.'`; 403 no autor |
 
 ### Matriz de Trazabilidad y Verificación E2E
 
@@ -288,20 +293,27 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | **HU_DN_06_79** | Botón Eliminar en tarjeta (según `can_delete`), modal `DeleteDocumentationModal` | `DeleteDocumentationEntryUseCase`, `DELETE /projects/{id}/documentation/{id}` | Diálogo de confirmación con texto exacto: `'¿Está seguro de que desea eliminar esta entrada?'`. Borrado lógico (`is_deleted = True`), solo Gerente/Admin. Toast: `'Entrada eliminada correctamente.'`. |
 | **HU_DN_06_80** | Pestaña `ProjectKnowledgeTab`, grid de tarjetas, barra de filtros y búsqueda | `ListDocumentationEntriesUseCase`, `GET /projects/{id}/documentation` | Entradas ancladas (`is_pinned`) al inicio. Alcance de rol: Admin/Gerente ven todas; Desarrolladores solo aprobadas y propias. Filtros por búsqueda, categoría y estado. Estado vacío con `'No hay entradas de documentación.'`. |
 | **HU_DN_06_81** | Manejo de error 403 Forbidden con toast y banner seguro | `GetDocumentationEntryUseCase`, `GET /projects/{id}/documentation/{id}` | Rechazo 403 con mensaje literal: `'No tiene acceso a esta entrada.'` ante consulta directa de entradas no autorizadas. |
+| **HU_DN_06_82** | Botón/switch "Visible para devs" / "Oculto para devs" en tarjeta aprobada para Admin/Gerente | `ToggleDocumentationVisibilityUseCase`, `PATCH /projects/{id}/documentation/{id}/visibility` | Solo entradas en estado APPROVED permiten cambiar visibilidad. Admin y Gerente autorizados. Trazabilidad en `audit_logs` (RNF-SEG-07). Toast: `'Visibilidad actualizada correctamente.'`. |
+| **HU_DN_06_83** | Subpestaña "Cola de aprobación" con badge de conteo en `ProjectKnowledgeTab` y `ApprovalQueueView` | `ListPendingDocumentationEntriesUseCase`, `GET /projects/{id}/documentation/pending-approvals` | Visualización exclusiva para Admin/Gerente. Lista con título, autor, categoría, fecha y botones directos Aprobar/Rechazar. Desarrollador denegado con HTTP 403 Forbidden. Estado vacío: `'No hay entradas pendientes de aprobación.'`. |
+| **HU_DN_06_84** | Botón "Aprobar" directo en la cola de aprobación | `ApproveDocumentationEntryUseCase`, `POST /projects/{id}/documentation/{id}/approve` | Solo entradas en estado PENDING. Restricción RN-DOC-01: auto-aprobación deshabilitada en UI y rechazada con 403 `'No puede aprobar su propia entrada.'`. Transición a `APPROVED`, `is_visible_to_devs=True` por defecto, salida de cola, auditoría RNF-SEG-07. Toast: `'Entrada aprobada correctamente.'`. |
+| **HU_DN_06_85** | Botón "Rechazar" y modal `RejectDocumentationModal` con motivo de rechazo opcional | `RejectDocumentationEntryUseCase`, `POST /projects/{id}/documentation/{id}/reject` | Solo entradas en estado PENDING. Transición a `REJECTED`, guardado de `rejection_reason`, salida de cola, ocultamiento a otros desarrolladores y auditoría RNF-SEG-07. Toast: `'Entrada rechazada correctamente.'`. |
+| **HU_DN_06_86** | Botón "Reenviar a aprobación" en tarjeta rechazada y modal `DocumentationModal` (modo resubmit) | `ResubmitDocumentationEntryUseCase`, `POST /projects/{id}/documentation/{id}/resubmit` | Exclusivo para el autor de la entrada. Solo entradas en estado `REJECTED` (error `'Solo se pueden reenviar entradas rechazadas.'`). Retroalimentación previa consultable. Paso a `PENDING`, retorno a la cola y auditoría. Toast: `'Entrada reenviada a aprobación.'`. |
 
 ### Resumen de Quality Gates
 
 | Repositorio | Verificación | Resultado | Estado |
 |---|---|---|---|
-| Backend | `pytest` | 343 pruebas pasadas (0 fallos) | APROBADO |
+| Backend | `pytest` | 349 pruebas pasadas (0 fallos) | APROBADO |
 | Backend | `ruff check .` | 0 errores | APROBADO |
-| Backend | `ruff format --check .` | 100% formateado | APROBADO |
-| Backend | `scan_secrets.py` | 0 secretos | APROBADO |
+| Backend | `ruff format --check .` | 271 archivos formateados correctamente | APROBADO |
+| Backend | `lint-imports` | 3 contratos cumplidos (BR-1, BR-2, BR-4) | APROBADO |
+| Backend | `scan_secrets.py` | 0 secretos detectados | APROBADO |
 | Frontend | `npm run typecheck` | 0 errores TypeScript | APROBADO |
 | Frontend | `npm run lint` | 0 errores / 0 advertencias ESLint | APROBADO |
 | Frontend | `npm run format:check` | 100% código formateado con Prettier | APROBADO |
-| Frontend | `npm run test:coverage` | Cobertura global aprobada (funciones > 78%, líneas > 85%) | APROBADO |
-| Frontend | `scan-secrets.mjs` | 0 secretos en 197 archivos | APROBADO |
+| Frontend | `npm run test:coverage` | 333 pruebas pasadas en 42 suites (statements 81.3%, lines 84.25%) | APROBADO |
+| Frontend | `scan-secrets.mjs` | 0 secretos detectados | APROBADO |
+
 
 
 

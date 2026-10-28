@@ -350,7 +350,7 @@ Validación local:
   - Registro en `app/main.py`.
   - Aislamiento modular verificado en `pyproject.toml` (contrato BR-4).
 
-### Pruebas y Quality Gates Backend
+### Pruebas y Quality Gates Backend (Lote 1: HU_DN_06_77 … HU_DN_06_81)
 - **Pruebas unitarias:** `tests/unit/test_documentation_rules.py` (4 tests: permisos de visualización, edición, eliminación y validación de URLs).
 - **Pruebas de API:** `tests/api/test_documentation_api.py` (5 tests cubriendo HU_DN_06_77 a HU_DN_06_81).
 - **Resultados de Calidad:**
@@ -358,6 +358,53 @@ Validación local:
   - `ruff check .`: 0 errores.
   - `ruff format --check .`: código limpio.
   - `scan_secrets.py`: 0 secretos detectados.
+
+---
+
+## Épica 09: Aprobación y visibilidad de documentación (HU_DN_06_82 … HU_DN_06_86)
+
+### Análisis del Orquestador (Modo Lote / Épica)
+- **Fecha:** 2026-10-28
+- **Clasificación del lote:** FULL_STACK
+- **Complejidad:** MODERATE (Score: 82/100)
+- **Project Mode:** EXTEND_EXISTING
+- **Ramas:** `feature/ep-09-documentation-doc` (backend y frontend)
+
+### Implementación Backend
+- **Migración de esquema:** `migrations/versions/016_ep09_doc_approvals.py`
+  - Añade columnas a `documentation_entries`:
+    - `is_visible_to_devs` (BOOLEAN NOT NULL DEFAULT TRUE, server_default='true')
+    - `rejection_reason` (TEXT NULL)
+- **Módulo Documentation:**
+  - `domain/entities.py`: Atributos `is_visible_to_devs`, `rejection_reason`; métodos de autorización `can_manage_visibility`, `can_approve` (impide auto-aprobación RN-DOC-01), `can_reject`, `can_resubmit`.
+  - `domain/messages.py`: Literales `VISIBILITY_UPDATED`, `VISIBILITY_APPROVED_ONLY`, `NO_PENDING_ENTRIES`, `CANNOT_APPROVE_OWN_ENTRY`, `ENTRY_APPROVED`, `ENTRY_REJECTED`, `ENTRY_RESUBMITTED`, `ONLY_REJECTED_CAN_BE_RESUBMITTED`.
+  - `domain/ports.py`: Métodos en `DocumentationRepository`: `list_pending_by_project` y `log_audit` (RNF-SEG-07).
+  - `infrastructure/models.py`: Modelo mapeado con `is_visible_to_devs` y `rejection_reason`.
+  - `infrastructure/repositories.py`: Persistencia de campos de aprobación y registro de auditoría desacoplado (cumplimiento BR-4).
+  - `application/dtos.py`: `UpdateVisibilityCommand`, `RejectDocumentationCommand`, `ResubmitDocumentationCommand`, y campos extendidos en `DocumentationEntryDTO`.
+  - `application/use_cases.py`:
+    - `ToggleDocumentationVisibilityUseCase` (HU_DN_06_82): Solo para entradas aprobadas y roles Admin/Gerente, registro en `audit_logs`.
+    - `ListPendingDocumentationEntriesUseCase` (HU_DN_06_83): Cola de aprobación, 403 para Desarrollador.
+    - `ApproveDocumentationEntryUseCase` (HU_DN_06_84): Restricción RN-DOC-01 contra auto-aprobación, paso a `APPROVED` y registro en `audit_logs`.
+    - `RejectDocumentationEntryUseCase` (HU_DN_06_85): Transición a `REJECTED`, guardado de observaciones opcionales y registro en `audit_logs`.
+    - `ResubmitDocumentationEntryUseCase` (HU_DN_06_86): Solo el autor original, validación de estado `REJECTED`, paso a `PENDING`.
+- **Rutas de Orquestación (`app/orchestration/documentation_routes.py`):**
+  - `GET /api/v1/projects/{project_id}/documentation/pending-approvals`
+  - `PATCH /api/v1/projects/{project_id}/documentation/{entry_id}/visibility`
+  - `POST /api/v1/projects/{project_id}/documentation/{entry_id}/approve`
+  - `POST /api/v1/projects/{project_id}/documentation/{entry_id}/reject`
+  - `POST /api/v1/projects/{project_id}/documentation/{entry_id}/resubmit`
+
+### Pruebas y Quality Gates Backend
+- **Pruebas unitarias:** `tests/unit/test_documentation_rules.py` (5 tests de reglas de negocio para visibilidad y flujo de aprobación).
+- **Pruebas de API:** `tests/api/test_documentation_api.py` (10 tests cubriendo exhaustivamente HU_DN_06_77 a HU_DN_06_86, incluyendo casos límite y restricciones de seguridad).
+- **Resultados de Calidad:**
+  - `pytest`: 349 pruebas pasadas (0 fallos).
+  - `ruff check .`: 0 errores.
+  - `ruff format --check .`: 271 archivos formateados correctamente.
+  - `lint-imports`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
+  - `scan_secrets.py`: 0 secretos detectados.
+
 
 
 
