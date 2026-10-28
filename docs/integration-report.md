@@ -263,4 +263,3 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | Frontend | `scan-secrets.mjs` | 0 secretos en 188 archivos inspeccionados | APROBADO |
 
 
-
