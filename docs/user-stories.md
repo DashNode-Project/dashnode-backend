@@ -797,4 +797,14 @@ Recibidas 2026-10-20. Registro de horas, estado de tarea, permisos de gerente, �
 | HU_DN_04_60 | COMPLETED |
 | HU_DN_04_61 | COMPLETED |
 
-La invitación de desarrollador ya no entrega una contraseña en claro. El correo lleva enlace y código de 6 dígitos; la cuenta permanece inactiva hasta autorizar, verificar el código y definir la contraseña.
+La invitación de desarrollador ya no entrega una contraseña en claro. El correo lleva enlace y código de 6 dígitos; la cuenta permanece inactiva hasta autorizar, verificar el código y definir la contraseña.
+
+## EP-07 — Sprints SPR (HU_DN_05_63 … HU_DN_05_71)
+
+| ID | Estado | Backend | Pruebas |
+|---|---|---|---|
+| HU_DN_05_63 … 67 | COMPLETED | Crear/listar/iniciar sprint, asignar HU | `tests/api/test_sprints_api.py` |
+| HU_DN_05_68 | COMPLETED | Burndown ideal/real | `tests/unit/test_burndown.py`, API burndown |
+| HU_DN_05_69 | COMPLETED | Cierre sprint `CLOSED` | API close + inmutabilidad |
+| HU_DN_05_70 | COMPLETED | Migración masiva incompletas | API close (backlog / sprint destino) |
+| HU_DN_05_71 | COMPLETED | Historial sprints cerrados | API history |

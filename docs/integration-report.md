@@ -207,5 +207,18 @@ Integración verificada mediante `tests/api/test_backlog_api.py` (permisos, lite
 
 Login local verificado (HTTP 200) contra Postgres de Docker después de que el host remoto no resolvía DNS. SMTP: sesión autenticada (`smtp_ok`) sin enviar un mensaje de prueba. El front usa el proxy `/api` hacia `127.0.0.1:8000`.
 
+---
+
+## EP-07 — Sprints SPR (HU_DN_05_68 … HU_DN_05_71)
+
+| HU | Método | Ruta | UI |
+|---|---|---|---|
+| HU_DN_05_68 | GET | `/projects/{id}/sprints/{sprintId}/burndown` | `SprintBurndownChart` en pestaña Sprints |
+| HU_DN_05_69–70 | POST | `/projects/{id}/sprints/{sprintId}/close` | Modal «Finalizar sprint» + destino incompletas |
+| HU_DN_05_71 | GET | `/projects/{id}/sprints/history` | Sección «Historial de sprints» (colapsable) |
+
+Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial vacío `No hay sprints finalizados en este proyecto.`; fallo técnico vía `MESSAGES.loadFailure` / `MESSAGES.technicalFailure` en frontend.
+
+**Verificación:** `tests/api/test_sprints_api.py` (burndown, close, history); frontend `npm run check` (285 tests Vitest, `fileParallelism: false` por estabilidad de mocks compartidos).
 
 

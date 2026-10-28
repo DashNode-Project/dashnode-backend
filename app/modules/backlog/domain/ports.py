@@ -1,6 +1,6 @@
 """Repository ports for backlog module."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Protocol
 
@@ -65,3 +65,5 @@ class BacklogRepository(Protocol):
         new_status: str,
         when: datetime,
     ) -> None: ...
+
+    def latest_done_date_by_task(self, project_id: str) -> dict[str, date]: ...

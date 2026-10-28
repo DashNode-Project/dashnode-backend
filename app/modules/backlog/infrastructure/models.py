@@ -38,7 +38,9 @@ class UserStoryModel(Base):
     estimation_mode: Mapped[str] = mapped_column(
         String(20), nullable=False, default="story", server_default="story"
     )
-    sprint_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    sprint_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("sprints.id", ondelete="SET NULL"), nullable=True
+    )
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by: Mapped[str] = mapped_column(String(36), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
