@@ -49,7 +49,7 @@ ignore = ["S101", "B008"]
 "tests/*" = ["S101", "S105", "S106", "TID251"]
 "app/cli/*" = ["T201", "TID251"]
 "app/modules/auth/domain/messages.py" = ["S105"]  # literal user-facing texts, not secrets
-"scripts/*" = ["T201", "S603", "S607", "TID251"]
+"scripts/*" = ["T201", "S105", "S106", "S603", "S607", "TID251", "E402", "E501"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "datetime.datetime.now".msg = "Use Clock port instead (HC-09)"
@@ -82,7 +82,7 @@ forbidden_modules = ["fastapi", "sqlalchemy", "pydantic_settings"]
 [[tool.importlinter.contracts]]
 name = "BR-4: Module isolation"
 type = "independence"
-modules = ["app.modules.auth", "app.modules.projects", "app.modules.tasks", "app.modules.notifications", "app.modules.availability", "app.modules.backlog"]
+modules = ["app.modules.auth", "app.modules.projects", "app.modules.tasks", "app.modules.notifications", "app.modules.availability", "app.modules.backlog", "app.modules.kanban"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

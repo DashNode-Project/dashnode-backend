@@ -110,3 +110,6 @@ class StoryTask:
     story_points: int | None = None
     logged_hours: Decimal = Decimal("0")
     label: str = ""
+    is_blocked: bool = False
+    blocked_reason: str | None = None
+    blocked_by_task_id: str | None = None
