@@ -135,3 +135,19 @@ tests/api/test_sprints_api.py                   HU 68–71
 
 Cierre (`CLOSED` + `closed_at`): historias incompletas → backlog (`sprint_id` NULL) o sprint planificado; sprint cerrado inmutable para asignaciones.
 
+## EP-08 — Tablero Kanban (HU_DN_05_72 … HU_DN_05_76)
+
+```
+app/modules/kanban/
+  domain/          entities (KanbanBoard, KanbanColumn, KanbanCard, KanbanWipLimit), messages, ports
+  application/     dtos (KanbanBoardResponse, UpdateWipLimitCommand, UpdateTaskBlockCommand), use_cases
+  infrastructure/  models (KanbanColumnSettingsModel), repositories (SqlAlchemyKanbanRepository)
+app/orchestration/kanban_routes.py
+  GET    /projects/{id}/kanban                          (HU_DN_05_72, HU_DN_05_75, HU_DN_05_76)
+  PUT    /projects/{id}/kanban/columns/{colId}/wip      (HU_DN_05_74)
+  PATCH  /projects/{id}/tasks/{taskId}/block            (HU_DN_05_76)
+migrations/versions/014_ep08_kanban_wip_and_blocks.py
+tests/unit/test_kanban_rules.py
+tests/api/test_kanban_api.py
+```
+

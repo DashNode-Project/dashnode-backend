@@ -221,4 +221,46 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 
 **Verificación:** `tests/api/test_sprints_api.py` (burndown, close, history); frontend `npm run check` (285 tests Vitest, `fileParallelism: false` por estabilidad de mocks compartidos).
 
+---
+
+## EP-08 — Tablero Kanban (HU_DN_05_72 … HU_DN_05_76)
+
+**Fecha de validación:** 2026-10-28  
+**Ramas:** `feature/ep-08-kanban-kan` (ambos repositorios)  
+**Directorio intocable:** `demo/` (preservado sin modificaciones)
+
+### Contrato de Integración y Endpoints
+
+| Método | Ruta | Rol | Propósito | Códigos / Mensajes |
+|---|---|---|---|---|
+| `GET` | `/api/v1/projects/{project_id}/kanban` | Auth (Admin, Gerente, Dev) | Obtener tablero del sprint activo con 6 columnas estándar y tareas | 200 OK (`KanbanBoardResponse`); vacío si no hay sprint: `'No hay ningún sprint activo en este proyecto.'` |
+| `PUT` | `/api/v1/projects/{project_id}/kanban/columns/{column_id}/wip` | Admin, Gerente | Configurar o reiniciar límite WIP por columna | 200 OK: `'Límite WIP actualizado correctamente.'`; 403 Forbidden para Dev; 400/422 límite < 1 |
+| `PATCH` | `/api/v1/projects/{project_id}/tasks/{task_id}/status` | Auth (Dev sus tareas, Admin/Gerente) | Mover tarjeta entre columnas / cambiar estado de tarea | 200 OK: `'Estado de la tarea actualizado.'`; 403 Dev ajena: `'Solo puede cambiar el estado de sus propias tareas.'`; 400 Corrección manual: `'El estado Corrección solo cambia al reportar o resolver un fix.'` |
+| `PATCH` | `/api/v1/projects/{project_id}/tasks/{task_id}/block` | Auth (Admin, Gerente, Dev) | Marcar o resolver impedimento o dependencia predecesora | 200 OK: `'Estado de bloqueo actualizado.'` |
+
+### Matriz de Trazabilidad y Verificación E2E
+
+| Historia de Usuario | Frontend | Backend | Reglas y Criterios Verificados |
+|---|---|---|---|
+| **HU_DN_05_72** | `ProjectKanbanTab.tsx`, `KanbanCard.tsx` | `GetKanbanBoardUseCase`, `GET /projects/{id}/kanban` | 6 columnas estándar (`TODO`, `IN_PROGRESS`, `CODE_REVIEW`, `TESTING`, `CORRECTION`, `DONE`). Tarjeta con título, tipo, avatar, HU padre y horas trabajadas vs estimadas con barra de progreso. Desarrollador solo ve sus tareas asignadas; Admin/Gerente ven todas. Mensaje si no hay sprint activo: `'No hay ningún sprint activo en este proyecto.'`. Fallo técnico: `'No fue posible cargar la información. Intente nuevamente.'`. |
+| **HU_DN_05_73** | Drag & drop HTML5, selector "Mover a...", rollback visual | `ChangeStoryTaskStatusUseCase`, `PATCH /projects/{id}/tasks/{id}/status` | Arrastre y menú "Mover a...". Desarrollador restringido a sus tareas (`'Solo puede cambiar el estado de sus propias tareas.'`). Prohibición manual a/desde `CORRECTION` (`'El estado Corrección solo cambia al reportar o resolver un fix.'`). Éxito: `'Estado de la tarea actualizado.'`. Rollback visual automático ante rechazo de la API. |
+| **HU_DN_05_74** | Cabecera de columna, badge de advertencia, `WipLimitModal.tsx` | `UpdateColumnWipLimitUseCase`, `PUT /projects/{id}/kanban/columns/{col}/wip` | Configuración de entero positivo o "Sin límite" (Admin/Gerente). Advertencia soft-limit en cabecera: `'Límite WIP superado ([Actual]/[Límite])'` en color ámbar sin bloquear movimiento. Éxito: `'Límite WIP actualizado correctamente.'`. Error: `'No fue posible completar la operación. Intente nuevamente.'`. |
+| **HU_DN_05_75** | `KanbanFilterBar.tsx` | Filtrado dinámico en memoria de tarjetas | Filtros combinables: texto libre, selector de responsable, selector de historia del sprint, selector de tipo de tarea. Si no hay coincidencias: `'No se encontraron tarjetas con los filtros aplicados.'` con botón para restablecer filtros. |
+| **HU_DN_05_76** | Badge de bloqueo en esquina, `TaskBlockModal.tsx` | `UpdateTaskBlockUseCase`, `PATCH /projects/{id}/tasks/{id}/block`, columnas `is_blocked` y `blocked_by_task_id` | Insignia con candado rojo en esquina de la tarjeta ante impedimento o tarea predecesora incompleta. Detalle y modal al hacer hover/clic. Reporte o resolución de impedimento con mensaje `'Estado de bloqueo actualizado.'`. |
+
+### Resumen de Quality Gates
+
+| Repositorio | Verificación | Resultado | Estado |
+|---|---|---|---|
+| Backend | `pytest tests/unit tests/application tests/api` | 324 pruebas pasadas (0 fallos) | APROBADO |
+| Backend | `ruff check .` | 0 errores | APROBADO |
+| Backend | `ruff format --check .` | 253 archivos formateados | APROBADO |
+| Backend | `lint-imports` | 3 contratos cumplidos (BR-1, BR-2, BR-4) | APROBADO |
+| Frontend | `npm run typecheck` | 0 errores TypeScript | APROBADO |
+| Frontend | `npm run lint` | 0 errores / 0 advertencias ESLint | APROBADO |
+| Frontend | `npm run format:check` | 100% código formateado con Prettier | APROBADO |
+| Frontend | `npm run test:coverage` | 310 pruebas pasadas en 40 suites (cobertura funciones: 79.61% > 78%) | APROBADO |
+| Frontend | `scan-secrets.mjs` | 0 secretos en 188 archivos inspeccionados | APROBADO |
+
+
 
