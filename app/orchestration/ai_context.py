@@ -9,6 +9,7 @@ from app.modules.documentation.infrastructure.models import DocumentationEntryMo
 from app.modules.projects.infrastructure.models import ProjectModel
 from app.modules.projects.infrastructure.repositories import SqlAlchemyProjectRepository
 from app.modules.sprints.infrastructure.models import SprintModel
+from app.orchestration.ai_context_metrics import metrics_line, project_metrics_summary
 from app.orchestration.backlog_adapters import SqlAlchemyProjectLookup
 
 
@@ -20,21 +21,26 @@ class SqlAlchemyProjectContextBuilder:
     def build_context(
         self, project_id: str | None, user_id: str, user_role: str
     ) -> ProjectAiContext:
+        workspace = self._workspace_summary(user_id, user_role)
         if not project_id:
             return ProjectAiContext(
                 None,
                 None,
                 None,
                 (),
-                workspace_summary=self._workspace_summary(user_id, user_role),
+                workspace_summary=workspace,
+                project_metrics_summary=None,
             )
-        workspace = self._workspace_summary(user_id, user_role)
         if user_role != "admin" and not self._projects.is_member(project_id, user_id):
-            return ProjectAiContext(None, None, None, (), workspace_summary=workspace)
+            return ProjectAiContext(
+                None, None, None, (), workspace_summary=workspace, project_metrics_summary=None
+            )
 
         project = self._session.get(ProjectModel, project_id)
         if project is None:
-            return ProjectAiContext(None, None, None, (), workspace_summary=workspace)
+            return ProjectAiContext(
+                None, None, None, (), workspace_summary=workspace, project_metrics_summary=None
+            )
 
         sprint = self._session.scalar(
             select(SprintModel)
@@ -62,7 +68,8 @@ class SqlAlchemyProjectContextBuilder:
             project_description=project.description or None,
             active_sprint_name=sprint.name if sprint else None,
             approved_doc_snippets=tuple(snippets[:8]),
-            workspace_summary=self._workspace_summary(user_id, user_role),
+            workspace_summary=workspace,
+            project_metrics_summary=project_metrics_summary(self._session, project_id),
         )
 
     def _workspace_summary(self, user_id: str, user_role: str) -> str:
@@ -70,7 +77,10 @@ class SqlAlchemyProjectContextBuilder:
         projects = repo.list_visible_for_user(user_id, role=user_role)
         if not projects:
             return "El usuario no tiene proyectos visibles en DashNode."
-        preview = ", ".join(project.name for project in projects[:15])
-        extra = len(projects) - 15
-        suffix = f" (y {extra} más)" if extra > 0 else ""
-        return f"Proyectos accesibles para el usuario: {len(projects)}. Nombres: {preview}{suffix}."
+        lines = [f"Proyectos accesibles para el usuario: {len(projects)}."]
+        for project in projects[:12]:
+            lines.append(f"- {project.name}: {metrics_line(self._session, project.id)}.")
+        extra = len(projects) - 12
+        if extra > 0:
+            lines.append(f"(Hay {extra} proyectos adicionales no detallados aquí.)")
+        return "\n".join(lines)

@@ -148,11 +148,7 @@ class ProcessVoiceUseCase:
                 fields={"service": exc.service},
             ) from exc
         except WhisperProcessingError as exc:
-            raise AppError(
-                "AI_PROCESSING_ERROR",
-                msg.AI_PROCESSING_ERROR,
-                ErrorKind.UNAVAILABLE,
-            ) from exc
+            raise _whisper_app_error(exc) from exc
 
         recognized = _validated_recognized_text(recognized)
 
@@ -166,10 +162,19 @@ class ProcessVoiceUseCase:
             cmd.user_role,
         )
 
+
+def _whisper_app_error(exc: WhisperProcessingError) -> AppError:
+    if str(exc) in {"no_speech", "invalid_payload"}:
+        return AppError("VOICE_NOT_UNDERSTOOD", msg.VOICE_NOT_UNDERSTOOD, ErrorKind.VALIDATION)
+    return AppError("AI_PROCESSING_ERROR", msg.AI_PROCESSING_ERROR, ErrorKind.UNAVAILABLE)
+
+
 def _validated_recognized_text(recognized: str) -> str:
     recognized = recognized.strip()
-    if not recognized or is_low_quality_transcription(recognized):
+    if not recognized:
         raise AppError("EMPTY_AUDIO", msg.EMPTY_AUDIO, ErrorKind.VALIDATION)
+    if is_low_quality_transcription(recognized):
+        raise AppError("VOICE_NOT_UNDERSTOOD", msg.VOICE_NOT_UNDERSTOOD, ErrorKind.VALIDATION)
     return recognized
 
 
@@ -209,11 +214,7 @@ class TranscribeVoiceUseCase:
                 fields={"service": exc.service},
             ) from exc
         except WhisperProcessingError as exc:
-            raise AppError(
-                "AI_PROCESSING_ERROR",
-                msg.AI_PROCESSING_ERROR,
-                ErrorKind.UNAVAILABLE,
-            ) from exc
+            raise _whisper_app_error(exc) from exc
         return _validated_recognized_text(recognized)
 
 

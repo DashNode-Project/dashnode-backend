@@ -17,10 +17,12 @@ def test_build_assistant_prompt_includes_project_context() -> None:
         project_description="Plataforma",
         active_sprint_name="Sprint 6",
         approved_doc_snippets=("Doc: fragmento",),
+        project_metrics_summary="Resumen numérico: 3 HUs, 5 tareas, 2 miembros.",
     )
     prompt = build_assistant_prompt(ctx, "Estado del sprint")
     assert "DashNode" in prompt
     assert "Sprint 6" in prompt
+    assert "3 HUs" in prompt
     assert "Estado del sprint" in prompt
 
 

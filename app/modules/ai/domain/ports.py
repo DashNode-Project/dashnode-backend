@@ -11,6 +11,7 @@ class ProjectAiContext:
     active_sprint_name: str | None
     approved_doc_snippets: tuple[str, ...]
     workspace_summary: str | None = None
+    project_metrics_summary: str | None = None
 
 
 class TranscriptionPort(Protocol):

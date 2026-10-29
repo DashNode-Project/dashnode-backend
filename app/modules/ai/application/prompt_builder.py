@@ -26,14 +26,19 @@ def build_assistant_prompt(context: ProjectAiContext, user_query: str) -> str:
             parts.append(f"Descripción: {sanitize_fragment(context.project_description)}")
         if context.active_sprint_name:
             parts.append(f"Sprint Activo: {sanitize_fragment(context.active_sprint_name)}")
+        if context.project_metrics_summary:
+            parts.append("Métricas y detalle del proyecto (datos de DashNode):")
+            parts.append(sanitize_fragment(context.project_metrics_summary))
         if context.approved_doc_snippets:
             parts.append("Documentos Aprobados Relevantes:")
             for snippet in context.approved_doc_snippets[:5]:
                 parts.append(f"- {sanitize_fragment(snippet)}")
     parts.append(f"Consulta del Usuario: {safe_query}")
     parts.append(
-        "Responde en español en 1 a 3 oraciones cortas, claras y pertinentes. "
-        "Usa el contexto cuando aplique. "
+        "Responde en español en 1 a 4 oraciones cortas, claras y pertinentes. "
+        "Usa únicamente los números, fechas y listados del contexto para preguntas sobre "
+        "proyectos, HUs, tareas, miembros o sprints. "
+        "Si el dato no está en el contexto, dilo explícitamente sin inventar cifras. "
         "No inventes credenciales ni datos de otros proyectos."
     )
     return "\n".join(parts)
