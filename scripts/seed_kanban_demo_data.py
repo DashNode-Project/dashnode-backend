@@ -21,6 +21,9 @@ import sys
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import TypedDict
+
+from sqlalchemy.orm import Session
 
 # Add backend directory to sys.path
 backend_dir = Path(__file__).resolve().parent.parent
@@ -41,7 +44,26 @@ now = datetime.now(UTC)
 today = now.date()
 
 
-def get_or_create_user(db, email: str, role: str, name: str, password_plain: str) -> UserModel:
+class TaskSeedItem(TypedDict):
+    name: str
+    story_id: str
+    task_type: str
+    status: str
+    assignee_id: str
+    estimated_hours: Decimal
+    logged_hours: Decimal
+    is_blocked: bool
+    blocked_reason: str | None
+    blocked_by: str | None
+
+
+def get_or_create_user(
+    db: Session,
+    email: str,
+    role: str,
+    name: str,
+    password_plain: str,
+) -> UserModel:
     user = db.query(UserModel).filter_by(email=email).first()
     if user is None:
         user = UserModel(
@@ -67,7 +89,12 @@ def get_or_create_user(db, email: str, role: str, name: str, password_plain: str
     return user
 
 
-def ensure_member(db, project_id: str, user_id: str, role: str = "member"):
+def ensure_member(
+    db: Session,
+    project_id: str,
+    user_id: str,
+    role: str = "member",
+) -> None:
     member = db.query(ProjectMemberModel).filter_by(project_id=project_id, user_id=user_id).first()
     if member is None:
         db.add(ProjectMemberModel(project_id=project_id, user_id=user_id, role=role, joined_at=now))
@@ -75,7 +102,7 @@ def ensure_member(db, project_id: str, user_id: str, role: str = "member"):
         print(f"    [+] Miembro agregado: {user_id} ({role})")
 
 
-def seed_kanban_data():
+def seed_kanban_data() -> int:
     db = SessionLocal()
     try:
         print("\n" + "=" * 70)
@@ -239,7 +266,7 @@ def seed_kanban_data():
         existing_tasks = db.query(StoryTaskModel).filter_by(project_id=project.id).all()
         existing_task_map = {t.name: t for t in existing_tasks}
 
-        tasks_to_create = [
+        tasks_to_create: list[TaskSeedItem] = [
             # Tareas en TODO
             {
                 "name": "Diseñar componentes visuales de tarjetas Kanban",
@@ -410,8 +437,9 @@ def seed_kanban_data():
 
         # Segundo pase: configurar predecesoras
         for item in tasks_to_create:
-            if item.get("blocked_by"):
-                pred_task = created_tasks_dict.get(item["blocked_by"])
+            blocked_by_name = item["blocked_by"]
+            if blocked_by_name:
+                pred_task = created_tasks_dict.get(blocked_by_name)
                 if pred_task:
                     target_task = created_tasks_dict[item["name"]]
                     target_task.blocked_by_task_id = pred_task.id
