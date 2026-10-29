@@ -1,6 +1,6 @@
 """Documentation HTTP routes (EP-09)."""
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.modules.auth.infrastructure.models import UserModel
@@ -11,6 +11,7 @@ from app.modules.documentation.application.dtos import (
     DocumentationOperationResponse,
     RejectDocumentationCommand,
     ResubmitDocumentationCommand,
+    TogglePinCommand,
     UpdateDocumentationCommand,
     UpdateVisibilityCommand,
 )
@@ -23,6 +24,7 @@ from app.modules.documentation.application.use_cases import (
     ListPendingDocumentationEntriesUseCase,
     RejectDocumentationEntryUseCase,
     ResubmitDocumentationEntryUseCase,
+    ToggleDocumentationPinUseCase,
     ToggleDocumentationVisibilityUseCase,
     UpdateDocumentationEntryUseCase,
 )
@@ -119,6 +121,10 @@ def list_documentation_entries(
 
 @router.get(
     "/projects/{project_id}/documentation/pending-approvals",
+    response_model=DocumentationListResponse,
+)
+@router.get(
+    "/projects/{project_id}/documentation/pending",
     response_model=DocumentationListResponse,
 )
 def list_pending_documentation_entries(
@@ -292,6 +298,35 @@ def resubmit_documentation_entry(
     use_case = ResubmitDocumentationEntryUseCase(
         repo=repo,
         uow=SqlAlchemyUnitOfWork(db),
+        clock=_clock,
+        projects=projects,
+        users=users,
+    )
+    return use_case.execute(project_id, entry_id, cmd, actor)
+
+
+@router.patch(
+    "/projects/{project_id}/documentation/{entry_id}/pin",
+    response_model=DocumentationOperationResponse,
+)
+@router.post(
+    "/projects/{project_id}/documentation/{entry_id}/pin",
+    response_model=DocumentationOperationResponse,
+)
+def toggle_documentation_pin(
+    project_id: str,
+    entry_id: str,
+    cmd: TogglePinCommand | None = Body(default=None),
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    repo: SqlAlchemyDocumentationRepository = Depends(_doc_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+) -> DocumentationOperationResponse:
+    use_case = ToggleDocumentationPinUseCase(
+        repo=repo,
+        uow=SqlAlchemyUnitOfWork(db),
+        id_gen=_id_gen,
         clock=_clock,
         projects=projects,
         users=users,

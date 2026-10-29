@@ -30,8 +30,14 @@ def register_session_authenticator(factory: SessionAuthenticatorFactory) -> None
 
 
 def get_session_token(request: Request) -> str | None:
-    """Opaque session token from the HttpOnly cookie (never from headers or the body)."""
-    return request.cookies.get(settings.SESSION_COOKIE_NAME)
+    """Session token from HttpOnly cookie or Authorization Bearer header."""
+    cookie_token = request.cookies.get(settings.SESSION_COOKIE_NAME)
+    if cookie_token:
+        return cookie_token
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header[7:].strip()
+    return None
 
 
 def get_current_session(

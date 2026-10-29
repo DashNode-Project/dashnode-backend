@@ -45,6 +45,8 @@ class SqlAlchemyDocumentationRepository(DocumentationRepository):
             else str(entry.approval_status)
         )
 
+        assert entry.created_at is not None
+        assert entry.updated_at is not None
         if model is None:
             model = DocumentationEntryModel(
                 id=entry.id,

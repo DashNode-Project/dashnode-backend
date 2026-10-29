@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from urllib.parse import urlparse
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 from app.modules.documentation.domain import messages
 
@@ -82,6 +82,15 @@ class DocumentationEntryDTO(BaseModel):
     can_edit: bool = False
     can_delete: bool = False
     can_approve: bool = False
+    can_pin: bool = False
+
+    @computed_field
+    def status(self) -> str:
+        return self.approval_status
+
+
+class TogglePinCommand(BaseModel):
+    is_pinned: bool | None = None
 
 
 class UpdateVisibilityCommand(BaseModel):
@@ -105,7 +114,27 @@ class DocumentationListResponse(BaseModel):
     entries: list[DocumentationEntryDTO]
     message: str | None = None
 
+    @computed_field
+    def pending_entries(self) -> list[DocumentationEntryDTO]:
+        return self.entries
+
 
 class DocumentationOperationResponse(BaseModel):
     message: str
     entry: DocumentationEntryDTO | None = None
+
+    @computed_field
+    def status(self) -> str | None:
+        return self.entry.approval_status if self.entry else None
+
+    @computed_field
+    def id(self) -> str | None:
+        return self.entry.id if self.entry else None
+
+    @computed_field
+    def is_pinned(self) -> bool | None:
+        return self.entry.is_pinned if self.entry else None
+
+    @computed_field
+    def is_visible_to_devs(self) -> bool | None:
+        return self.entry.is_visible_to_devs if self.entry else None

@@ -142,3 +142,22 @@ def test_documentation_visibility_and_approval_workflow_rules() -> None:
     entry.approval_status = DocumentationApprovalStatus.REJECTED
     assert entry.can_resubmit("dev-1") is True  # Author can resubmit rejected entry
     assert entry.can_resubmit("dev-2") is False  # Non-author cannot resubmit
+
+
+def test_documentation_can_pin_rules() -> None:
+    entry = _sample_entry()
+
+    # Admin and Manager can pin/unpin (HU_DN_06_87, HU_DN_06_89)
+    assert entry.can_pin("manager") is True
+    assert entry.can_pin("admin") is True
+    assert entry.can_pin("gerente") is True
+    assert entry.can_pin("administrador") is True
+
+    # Developers cannot pin/unpin
+    assert entry.can_pin("developer") is False
+    assert entry.can_pin("viewer") is False
+
+    # Deleted entries cannot be pinned
+    entry.is_deleted = True
+    assert entry.can_pin("manager") is False
+    assert entry.can_pin("admin") is False

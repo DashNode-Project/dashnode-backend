@@ -27,5 +27,10 @@ ENTRY_RESUBMITTED = "Entrada reenviada a aprobación."
 ONLY_REJECTED_CAN_BE_RESUBMITTED = "Solo se pueden reenviar entradas rechazadas."
 ONLY_PENDING_CAN_BE_PROCESSED = "Solo se pueden procesar entradas pendientes de aprobación."
 
+ENTRY_PINNED = "Entrada anclada correctamente."
+ENTRY_UNPINNED = "Entrada desanclada correctamente."
+ENTRY_PINNED_SHORT = "Entrada anclada."
+ENTRY_UNPINNED_SHORT = "Entrada desanclada."
+
 LOAD_ERROR = "No fue posible cargar la información. Intente nuevamente."
 GENERIC_ERROR = "No fue posible completar la operación. Intente nuevamente."

@@ -7,7 +7,7 @@ Revises: 015_ep09_documentation_entries
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
+from alembic import context, op
 
 revision: str = "016_ep09_doc_approvals"
 down_revision: str | None = "015_ep09_documentation_entries"
@@ -16,6 +16,22 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    if context.is_offline_mode():
+        op.add_column(
+            "documentation_entries",
+            sa.Column(
+                "is_visible_to_devs",
+                sa.Boolean(),
+                nullable=False,
+                server_default=sa.text("true"),
+            ),
+        )
+        op.add_column(
+            "documentation_entries",
+            sa.Column("rejection_reason", sa.Text(), nullable=True),
+        )
+        return
+
     # Check if columns already exist (in case partial transaction)
     conn = op.get_bind()
     insp = sa.inspect(conn)

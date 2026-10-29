@@ -85,3 +85,8 @@ class DocumentationEntry:
             self.author_id == user_id
             and self.approval_status == DocumentationApprovalStatus.REJECTED
         )
+
+    def can_pin(self, user_role: str) -> bool:
+        if self.is_deleted:
+            return False
+        return str(user_role).lower() in ("admin", "manager", "administrador", "gerente")

@@ -548,3 +548,101 @@ def test_hu_86_resubmit_rejected_entry(client: TestClient, db_engine: Engine) ->
     assert res_ok.json()["message"] == messages.ENTRY_RESUBMITTED
     assert res_ok.json()["entry"]["approval_status"] == "PENDING"
     assert res_ok.json()["entry"]["rejection_reason"] == "Corregir formato."
+
+
+def test_hu_87_89_toggle_pin_entry_success_and_ordering(
+    client: TestClient, db_engine: Engine
+) -> None:
+    project_id, _, _, _ = _setup_project_with_members(client, db_engine)
+
+    # Manager creates two entries: older entry_a and newer entry_b
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_a = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={"title": "Entrada Primera A", "category": "General", "content": "Contenido A"},
+    )
+    entry_a_id = res_a.json()["entry"]["id"]
+
+    res_b = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={"title": "Entrada Segunda B", "category": "General", "content": "Contenido B"},
+    )
+    entry_b_id = res_b.json()["entry"]["id"]
+
+    # Before pinning: newest entry_b is first
+    res_list_1 = client.get(f"/api/v1/projects/{project_id}/documentation")
+    entries_1 = res_list_1.json()["entries"]
+    assert entries_1[0]["id"] == entry_b_id
+    assert entries_1[1]["id"] == entry_a_id
+    assert entries_1[0]["is_pinned"] is False
+    assert entries_1[1]["is_pinned"] is False
+
+    # 1. Manager pins entry_a (HU_DN_06_87, HU_DN_06_89) via PATCH
+    res_pin = client.patch(f"/api/v1/projects/{project_id}/documentation/{entry_a_id}/pin")
+    assert res_pin.status_code == 200
+    assert res_pin.json()["message"] == messages.ENTRY_PINNED
+    assert res_pin.json()["entry"]["is_pinned"] is True
+    assert res_pin.json()["entry"]["can_pin"] is True
+
+    # Validation: entry_a now appears at the top of the list!
+    res_list_2 = client.get(f"/api/v1/projects/{project_id}/documentation")
+    entries_2 = res_list_2.json()["entries"]
+    assert entries_2[0]["id"] == entry_a_id
+    assert entries_2[0]["is_pinned"] is True
+    assert entries_2[1]["id"] == entry_b_id
+
+    # 2. Manager unpins entry_a via POST (alternating action)
+    res_unpin = client.post(f"/api/v1/projects/{project_id}/documentation/{entry_a_id}/pin")
+    assert res_unpin.status_code == 200
+    assert res_unpin.json()["message"] == messages.ENTRY_UNPINNED
+    assert res_unpin.json()["entry"]["is_pinned"] is False
+
+    # Validation: entry_a returns to its normal position
+    res_list_3 = client.get(f"/api/v1/projects/{project_id}/documentation")
+    entries_3 = res_list_3.json()["entries"]
+    assert entries_3[0]["id"] == entry_b_id
+    assert entries_3[1]["id"] == entry_a_id
+
+
+def test_hu_87_89_toggle_pin_restrictions_and_errors(client: TestClient, db_engine: Engine) -> None:
+    project_id, _, _, _ = _setup_project_with_members(client, db_engine)
+
+    # Manager creates an entry
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_c = client.post(
+        f"/api/v1/projects/{project_id}/documentation",
+        json={"title": "Entrada de prueba", "category": "General", "content": "Contenido"},
+    )
+    entry_id = res_c.json()["entry"]["id"]
+
+    # Developer cannot pin -> 403 Forbidden
+    _switch_user(client, "dev1-doc@dashnode.io")
+    res_dev_pin = client.patch(f"/api/v1/projects/{project_id}/documentation/{entry_id}/pin")
+    assert res_dev_pin.status_code == 403
+
+    # Admin CAN pin and unpin with explicit payload (HU_DN_06_87, HU_DN_06_89)
+    create_user(db_engine, email="admin-doc@dashnode.io", role="admin")
+    _switch_user(client, "admin-doc@dashnode.io")
+    res_admin_pin = client.patch(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}/pin",
+        json={"is_pinned": True},
+    )
+    assert res_admin_pin.status_code == 200
+    assert res_admin_pin.json()["entry"]["is_pinned"] is True
+    assert res_admin_pin.json()["message"] == messages.ENTRY_PINNED
+
+    res_admin_unpin = client.patch(
+        f"/api/v1/projects/{project_id}/documentation/{entry_id}/pin",
+        json={"is_pinned": False},
+    )
+    assert res_admin_unpin.status_code == 200
+    assert res_admin_unpin.json()["entry"]["is_pinned"] is False
+    assert res_admin_unpin.json()["message"] == messages.ENTRY_UNPINNED
+
+    # Non-existent entry -> 404 Not Found
+    _switch_user(client, "mgr-doc@dashnode.io")
+    res_404 = client.patch(
+        f"/api/v1/projects/{project_id}/documentation/00000000-0000-0000-0000-000000000000/pin"
+    )
+    assert res_404.status_code == 404
+    assert res_404.json()["error"]["message"] == messages.ENTRY_NOT_FOUND

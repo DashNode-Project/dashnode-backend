@@ -9,6 +9,7 @@ from app.modules.documentation.application.dtos import (
     DocumentationOperationResponse,
     RejectDocumentationCommand,
     ResubmitDocumentationCommand,
+    TogglePinCommand,
     UpdateDocumentationCommand,
     UpdateVisibilityCommand,
     is_valid_url,
@@ -57,12 +58,29 @@ def _check_project_access(
 
 
 def _validate_documentation_input(
-    cmd: CreateDocumentationCommand | UpdateDocumentationCommand,
+    cmd: CreateDocumentationCommand | UpdateDocumentationCommand | ResubmitDocumentationCommand,
 ) -> None:
     if not cmd.title or not cmd.title.strip():
         raise AppError("TITLE_REQUIRED", messages.TITLE_REQUIRED, ErrorKind.VALIDATION)
     if len(cmd.title.strip()) > 100:
         raise AppError("TITLE_TOO_LONG", messages.TITLE_TOO_LONG, ErrorKind.VALIDATION)
+
+    category_aliases = {
+        "tech": "Técnica",
+        "tecnica": "Técnica",
+        "técnica": "Técnica",
+        "technical": "Técnica",
+        "funcional": "Funcional",
+        "functional": "Funcional",
+        "reunion": "Reunión",
+        "reunión": "Reunión",
+        "meeting": "Reunión",
+        "general": "General",
+        "prompt": "Prompt",
+    }
+    if cmd.category:
+        cleaned_cat = cmd.category.strip()
+        cmd.category = category_aliases.get(cleaned_cat.lower(), cleaned_cat)
 
     valid_cats = {c.value for c in DocumentationCategory}
     if not cmd.category or cmd.category.strip() not in valid_cats:
@@ -107,6 +125,7 @@ def _entry_to_dto(
         can_edit=entry.can_edit(actor.id, actor.role),
         can_delete=entry.can_delete(actor.role),
         can_approve=entry.can_approve(actor.id, actor.role),
+        can_pin=entry.can_pin(actor.role),
     )
 
 
@@ -340,7 +359,12 @@ class ListDocumentationEntriesUseCase:
             ]
 
         # Sort: pinned first (0), then newest created_at first
-        visible.sort(key=lambda e: (0 if e.is_pinned else 1, -e.created_at.timestamp()))
+        visible.sort(
+            key=lambda e: (
+                0 if e.is_pinned else 1,
+                -(e.created_at.timestamp() if e.created_at else 0.0),
+            )
+        )
 
         dtos = [_entry_to_dto(e, actor, self._users) for e in visible]
         msg = messages.NO_ENTRIES if not dtos else None
@@ -616,6 +640,12 @@ class ResubmitDocumentationEntryUseCase:
                 ErrorKind.VALIDATION,
             )
 
+        if not cmd.category and entry.category:
+            cmd.category = entry.category.value
+        if not cmd.content and not cmd.external_url:
+            cmd.content = entry.content
+            cmd.external_url = entry.external_url
+
         _validate_documentation_input(cmd)
 
         now = self._clock.now()
@@ -634,5 +664,66 @@ class ResubmitDocumentationEntryUseCase:
 
         return DocumentationOperationResponse(
             message=messages.ENTRY_RESUBMITTED,
+            entry=_entry_to_dto(entry, actor, self._users),
+        )
+
+
+class ToggleDocumentationPinUseCase:
+    def __init__(
+        self,
+        repo: DocumentationRepository,
+        uow: UnitOfWork,
+        id_gen: IdGenerator,
+        clock: Clock,
+        projects: ProjectLookupPort,
+        users: UserLookupPort,
+    ) -> None:
+        self._repo = repo
+        self._uow = uow
+        self._id_gen = id_gen
+        self._clock = clock
+        self._projects = projects
+        self._users = users
+
+    def execute(
+        self,
+        project_id: str,
+        entry_id: str,
+        cmd: TogglePinCommand | None,
+        actor: CurrentUser,
+    ) -> DocumentationOperationResponse:
+        _check_project_access(project_id, actor, self._projects)
+        entry = self._repo.get_by_id(entry_id)
+        if entry is None or entry.is_deleted or entry.project_id != project_id:
+            raise AppError("ENTRY_NOT_FOUND", messages.ENTRY_NOT_FOUND, ErrorKind.NOT_FOUND)
+
+        if not entry.can_pin(actor.role):
+            raise AccessDeniedError()
+
+        now = self._clock.now()
+        new_is_pinned = (
+            cmd.is_pinned if (cmd and cmd.is_pinned is not None) else not entry.is_pinned
+        )
+        entry.is_pinned = new_is_pinned
+        entry.updated_at = now
+
+        action = "PIN" if entry.is_pinned else "UNPIN"
+
+        with self._uow:
+            self._repo.save(entry)
+            self._repo.log_audit(
+                audit_id=self._id_gen.generate(),
+                user_id=actor.id,
+                action=action,
+                resource_type="documentation_entry",
+                resource_id=entry.id,
+                when=now,
+            )
+            self._uow.commit()
+
+        msg = messages.ENTRY_PINNED if entry.is_pinned else messages.ENTRY_UNPINNED
+
+        return DocumentationOperationResponse(
+            message=msg,
             entry=_entry_to_dto(entry, actor, self._users),
         )
