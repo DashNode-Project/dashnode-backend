@@ -17,6 +17,7 @@ class ErrorKind(StrEnum):
     NOT_FOUND = "not_found"
     CONFLICT = "conflict"
     RATE_LIMITED = "rate_limited"
+    UNAVAILABLE = "unavailable"
 
 
 class AppError(Exception):

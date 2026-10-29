@@ -74,6 +74,15 @@ class Settings(BaseSettings):
     SEED_DISABLED_EMAIL: str | None = None
     SEED_DISABLED_PASSWORD: SecretStr | None = None
 
+    # --- EP-10 AI assistant (Whisper + Gemini free tier only) --------------------
+    API_TRANSCRIPTION_WHISPER: SecretStr | None = None
+    API_GEMINI: SecretStr | None = None
+    AI_WHISPER_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)
+    AI_GEMINI_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)
+    AI_VOICE_MAX_SECONDS: int = Field(default=60, ge=1, le=120)
+    AI_VOICE_MAX_BYTES: int = Field(default=5_242_880, ge=1024, le=20_971_520)
+    AI_VOICE_MIN_BYTES: int = Field(default=64, ge=1, le=4096)
+
     @model_validator(mode="after")
     def _validate_security_profile(self) -> Self:
         if "*" in self.cors_origins_list:

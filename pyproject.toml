@@ -14,6 +14,7 @@ dependencies = [
     "argon2-cffi>=23.1.0",
     "email-validator>=2.1.1",
     "python-multipart>=0.0.9",
+    "httpx>=0.27.0",
 ]
 
 [build-system]
@@ -82,7 +83,7 @@ forbidden_modules = ["fastapi", "sqlalchemy", "pydantic_settings"]
 [[tool.importlinter.contracts]]
 name = "BR-4: Module isolation"
 type = "independence"
-modules = ["app.modules.auth", "app.modules.projects", "app.modules.tasks", "app.modules.notifications", "app.modules.availability", "app.modules.backlog", "app.modules.kanban", "app.modules.documentation"]
+modules = ["app.modules.auth", "app.modules.projects", "app.modules.tasks", "app.modules.notifications", "app.modules.availability", "app.modules.backlog", "app.modules.kanban", "app.modules.documentation", "app.modules.ai"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
