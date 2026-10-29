@@ -16,6 +16,9 @@ def sanitize_fragment(text: str) -> str:
 def build_assistant_prompt(context: ProjectAiContext, user_query: str) -> str:
     safe_query = sanitize_fragment(user_query.strip())
     parts: list[str] = []
+    if context.workspace_summary:
+        parts.append("Contexto del usuario en DashNode:")
+        parts.append(sanitize_fragment(context.workspace_summary))
     if context.project_name:
         parts.append("Contexto del Proyecto:")
         parts.append(f"Nombre: {sanitize_fragment(context.project_name)}")
@@ -29,8 +32,8 @@ def build_assistant_prompt(context: ProjectAiContext, user_query: str) -> str:
                 parts.append(f"- {sanitize_fragment(snippet)}")
     parts.append(f"Consulta del Usuario: {safe_query}")
     parts.append(
-        "Responde en español, de forma concisa y útil, asistiendo al usuario "
-        "con base en este contexto cuando aplique. "
+        "Responde en español en 1 a 3 oraciones cortas, claras y pertinentes. "
+        "Usa el contexto cuando aplique. "
         "No inventes credenciales ni datos de otros proyectos."
     )
     return "\n".join(parts)

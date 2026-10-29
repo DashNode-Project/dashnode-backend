@@ -10,6 +10,7 @@ class ProjectAiContext:
     project_description: str | None
     active_sprint_name: str | None
     approved_doc_snippets: tuple[str, ...]
+    workspace_summary: str | None = None
 
 
 class TranscriptionPort(Protocol):

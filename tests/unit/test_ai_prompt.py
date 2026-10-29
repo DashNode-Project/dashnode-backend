@@ -25,7 +25,14 @@ def test_build_assistant_prompt_includes_project_context() -> None:
 
 
 def test_build_assistant_prompt_without_project() -> None:
-    ctx = ProjectAiContext(None, None, None, ())
+    ctx = ProjectAiContext(
+        None,
+        None,
+        None,
+        (),
+        workspace_summary="Proyectos accesibles para el usuario: 2.",
+    )
     prompt = build_assistant_prompt(ctx, "Hola")
     assert "Consulta del Usuario: Hola" in prompt
     assert "Contexto del Proyecto" not in prompt
+    assert "Proyectos accesibles" in prompt

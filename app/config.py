@@ -77,11 +77,13 @@ class Settings(BaseSettings):
     # --- EP-10 AI assistant (Whisper + Gemini free tier only) --------------------
     API_TRANSCRIPTION_WHISPER: SecretStr | None = None
     API_GEMINI: SecretStr | None = None
+    API_GEMINI_MODEL: str = "gemini-3.8-flash"
     AI_WHISPER_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)
     AI_GEMINI_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)
     AI_VOICE_MAX_SECONDS: int = Field(default=60, ge=1, le=120)
     AI_VOICE_MAX_BYTES: int = Field(default=5_242_880, ge=1024, le=20_971_520)
     AI_VOICE_MIN_BYTES: int = Field(default=64, ge=1, le=4096)
+    AI_CHAT_RETENTION_HOURS: int = Field(default=24, ge=1, le=168)
 
     @model_validator(mode="after")
     def _validate_security_profile(self) -> Self:

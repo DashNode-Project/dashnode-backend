@@ -11,6 +11,7 @@ from app.modules.ai.application.use_cases import (
     GeminiProcessingError,
     GenerateTextUseCase,
     ProcessVoiceUseCase,
+    TranscribeVoiceUseCase,
 )
 from app.orchestration import ai_routes
 from app.orchestration.ai_context import SqlAlchemyProjectContextBuilder
@@ -75,6 +76,31 @@ def test_text_generate_success(client: TestClient, db_engine: Engine, db_session
     body = response.json()
     assert body["status"] == "RESPONDED"
     assert body["assistant_response"] == "respuesta contextual"
+
+
+def test_voice_transcribe_success(
+    client: TestClient, db_engine: Engine, db_session: Session
+) -> None:
+    login_as(client, db_engine, email="dev3@dashnode.local", role="developer")
+
+    def override_transcribe() -> TranscribeVoiceUseCase:
+        from app.config import settings
+
+        return TranscribeVoiceUseCase(
+            transcription=StubTranscription(),
+            quotas=NoQuota(),
+            min_bytes=settings.AI_VOICE_MIN_BYTES,
+            max_bytes=settings.AI_VOICE_MAX_BYTES,
+            max_seconds=float(settings.AI_VOICE_MAX_SECONDS),
+        )
+
+    app.dependency_overrides[ai_routes._transcribe_use_case] = override_transcribe
+    files = {"audio": ("voice.webm", BytesIO(b"0" * 128), "audio/webm")}
+    data = {"duration_seconds": "2"}
+    response = client.post("/api/v1/ai/voice-transcribe", files=files, data=data)
+    app.dependency_overrides.pop(ai_routes._transcribe_use_case, None)
+    assert response.status_code == 200
+    assert response.json()["recognized_text"] == "consulta de voz"
 
 
 def test_voice_process_partial_gemini_failure(

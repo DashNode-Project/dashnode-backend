@@ -1,8 +1,8 @@
-"""ORM models for AI quota tracking (EP-10)."""
+"""ORM models for AI quota tracking and chat history (EP-10)."""
 
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Date, Integer, String
+from sqlalchemy import Date, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.database import Base
@@ -21,3 +21,14 @@ class AiDailyUsageModel(Base):
     service: Mapped[str] = mapped_column(String(20), primary_key=True)
     usage_date: Mapped[date] = mapped_column(Date(), primary_key=True)
     count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+
+
+class AiChatMessageModel(Base):
+    __tablename__ = "ai_chat_messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    text: Mapped[str] = mapped_column(Text(), nullable=False)
+    input_source: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
