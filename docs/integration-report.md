@@ -317,7 +317,3 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | Frontend | `npm run test:coverage` | 333 pruebas pasadas en 42 suites (statements 81.3%, lines 84.25%) | APROBADO |
 | Frontend | `scan-secrets.mjs` | 0 secretos detectados | APROBADO |
 
-
-
-
-

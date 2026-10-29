@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any, TypedDict
 
 # Add repo root to sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -39,11 +40,31 @@ from tests.support import DEFAULT_PASSWORD, create_user
 SEPARATOR = "=" * 80
 SUB_SEPARATOR = "-" * 80
 
+ResponseBody = dict[str, Any] | list[Any] | str | None
+
+
+class QaStepResult(TypedDict):
+    step: int
+    name: str
+    hu: str
+    passed: bool
+    details: str
+
+
+def parse_response_body(response: requests.Response) -> ResponseBody:
+    content_type = response.headers.get("content-type", "")
+    if content_type.startswith("application/json"):
+        payload: Any = response.json()
+        if isinstance(payload, (dict, list)):
+            return payload
+        return str(payload)
+    return response.text if response.text else None
+
 
 def find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+        return int(s.getsockname()[1])
 
 
 def print_step_header(step_num: int, title: str, hu: str) -> None:
@@ -57,9 +78,9 @@ def print_transaction(
     url: str,
     actor: str,
     token_preview: str,
-    req_body: dict | None,
+    req_body: dict[str, Any] | None,
     res_status: int,
-    res_body: dict | list | None,
+    res_body: ResponseBody,
 ) -> None:
     print(f"--> REQUEST: {method} {url}")
     print(f"    Actor / Rol: {actor}")
@@ -72,14 +93,9 @@ def print_transaction(
     print(f"{SUB_SEPARATOR}")
 
 
-def get_token_headers_and_cookies(token: str) -> tuple[dict, dict]:
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
-    cookies = {
-        "dashnode_session": token,
-    }
+def get_token_headers_and_cookies(token: str) -> tuple[dict[str, str], dict[str, str]]:
+    headers = {"Content-Type": "application/json"}
+    cookies = {"dashnode_session": token}
     return headers, cookies
 
 
@@ -107,7 +123,7 @@ def main() -> int:
     ready = False
     for _ in range(50):
         try:
-            r = requests.get(f"{base_url}/api/v1/auth/session", timeout=1)
+            requests.get(f"{base_url}/api/v1/auth/session", timeout=1)
             ready = True
             break
         except Exception:
@@ -193,7 +209,7 @@ def main() -> int:
     )
     print("  Miembros vinculados al proyecto: Manager, Dev1 (autor), Dev2 (otro)")
 
-    results: list[dict] = []
+    results: list[QaStepResult] = []
     entry_id = None
 
     # =========================================================================
@@ -211,9 +227,7 @@ def main() -> int:
     h_dev, c_dev = get_token_headers_and_cookies(TOKEN_DEV)
     p1_url = f"{base_url}/api/v1/projects/{PROJECT_ID}/documentation"
     r1 = requests.post(p1_url, json=p1_payload, headers=h_dev, cookies=c_dev, timeout=5)
-    r1_body = (
-        r1.json() if r1.headers.get("content-type", "").startswith("application/json") else r1.text
-    )
+    r1_body = parse_response_body(r1)
     print_transaction(
         "POST",
         p1_url,
@@ -250,9 +264,7 @@ def main() -> int:
     p2_payload = {"rejection_reason": "Falta detalle"}
     p2_url = f"{base_url}/api/v1/projects/{PROJECT_ID}/documentation/{entry_id}/reject"
     r2 = requests.post(p2_url, json=p2_payload, headers=headers_mgr, cookies=cookies_mgr, timeout=5)
-    r2_body = (
-        r2.json() if r2.headers.get("content-type", "").startswith("application/json") else r2.text
-    )
+    r2_body = parse_response_body(r2)
     print_transaction(
         "POST",
         p2_url,
@@ -281,9 +293,7 @@ def main() -> int:
     p3_payload = {"title": "Guía de API v2", "content": "Detalles actualizados..."}
     p3_url = f"{base_url}/api/v1/projects/{PROJECT_ID}/documentation/{entry_id}/resubmit"
     r3 = requests.post(p3_url, json=p3_payload, headers=h_dev, cookies=c_dev, timeout=5)
-    r3_body = (
-        r3.json() if r3.headers.get("content-type", "").startswith("application/json") else r3.text
-    )
+    r3_body = parse_response_body(r3)
     print_transaction(
         "POST",
         p3_url,
@@ -322,9 +332,7 @@ def main() -> int:
     print_step_header(4, "Consultar cola de entradas pendientes", "HU_DN_06_83")
     p4_url = f"{base_url}/api/v1/projects/{PROJECT_ID}/documentation/pending"
     r4 = requests.get(p4_url, headers=headers_mgr, cookies=cookies_mgr, timeout=5)
-    r4_body = (
-        r4.json() if r4.headers.get("content-type", "").startswith("application/json") else r4.text
-    )
+    r4_body = parse_response_body(r4)
     print_transaction(
         "GET",
         p4_url,
@@ -335,9 +343,11 @@ def main() -> int:
         r4_body,
     )
 
-    pending_list = []
+    pending_list: list[dict[str, Any]] = []
     if isinstance(r4_body, dict):
-        pending_list = r4_body.get("pending_entries") or r4_body.get("entries") or []
+        raw_pending = r4_body.get("pending_entries") or r4_body.get("entries") or []
+        if isinstance(raw_pending, list):
+            pending_list = [item for item in raw_pending if isinstance(item, dict)]
     contains_entry = any(item.get("id") == entry_id for item in pending_list)
 
     p4_pass = (r4.status_code == 200) and contains_entry
@@ -357,9 +367,7 @@ def main() -> int:
     print_step_header(5, "Aprobar entrada de documentación", "HU_DN_06_84")
     p5_url = f"{base_url}/api/v1/projects/{PROJECT_ID}/documentation/{entry_id}/approve"
     r5 = requests.post(p5_url, headers=headers_mgr, cookies=cookies_mgr, timeout=5)
-    r5_body = (
-        r5.json() if r5.headers.get("content-type", "").startswith("application/json") else r5.text
-    )
+    r5_body = parse_response_body(r5)
     print_transaction(
         "POST",
         p5_url,
@@ -397,9 +405,7 @@ def main() -> int:
     r6 = requests.patch(
         p6_url, json=p6_payload, headers=headers_mgr, cookies=cookies_mgr, timeout=5
     )
-    r6_body = (
-        r6.json() if r6.headers.get("content-type", "").startswith("application/json") else r6.text
-    )
+    r6_body = parse_response_body(r6)
     print_transaction(
         "PATCH",
         p6_url,
@@ -439,9 +445,7 @@ def main() -> int:
     h_dev2, c_dev2 = get_token_headers_and_cookies(TOKEN_DEV2)
     p7_url = f"{base_url}/api/v1/projects/{PROJECT_ID}/documentation/{entry_id}"
     r7 = requests.get(p7_url, headers=h_dev2, cookies=c_dev2, timeout=5)
-    r7_body = (
-        r7.json() if r7.headers.get("content-type", "").startswith("application/json") else r7.text
-    )
+    r7_body = parse_response_body(r7)
     print_transaction(
         "GET",
         p7_url,
@@ -472,9 +476,7 @@ def main() -> int:
     r8 = requests.patch(
         p8_url, json=p8_payload, headers=headers_mgr, cookies=cookies_mgr, timeout=5
     )
-    r8_body = (
-        r8.json() if r8.headers.get("content-type", "").startswith("application/json") else r8.text
-    )
+    r8_body = parse_response_body(r8)
     print_transaction(
         "PATCH",
         p8_url,
@@ -509,9 +511,7 @@ def main() -> int:
     print_step_header(9, "Consultar catálogo de proyecto con entradas ancladas", "HU_DN_06_80")
     p9_url = f"{base_url}/api/v1/projects/{PROJECT_ID}/documentation"
     r9 = requests.get(p9_url, headers=headers_mgr, cookies=cookies_mgr, timeout=5)
-    r9_body = (
-        r9.json() if r9.headers.get("content-type", "").startswith("application/json") else r9.text
-    )
+    r9_body = parse_response_body(r9)
     print_transaction(
         "GET",
         p9_url,
@@ -544,11 +544,7 @@ def main() -> int:
     h_adm, c_adm = get_token_headers_and_cookies(TOKEN_ADMIN)
     p10_url = f"{base_url}/api/v1/projects/{PROJECT_ID}/documentation/{entry_id}"
     r10 = requests.delete(p10_url, headers=h_adm, cookies=c_adm, timeout=5)
-    r10_body = (
-        r10.json()
-        if r10.headers.get("content-type", "").startswith("application/json")
-        else r10.text
-    )
+    r10_body = parse_response_body(r10)
     print_transaction(
         "DELETE",
         p10_url,
@@ -576,11 +572,7 @@ def main() -> int:
     print_step_header(11, "Verificar borrado lógico de entrada", "HU_DN_06_79")
     p11_url = f"{base_url}/api/v1/projects/{PROJECT_ID}/documentation/{entry_id}"
     r11 = requests.get(p11_url, headers=headers_mgr, cookies=cookies_mgr, timeout=5)
-    r11_body = (
-        r11.json()
-        if r11.headers.get("content-type", "").startswith("application/json")
-        else r11.text
-    )
+    r11_body = parse_response_body(r11)
     print_transaction(
         "GET",
         p11_url,
@@ -616,12 +608,12 @@ def main() -> int:
     print("-" * 115)
 
     passed_count = 0
-    for r in results:
-        status_icon = "✅ PASÓ" if r["passed"] else "❌ FALLÓ"
-        if r["passed"]:
+    for result in results:
+        status_icon = "✅ PASÓ" if result["passed"] else "❌ FALLÓ"
+        if result["passed"]:
             passed_count += 1
         print(
-            f"{r['step']:<6} | {r['hu']:<18} | {r['name']:<35} | {status_icon:<10} | {r['details']}"
+            f"{result['step']:<6} | {result['hu']:<18} | {result['name']:<35} | {status_icon:<10} | {result['details']}"
         )
 
     print("-" * 115)

@@ -27,7 +27,9 @@ for _k, _v in _TEST_ENV.items():
     os.environ[_k] = _v
 
 import json
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -55,8 +57,8 @@ def print_transaction(
     path: str,
     user: str,
     status_code: int,
-    req_body: dict | None,
-    res_body: dict | None,
+    req_body: dict[str, Any] | None,
+    res_body: dict[str, Any] | None,
 ) -> None:
     print(f"\n--> REQUEST: {method} {path}")
     print(f"    Actor / Contexto: {user}")
@@ -84,7 +86,7 @@ def main() -> int:
 
     session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-    def override_get_db_session():
+    def override_get_db_session() -> Iterator[Session]:
         db: Session = session_factory()
         try:
             yield db

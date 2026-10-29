@@ -9,6 +9,7 @@ import socket
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict
 
 # Agregar directorio backend al sys.path
 backend_dir = Path(__file__).resolve().parent.parent
@@ -38,7 +39,11 @@ sqlite_path = backend_dir / "data" / "dashnode.db"
 sqlite_path.parent.mkdir(parents=True, exist_ok=True)
 sqlite_url = f"sqlite+pysqlite:///{sqlite_path.resolve()}"
 
+active_db_url: str
 if is_postgres_alive and "--sqlite" not in sys.argv:
+    if db_url is None:
+        print("[ERROR] DATABASE_URL no configurada; use --sqlite o defina .env")
+        sys.exit(1)
     active_db_url = db_url
     db_desc = "PostgreSQL (Docker / Local en puerto 5434)"
 else:
@@ -48,6 +53,7 @@ else:
 os.environ["DATABASE_URL"] = active_db_url
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.modules.auth.infrastructure.models import UserModel
@@ -69,7 +75,21 @@ SEPARATOR = "=" * 80
 SUB_SEPARATOR = "-" * 80
 
 
-def get_engine_and_session() -> tuple[object, sessionmaker[Session], str]:
+class DocSeedItem(TypedDict):
+    title: str
+    category: str
+    objective: str
+    tags: str
+    content: str | None
+    external_url: str | None
+    approval_status: str
+    is_pinned: bool
+    is_visible_to_devs: bool
+    author_id: str
+    created_at: datetime
+
+
+def get_engine_and_session() -> tuple[Engine, sessionmaker[Session], str]:
     """Obtiene el motor y fábrica de sesiones según active_db_url."""
     connect_args = {"check_same_thread": False} if "sqlite" in active_db_url else {}
     engine = create_engine(active_db_url, connect_args=connect_args)
@@ -181,7 +201,7 @@ def seed_demo_data() -> None:
         # 4. Crear entradas realistas de prueba para HU 87 y 89
         print("\n3. Creando Entradas de Documentación para Pruebas Manuales:")
 
-        entries_data = [
+        entries_data: list[DocSeedItem] = [
             {
                 "title": "⭐ [ANCLADA] Estándares de Arquitectura Hexagonal y Convenciones de Código",
                 "category": DocumentationCategory.TECNICA.value,

@@ -177,3 +177,4 @@ migrations/versions/
 tests/unit/test_documentation_rules.py                     (reglas de permisos, can_pin, visibilidad y aprobaciones)
 tests/api/test_documentation_api.py                        (12 tests integrales para endpoints de documentación)
 ```
+
