@@ -82,7 +82,7 @@ forbidden_modules = ["fastapi", "sqlalchemy", "pydantic_settings"]
 [[tool.importlinter.contracts]]
 name = "BR-4: Module isolation"
 type = "independence"
-modules = ["app.modules.auth", "app.modules.projects", "app.modules.tasks", "app.modules.notifications", "app.modules.availability", "app.modules.backlog", "app.modules.kanban"]
+modules = ["app.modules.auth", "app.modules.projects", "app.modules.tasks", "app.modules.notifications", "app.modules.availability", "app.modules.backlog", "app.modules.kanban", "app.modules.documentation"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

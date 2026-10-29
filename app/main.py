@@ -17,6 +17,7 @@ from app.modules.tasks.api.routes import router as tasks_router
 from app.orchestration.auth_container import build_session_authenticator
 from app.orchestration.availability_routes import router as availability_router
 from app.orchestration.backlog_routes import router as backlog_router
+from app.orchestration.documentation_routes import router as documentation_router
 from app.orchestration.error_handling import register_error_handlers
 from app.orchestration.kanban_routes import router as kanban_router
 from app.orchestration.middleware import OriginCheckMiddleware, SecurityHeadersMiddleware
@@ -60,6 +61,7 @@ app.include_router(availability_router, prefix="/api/v1")
 app.include_router(backlog_router, prefix="/api/v1")
 app.include_router(sprint_router, prefix="/api/v1")
 app.include_router(kanban_router, prefix="/api/v1")
+app.include_router(documentation_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["public"])

@@ -322,4 +322,129 @@ Validación local:
   - `ruff format --check .`: 253 archivos formateados correctamente.
   - `import-linter`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
 
+---
 
+## Épica 09: Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_81)
+
+### Análisis del Orquestador (Modo Lote / Épica)
+- **Fecha:** 2026-10-28
+- **Clasificación del lote:** FULL_STACK
+- **Complejidad:** MODERATE (Score: 78/100)
+- **Project Mode:** EXTEND_EXISTING
+- **Ramas:** `feature/ep-09-documentation-doc` (backend y frontend)
+
+### Implementación Backend
+- **Migración de esquema:** `migrations/versions/015_ep09_documentation_entries.py`
+  - Tabla `documentation_entries`: `id` (VARCHAR 36 PK), `project_id` (VARCHAR 36 FK a projects), `author_id` (VARCHAR 36 FK a users), `title` (VARCHAR 100), `category` (VARCHAR 20), `objective` (TEXT NULL), `tags` (TEXT NULL), `content` (TEXT NULL), `external_url` (VARCHAR 2048 NULL), `approval_status` (VARCHAR 20 DEFAULT 'PENDING'), `is_pinned` (BOOLEAN DEFAULT FALSE), `is_deleted` (BOOLEAN DEFAULT FALSE), `created_at` (TIMESTAMP), `updated_at` (TIMESTAMP).
+  - Índices para `(project_id, is_deleted)`, `(author_id)`, `(approval_status)`.
+- **Módulo Documentation:**
+  - `app/modules/documentation/domain/entities.py`: Entidad `DocumentationEntry`, enums `DocumentationCategory`, `DocumentationApprovalStatus`, y métodos de negocio `can_view`, `can_edit`, `can_delete`.
+  - `app/modules/documentation/domain/messages.py`: Mensajes de validación de dominio literales.
+  - `app/modules/documentation/domain/ports.py`: Protocolo `DocumentationRepository`.
+  - `app/modules/documentation/infrastructure/models.py`: Modelo SQLAlchemy `DocumentationEntryModel`.
+  - `app/modules/documentation/infrastructure/repositories.py`: Adaptador `SqlAlchemyDocumentationRepository`.
+  - `app/modules/documentation/application/dtos.py`: `CreateDocumentationCommand`, `UpdateDocumentationCommand`, `DocumentationEntryDTO`, `DocumentationListResponse`, `DocumentationOperationResponse`, y validador `is_valid_url`.
+  - `app/modules/documentation/application/use_cases.py`: Casos de uso `CreateDocumentationEntryUseCase`, `UpdateDocumentationEntryUseCase`, `DeleteDocumentationEntryUseCase`, `ListDocumentationEntriesUseCase`, `GetDocumentationEntryUseCase`.
+- **Rutas de Orquestación:**
+  - `app/orchestration/documentation_routes.py`: Endpoints REST bajo `/api/v1/projects/{project_id}/documentation`.
+  - Registro en `app/main.py`.
+  - Aislamiento modular verificado en `pyproject.toml` (contrato BR-4).
+
+### Pruebas y Quality Gates Backend (Lote 1: HU_DN_06_77 … HU_DN_06_81)
+- **Pruebas unitarias:** `tests/unit/test_documentation_rules.py` (4 tests: permisos de visualización, edición, eliminación y validación de URLs).
+- **Pruebas de API:** `tests/api/test_documentation_api.py` (5 tests cubriendo HU_DN_06_77 a HU_DN_06_81).
+- **Resultados de Calidad:**
+  - `pytest -q`: 343 pruebas pasadas (0 fallos).
+  - `ruff check .`: 0 errores.
+  - `ruff format --check .`: código limpio.
+  - `scan_secrets.py`: 0 secretos detectados.
+
+---
+
+## Épica 09: Aprobación y visibilidad de documentación (HU_DN_06_82 … HU_DN_06_86)
+
+### Análisis del Orquestador (Modo Lote / Épica)
+- **Fecha:** 2026-10-28
+- **Clasificación del lote:** FULL_STACK
+- **Complejidad:** MODERATE (Score: 82/100)
+- **Project Mode:** EXTEND_EXISTING
+- **Ramas:** `feature/ep-09-documentation-doc` (backend y frontend)
+
+### Implementación Backend
+- **Migración de esquema:** `migrations/versions/016_ep09_doc_approvals.py`
+  - Añade columnas a `documentation_entries`:
+    - `is_visible_to_devs` (BOOLEAN NOT NULL DEFAULT TRUE, server_default='true')
+    - `rejection_reason` (TEXT NULL)
+- **Módulo Documentation:**
+  - `domain/entities.py`: Atributos `is_visible_to_devs`, `rejection_reason`; métodos de autorización `can_manage_visibility`, `can_approve` (impide auto-aprobación RN-DOC-01), `can_reject`, `can_resubmit`.
+  - `domain/messages.py`: Literales `VISIBILITY_UPDATED`, `VISIBILITY_APPROVED_ONLY`, `NO_PENDING_ENTRIES`, `CANNOT_APPROVE_OWN_ENTRY`, `ENTRY_APPROVED`, `ENTRY_REJECTED`, `ENTRY_RESUBMITTED`, `ONLY_REJECTED_CAN_BE_RESUBMITTED`.
+  - `domain/ports.py`: Métodos en `DocumentationRepository`: `list_pending_by_project` y `log_audit` (RNF-SEG-07).
+  - `infrastructure/models.py`: Modelo mapeado con `is_visible_to_devs` y `rejection_reason`.
+  - `infrastructure/repositories.py`: Persistencia de campos de aprobación y registro de auditoría desacoplado (cumplimiento BR-4).
+  - `application/dtos.py`: `UpdateVisibilityCommand`, `RejectDocumentationCommand`, `ResubmitDocumentationCommand`, y campos extendidos en `DocumentationEntryDTO`.
+  - `application/use_cases.py`:
+    - `ToggleDocumentationVisibilityUseCase` (HU_DN_06_82): Solo para entradas aprobadas y roles Admin/Gerente, registro en `audit_logs`.
+    - `ListPendingDocumentationEntriesUseCase` (HU_DN_06_83): Cola de aprobación, 403 para Desarrollador.
+    - `ApproveDocumentationEntryUseCase` (HU_DN_06_84): Restricción RN-DOC-01 contra auto-aprobación, paso a `APPROVED` y registro en `audit_logs`.
+    - `RejectDocumentationEntryUseCase` (HU_DN_06_85): Transición a `REJECTED`, guardado de observaciones opcionales y registro en `audit_logs`.
+    - `ResubmitDocumentationEntryUseCase` (HU_DN_06_86): Solo el autor original, validación de estado `REJECTED`, paso a `PENDING`.
+- **Rutas de Orquestación (`app/orchestration/documentation_routes.py`):**
+  - `GET /api/v1/projects/{project_id}/documentation/pending-approvals`
+  - `PATCH /api/v1/projects/{project_id}/documentation/{entry_id}/visibility`
+  - `POST /api/v1/projects/{project_id}/documentation/{entry_id}/approve`
+  - `POST /api/v1/projects/{project_id}/documentation/{entry_id}/reject`
+  - `POST /api/v1/projects/{project_id}/documentation/{entry_id}/resubmit`
+
+### Pruebas y Quality Gates Backend
+- **Pruebas unitarias:** `tests/unit/test_documentation_rules.py` (5 tests de reglas de negocio para visibilidad y flujo de aprobación).
+- **Pruebas de API:** `tests/api/test_documentation_api.py` (10 tests cubriendo exhaustivamente HU_DN_06_77 a HU_DN_06_86, incluyendo casos límite y restricciones de seguridad).
+- **Resultados de Calidad:**
+  - `pytest`: 349 pruebas pasadas (0 fallos).
+  - `ruff check .`: 0 errores.
+  - `ruff format --check .`: 271 archivos formateados correctamente.
+  - `lint-imports`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
+  - `scan_secrets.py`: 0 secretos detectados.
+
+
+
+
+
+
+---
+
+## Épica 09: Anclado de documentación destacada (HU_DN_06_87 y HU_DN_06_89)
+
+### Análisis del Orquestador (Modo Lote / Consolidación de HU)
+- **Fecha:** 2026-10-28
+- **Clasificación del lote:** FULL_STACK
+- **Complejidad:** MODERATE (Score: 78/100)
+- **Project Mode:** EXTEND_EXISTING
+- **Ramas:** `feature/ep-09-documentation-doc` (backend y frontend)
+- **Consolidación:** Ambas historias abordan la funcionalidad subyacente de anclar/desanclar entradas destacadas al inicio del listado en la pestaña "Conocimiento", restringida exclusivamente a Administrador y Gerente. Se consolidó una API unificada con conmutación directa o payload explícito.
+
+### Implementación Backend
+- **Modelo y Base de Datos:**
+  - Columna `is_pinned` (BOOLEAN NOT NULL DEFAULT FALSE) persistida en `documentation_entries` (definida en migración 015 y mantenida en el esquema activo).
+- **Módulo Documentation:**
+  - `domain/entities.py`: método `can_pin(user_role: str) -> bool` que restringe el anclado a `admin`, `manager`, `administrador` y `gerente` e invalida entradas eliminadas (`is_deleted`).
+  - `domain/messages.py`: constantes `ENTRY_PINNED` (`"Entrada anclada correctamente."`), `ENTRY_UNPINNED` (`"Entrada desanclada correctamente."`), `ENTRY_PINNED_SHORT` (`"Entrada anclada."`), `ENTRY_UNPINNED_SHORT` (`"Entrada desanclada."`).
+  - `application/dtos.py`: DTO `TogglePinCommand` con campo opcional `is_pinned: bool | None` y campo `can_pin: bool` en `DocumentationEntryDTO`.
+  - `application/use_cases.py`:
+    - `ToggleDocumentationPinUseCase`: valida pertenencia al proyecto, existencia de la entrada, rol permitido (`can_pin`), computa nuevo estado (alternando si no se pasa valor explícito), actualiza `updated_at`, persiste cambios en el repositorio y registra auditoría con acción `PIN` o `UNPIN` en `audit_logs` (RNF-SEG-07).
+    - `ListDocumentationEntriesUseCase`: actualiza ordenamiento para asegurar que las entradas ancladas (`is_pinned = True`) siempre aparezcan primero (`0 if e.is_pinned else 1`), seguido por orden cronológico descendente (`-e.created_at.timestamp()`).
+  - `infrastructure/repositories.py`: `list_by_project` ordena por `DocumentationEntryModel.is_pinned.desc(), DocumentationEntryModel.created_at.desc()`.
+- **Rutas de Orquestación (`app/orchestration/documentation_routes.py`):**
+  - `PATCH /api/v1/projects/{project_id}/documentation/{entry_id}/pin`
+  - `POST  /api/v1/projects/{project_id}/documentation/{entry_id}/pin`
+
+### Pruebas y Quality Gates Backend
+- **Pruebas unitarias:** `tests/unit/test_documentation_rules.py` (`test_documentation_can_pin_rules` validando permisos de admin/manager y bloqueo de desarrolladores/eliminados).
+- **Pruebas de API:** `tests/api/test_documentation_api.py` (`test_hu_87_89_toggle_pin_entry_success_and_ordering` y `test_hu_87_89_toggle_pin_restrictions_and_errors` con 100% de aserciones pasando).
+- **Resultados de Calidad:**
+  - `pytest`: 342 pruebas pasadas (0 fallos).
+  - `pytest --cov=app`: Cobertura del 87.08% (umbral mínimo CI de 80% superado; módulo `documentation_routes.py` con 99% de cobertura).
+  - `ruff check .`: 0 errores.
+  - `ruff format --check .`: 271 archivos formateados correctamente.
+  - `mypy . --strict`: 0 errores en 238 archivos.
+  - `lint-imports`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
+  - `scan_secrets.py`: 0 secretos detectados.

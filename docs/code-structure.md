@@ -151,3 +151,30 @@ tests/unit/test_kanban_rules.py
 tests/api/test_kanban_api.py
 ```
 
+## EP-09 — Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_89)
+
+```
+app/modules/documentation/
+  domain/          entities (DocumentationEntry [con is_pinned, can_pin, is_visible_to_devs, rejection_reason], DocumentationCategory, DocumentationApprovalStatus, permission methods), messages, ports
+  application/     dtos (CreateDocumentationCommand, UpdateDocumentationCommand, UpdateVisibilityCommand, TogglePinCommand, RejectDocumentationCommand, ResubmitDocumentationCommand, DocumentationEntryDTO), use_cases (ToggleDocumentationPinUseCase, ToggleDocumentationVisibilityUseCase, etc.)
+  infrastructure/  models (DocumentationEntryModel with is_pinned, is_visible_to_devs, rejection_reason), repositories (SqlAlchemyDocumentationRepository con ordenamiento is_pinned.desc(), created_at.desc())
+app/orchestration/documentation_routes.py
+  POST   /projects/{id}/documentation                      (HU_DN_06_77)
+  PUT    /projects/{id}/documentation/{id}                 (HU_DN_06_78)
+  DELETE /projects/{id}/documentation/{id}                 (HU_DN_06_79)
+  GET    /projects/{id}/documentation                      (HU_DN_06_80)
+  GET    /projects/{id}/documentation/pending-approvals    (HU_DN_06_83)
+  GET    /projects/{id}/documentation/{id}                 (HU_DN_06_81)
+  PATCH  /projects/{id}/documentation/{id}/visibility      (HU_DN_06_82)
+  POST   /projects/{id}/documentation/{id}/approve         (HU_DN_06_84)
+  POST   /projects/{id}/documentation/{id}/reject          (HU_DN_06_85)
+  POST   /projects/{id}/documentation/{id}/resubmit        (HU_DN_06_86)
+  PATCH  /projects/{id}/documentation/{id}/pin             (HU_DN_06_87, HU_DN_06_89)
+  POST   /projects/{id}/documentation/{id}/pin             (HU_DN_06_87, HU_DN_06_89)
+migrations/versions/
+  015_ep09_documentation_entries.py
+  016_ep09_doc_approvals.py
+tests/unit/test_documentation_rules.py                     (reglas de permisos, can_pin, visibilidad y aprobaciones)
+tests/api/test_documentation_api.py                        (12 tests integrales para endpoints de documentación)
+```
+

@@ -903,3 +903,252 @@ La invitación de desarrollador ya no entrega una contraseña en claro. El corre
 
 **Fecha recepción:** 2026-10-28  
 **Estado:** COMPLETED
+
+---
+
+## Épica 09: Documentación y base de conocimiento
+
+### HU_DN_06_77 — Registrar una entrada de documentación en un proyecto
+**Como** Administrador, Gerente o Desarrollador  
+**Quiero** Registrar una entrada de documentación en un proyecto  
+**Para** dejar el conocimiento del proyecto disponible, previa aprobación
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento” del proyecto, botón “Nueva entrada”.
+2. Campos: El formulario contiene:
+   2.1 Título: texto, obligatorio, longitud máxima 100 caracteres. Si está vacío: 'El título es obligatorio.'
+   2.2 Categoría: lista desplegable obligatoria con Técnica, Funcional, Reunión, General y Prompt. Si falta: 'Seleccione una categoría.'
+   2.3 Objetivo: texto, opcional.
+   2.4 Etiquetas: texto, opcionales.
+   2.5 Contenido: texto propio.
+   2.6 Enlace externo: URL con formato válido. Si no es válida: 'El enlace no tiene un formato de URL válido.'
+   2.7 Botón “Registrar entrada” y botón “Cancelar”.
+3. Validación: Debe existir contenido de texto o enlace externo; si faltan ambos: 'Ingrese contenido o un enlace externo.'
+4. Restricción: No se almacenan archivos, solo texto y/o enlace (S-07); el sistema avisa que la visibilidad en DashNode no controla los permisos del recurso externo (RN-DOC-03); todo texto se escapa al mostrarse (RNF-SEG-10).
+5. Éxito: 'Entrada registrada correctamente. Quedó pendiente de aprobación.'; la entrada queda en estado Pendiente y no es visible para otros desarrolladores hasta ser aprobada (RN-DOC-05).
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_78 — Editar una entrada de documentación
+**Como** autor de la entrada, Administrador o Gerente  
+**Quiero** Editar una entrada de documentación  
+**Para** corregir o completar la información registrada
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento”, acción “Editar” de la entrada.
+2. Campos: El formulario contiene:
+   2.1 Los mismos campos y reglas de HU_DN_06_77, precargados.
+   2.2 Botón “Guardar cambios” y botón “Cancelar”.
+3. Validación: El autor edita sus entradas Pendientes o Rechazadas; el Administrador y el Gerente editan cualquier entrada del proyecto.
+4. Restricción: Un Desarrollador no edita entradas ajenas ni aprobadas y recibe acceso denegado. Al editar una entrada ya aprobada, esta vuelve al estado Pendiente y deja de ser visible para el Desarrollador hasta que otro aprobador la apruebe de nuevo.
+5. Éxito: 'Entrada actualizada correctamente.'
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_79 — Eliminar una entrada de documentación
+**Como** Administrador o Gerente  
+**Quiero** Eliminar una entrada de documentación  
+**Para** retirar entradas erróneas u obsoletas de la base de conocimiento
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento”, acción “Eliminar” de la entrada.
+2. Campos: Diálogo de confirmación:
+   2.1 Mensaje: '¿Está seguro de que desea eliminar esta entrada?'
+   2.2 Botón “Confirmar” y botón “Cancelar”.
+3. Validación: Sin confirmación no se elimina.
+4. Restricción: Solo Administrador y Gerente eliminan entradas; el Desarrollador recibe acceso denegado. El borrado es lógico: la entrada deja de listarse y consultarse, pero se conserva en base de datos.
+5. Éxito: 'Entrada eliminada correctamente.' y deja de listarse.
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_80 — Consultar el listado de entradas de documentación del proyecto
+**Como** Administrador, Gerente o Desarrollador  
+**Quiero** Consultar el listado de entradas de documentación del proyecto  
+**Para** encontrar la información documentada del proyecto
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento” del proyecto.
+2. Campos: El listado muestra por entrada:
+   2.1 Título, categoría, objetivo, estado de aprobación (Pendiente, Aprobada o Rechazada) y enlace.
+   2.2 Las entradas ancladas aparecen destacadas al inicio.
+3. Validación: El Administrador y el Gerente ven todas las entradas del proyecto; el Desarrollador, solo las aprobadas con visibilidad habilitada y las propias.
+4. Restricción: Una entrada restringida o no aprobada no aparece al Desarrollador (RN-DOC-02).
+5. Éxito: Se listan las entradas permitidas; sin entradas: 'No hay entradas de documentación.' con la acción sugerida “Nueva entrada”.
+6. Fallo técnico: Si la información no puede cargarse se muestra 'No fue posible cargar la información. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_81 — Recibir acceso denegado al consultar directamente una entrada restringida o no aprobada
+**Como** Desarrollador  
+**Quiero** Recibir acceso denegado al consultar directamente una entrada restringida o no aprobada  
+**Para** que la información no autorizada no se exponga aunque conozca su identificador
+**Criterios de aceptación:**
+1. Dónde: Solicitud directa de una entrada por su identificador o ruta.
+2. Campos: No aplica captura de datos; la acción no requiere formulario.
+3. Validación: Si la entrada está restringida o no aprobada y no es del solicitante, el servidor deniega la consulta.
+4. Restricción: La respuesta no incluye contenido ni enlace externo; el autor conserva acceso a sus propias entradas (RN-DOC-02).
+5. Éxito: Se muestra 'No tiene acceso a esta entrada.'
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_82 — Control de visibilidad de documentación para desarrolladores
+**Como** Administrador o Gerente  
+**Quiero** Alternar la visibilidad de una entrada de documentación aprobada para los desarrolladores  
+**Para** controlar qué información aprobada está disponible para el equipo de desarrollo
+
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento” del proyecto, conmutador de visibilidad en la tarjeta de entrada aprobada.
+2. Campos: Interruptor/conmutador “Visible para desarrolladores” (activo/inactivo).
+3. Validación: Solo se puede alternar la visibilidad de entradas en estado Aprobada (`APPROVED`).
+4. Restricción: Solo Administrador y Gerente pueden modificar la visibilidad. Una entrada no aprobada no puede ser visible para desarrolladores (`is_visible_to_devs = False`). El cambio genera trazabilidad en registro de auditoría (`audit_logs`, RNF-SEG-07).
+5. Éxito: Se muestra 'Visibilidad actualizada correctamente.' y el estado visual se actualiza de inmediato.
+6. Fallo: Si la entrada no está aprobada, se rechaza con 'Solo se puede cambiar la visibilidad de entradas aprobadas.' Ante error técnico: 'No fue posible completar la operación. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_83 — Visualización de cola de aprobación de documentación
+**Como** Administrador o Gerente  
+**Quiero** Consultar la cola de entradas de documentación pendientes de aprobación  
+**Para** revisar y gestionar las solicitudes de documentación enviadas por el equipo
+
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Cola de aprobación” en la sección de Conocimiento del proyecto.
+2. Campos: Lista de entradas pendientes con: título, autor, categoría, fecha de creación y acciones directas (Aprobar, Rechazar).
+3. Validación: Si no hay entradas pendientes, se muestra el estado vacío: 'No hay entradas pendientes de aprobación.'
+4. Restricción: Si un Desarrollador intenta acceder a la cola, el servidor deniega el acceso con HTTP 403 Forbidden.
+5. Éxito: Se listan todas las entradas en estado `PENDING` del proyecto con contador visual.
+6. Fallo técnico: Ante un error de conexión se muestra 'No fue posible cargar la información. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_84 — Aprobación de entrada de documentación
+**Como** Administrador o Gerente  
+**Quiero** Aprobar una entrada de documentación pendiente  
+**Para** validar su contenido y ponerla a disposición del proyecto
+
+**Criterios de aceptación:**
+1. Dónde: Cola de aprobación de documentación, botón “Aprobar” de la entrada.
+2. Campos: Acción directa (sin formulario adicional requerido).
+3. Validación: Solo se pueden procesar entradas en estado Pendiente (`PENDING`).
+4. Restricción (RN-DOC-01): Si el usuario que intenta aprobar es el mismo autor de la entrada, la acción se deshabilita y se muestra 'No puede aprobar su propia entrada.' (también validado en backend con 403 Forbidden).
+5. Éxito: Se muestra 'Entrada aprobada correctamente.', el estado pasa a `APPROVED`, `is_visible_to_devs` queda habilitado por defecto y la entrada sale de la cola de aprobación. Registra trazabilidad en `audit_logs` (RNF-SEG-07).
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_85 — Rechazo de entrada de documentación con retroalimentación
+**Como** Administrador o Gerente  
+**Quiero** Rechazar una entrada de documentación pendiente indicando observaciones  
+**Para** que el autor conozca los motivos del rechazo y realice las correcciones necesarias
+
+**Criterios de aceptación:**
+1. Dónde: Cola de aprobación de documentación, botón “Rechazar” de la entrada.
+2. Campos: Modal con:
+   2.1 Campo de texto multilínea “Motivo de rechazo (opcional)”.
+   2.2 Botón “Confirmar rechazo” y botón “Cancelar”.
+3. Validación: Solo se pueden rechazar entradas en estado Pendiente (`PENDING`).
+4. Restricción: Solo Administrador y Gerente pueden rechazar. La entrada pasa a `REJECTED`, sale de la cola de aprobación y se oculta para otros desarrolladores. El autor conserva acceso exclusivo para consultar el motivo, editarla y reenviarla. Registra auditoría (RNF-SEG-07).
+5. Éxito: Se muestra 'Entrada rechazada correctamente.'
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_86 — Reenvío de entrada rechazada a nueva revisión
+**Como** Desarrollador, Gerente o Administrador (autor de la entrada rechazada)  
+**Quiero** Reenviar una entrada de documentación rechazada a aprobación tras realizar ajustes  
+**Para** que sea nuevamente revisada por el Administrador o Gerente
+
+**Criterios de aceptación:**
+1. Dónde: Tarjeta de entrada en estado Rechazada (`REJECTED`) en la base de conocimiento o modal de edición.
+2. Campos: El formulario muestra el motivo de rechazo previo como referencia y permite actualizar título, categoría, objetivo, contenido o recurso externo. Botón “Reenviar a aprobación”.
+3. Validación: Solo se pueden reenviar entradas en estado Rechazada (si no: 'Solo se pueden reenviar entradas rechazadas.').
+4. Restricción: Solo el autor original de la entrada puede reenviarla. Al confirmar el reenvío, el estado cambia a Pendiente (`PENDING`), `is_visible_to_devs` se mantiene activo para el ciclo de revisión, y reaparece en la cola de aprobación.
+5. Éxito: Se muestra 'Entrada reenviada a aprobación.'
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_87 — Anclar o desanclar una entrada de documentación al inicio de la lista
+**Como** Administrador o Gerente  
+**Quiero** Anclar o desanclar una entrada de documentación al inicio de la lista  
+**Para** destacar información relevante o de consulta frecuente
+
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento”, acción “Anclar” / “Desanclar” en la entrada.
+2. Campos: Control: 2.1 Ícono / Botón “Anclar al inicio” o “Desanclar”.
+3. Validación: Al anclar, la entrada pasa a mostrarse destacada al inicio del listado.
+4. Restricción: Solo Administrador y Gerente pueden anclar o desanclar entradas.
+5. Éxito: 'Entrada anclada correctamente.' o 'Entrada desanclada correctamente.'
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_89 — Anclar una entrada importante al inicio de la lista
+**Como** Administrador o Gerente  
+**Quiero** Anclar una entrada importante al inicio de la lista  
+**Para** destacar la documentación clave del proyecto
+
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento”, acción “Anclar” de la entrada; la misma acción alterna a “Desanclar”.
+2. Campos: No aplica captura de datos; la acción no requiere formulario.
+3. Validación: Las entradas ancladas aparecen destacadas al inicio de la lista; al desanclar vuelven a su posición normal.
+4. Restricción: Solo Administrador y Gerente anclan o desanclan.
+5. Éxito: 'Entrada anclada.' o 'Entrada desanclada.' según la acción.
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+## Estado de implementación — EP-09 Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_89)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_06_77 | Implementado | `POST /api/v1/projects/{projectId}/documentation`, validaciones de título (<= 100), categoría (Técnica, Funcional, Reunión, General, Prompt), contenido o URL obligatorios, formato URL válido, estado inicial `PENDING`, aviso de recurso externo (RN-DOC-03). Tests: `test_hu_77_*`, `test_validate_optional_url`. |
+| HU_DN_06_78 | Implementado | `PUT /api/v1/projects/{projectId}/documentation/{id}`, permisos de autor en estado PENDING/REJECTED, Gerente y Admin en cualquier estado, transición de APPROVED a PENDING al editar (RN-DOC-05). Tests: `test_hu_78_*`, `test_documentation_can_edit_rules`. |
+| HU_DN_06_79 | Implementado | `DELETE /api/v1/projects/{projectId}/documentation/{id}`, borrado lógico (`is_deleted = True`), solo Gerente y Admin, confirmación con texto literal. Tests: `test_hu_79_*`, `test_documentation_can_delete_rules`. |
+| HU_DN_06_80 | Implementado | `GET /api/v1/projects/{projectId}/documentation`, listado ordenado con entradas ancladas (`is_pinned`) al inicio, alcance por rol (Admin/Gerente ven todas; Desarrolladores solo aprobadas y propias), filtros de búsqueda y categoría, estado vacío con mensaje literal. Tests: `test_hu_80_*`, `test_documentation_can_view_rules`. |
+| HU_DN_06_81 | Implementado | `GET /api/v1/projects/{projectId}/documentation/{id}`, rechazo 403 Forbidden con mensaje exacto `'No tiene acceso a esta entrada.'` para entradas restringidas/no aprobadas de otros usuarios. Tests: `test_hu_81_*`. |
+| HU_DN_06_82 | Implementado | `PATCH /api/v1/projects/{projectId}/documentation/{id}/visibility`, conmutador de visibilidad `is_visible_to_devs` solo para entradas aprobadas y roles Admin/Gerente, trazabilidad RNF-SEG-07 en `audit_logs`. Tests: `test_hu_82_*`. |
+| HU_DN_06_83 | Implementado | `GET /api/v1/projects/{projectId}/documentation/pending-approvals`, cola de aprobación para Admin y Gerente, 403 para Desarrolladores, mensaje literal de cola vacía `'No hay entradas pendientes de aprobación.'`. Tests: `test_hu_83_*`. |
+| HU_DN_06_84 | Implementado | `POST /api/v1/projects/{projectId}/documentation/{id}/approve`, aprobación directa, restricción RN-DOC-01 de auto-aprobación (`'No puede aprobar su propia entrada.'`), paso a `APPROVED` y salida de cola. Tests: `test_hu_84_*`. |
+| HU_DN_06_85 | Implementado | `POST /api/v1/projects/{projectId}/documentation/{id}/reject`, rechazo con feedback opcional `rejection_reason`, paso a `REJECTED`, ocultamiento a terceros y acceso reservado al autor. Tests: `test_hu_85_*`. |
+| HU_DN_06_86 | Implementado | `POST /api/v1/projects/{projectId}/documentation/{id}/resubmit`, reenvío exclusivo por el autor de entradas en estado `REJECTED`, consulta de feedback previo y retorno a `PENDING`. Tests: `test_hu_86_*`. |
+| HU_DN_06_87 | Implementado | `PATCH /api/v1/projects/{projectId}/documentation/{id}/pin` y `POST .../pin`, conmutador de anclado de entrada, restricción exclusiva para Admin y Gerente, ordenamiento destacado al inicio, trazabilidad RNF-SEG-07 en `audit_logs`. Mensajes exactos: `'Entrada anclada correctamente.'` / `'Entrada desanclada correctamente.'`. Tests: `test_hu_87_89_*`, `test_documentation_can_pin_rules`. |
+| HU_DN_06_89 | Implementado | `PATCH /api/v1/projects/{projectId}/documentation/{id}/pin`, acción directa sin formulario, entradas ancladas destacadas al inicio y retorno a posición normal al desanclar, soporte de respuesta corta `'Entrada anclada.'` / `'Entrada desanclada.'` y extendida. Tests: `test_hu_87_89_*`, `test_documentation_can_pin_rules`. |
+
+Mensajes literales en `app/modules/documentation/domain/messages.py`. Migraciones `015_ep09_documentation_entries.py` y `016_ep09_doc_approvals.py`. Rutas HTTP en `app/orchestration/documentation_routes.py`.
