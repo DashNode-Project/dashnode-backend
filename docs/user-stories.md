@@ -1098,7 +1098,43 @@ La invitación de desarrollador ya no entrega una contraseña en claro. El corre
 
 ---
 
-## Estado de implementación — EP-09 Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_86)
+### HU_DN_06_87 — Anclar o desanclar una entrada de documentación al inicio de la lista
+**Como** Administrador o Gerente  
+**Quiero** Anclar o desanclar una entrada de documentación al inicio de la lista  
+**Para** destacar información relevante o de consulta frecuente
+
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento”, acción “Anclar” / “Desanclar” en la entrada.
+2. Campos: Control: 2.1 Ícono / Botón “Anclar al inicio” o “Desanclar”.
+3. Validación: Al anclar, la entrada pasa a mostrarse destacada al inicio del listado.
+4. Restricción: Solo Administrador y Gerente pueden anclar o desanclar entradas.
+5. Éxito: 'Entrada anclada correctamente.' o 'Entrada desanclada correctamente.'
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_06_89 — Anclar una entrada importante al inicio de la lista
+**Como** Administrador o Gerente  
+**Quiero** Anclar una entrada importante al inicio de la lista  
+**Para** destacar la documentación clave del proyecto
+
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Conocimiento”, acción “Anclar” de la entrada; la misma acción alterna a “Desanclar”.
+2. Campos: No aplica captura de datos; la acción no requiere formulario.
+3. Validación: Las entradas ancladas aparecen destacadas al inicio de la lista; al desanclar vuelven a su posición normal.
+4. Restricción: Solo Administrador y Gerente anclan o desanclan.
+5. Éxito: 'Entrada anclada.' o 'Entrada desanclada.' según la acción.
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+## Estado de implementación — EP-09 Documentación y base de conocimiento (HU_DN_06_77 … HU_DN_06_89)
 
 | HU | Estado | Evidencia |
 | --- | --- | --- |
@@ -1112,9 +1148,7 @@ La invitación de desarrollador ya no entrega una contraseña en claro. El corre
 | HU_DN_06_84 | Implementado | `POST /api/v1/projects/{projectId}/documentation/{id}/approve`, aprobación directa, restricción RN-DOC-01 de auto-aprobación (`'No puede aprobar su propia entrada.'`), paso a `APPROVED` y salida de cola. Tests: `test_hu_84_*`. |
 | HU_DN_06_85 | Implementado | `POST /api/v1/projects/{projectId}/documentation/{id}/reject`, rechazo con feedback opcional `rejection_reason`, paso a `REJECTED`, ocultamiento a terceros y acceso reservado al autor. Tests: `test_hu_85_*`. |
 | HU_DN_06_86 | Implementado | `POST /api/v1/projects/{projectId}/documentation/{id}/resubmit`, reenvío exclusivo por el autor de entradas en estado `REJECTED`, consulta de feedback previo y retorno a `PENDING`. Tests: `test_hu_86_*`. |
+| HU_DN_06_87 | Implementado | `PATCH /api/v1/projects/{projectId}/documentation/{id}/pin` y `POST .../pin`, conmutador de anclado de entrada, restricción exclusiva para Admin y Gerente, ordenamiento destacado al inicio, trazabilidad RNF-SEG-07 en `audit_logs`. Mensajes exactos: `'Entrada anclada correctamente.'` / `'Entrada desanclada correctamente.'`. Tests: `test_hu_87_89_*`, `test_documentation_can_pin_rules`. |
+| HU_DN_06_89 | Implementado | `PATCH /api/v1/projects/{projectId}/documentation/{id}/pin`, acción directa sin formulario, entradas ancladas destacadas al inicio y retorno a posición normal al desanclar, soporte de respuesta corta `'Entrada anclada.'` / `'Entrada desanclada.'` y extendida. Tests: `test_hu_87_89_*`, `test_documentation_can_pin_rules`. |
 
 Mensajes literales en `app/modules/documentation/domain/messages.py`. Migraciones `015_ep09_documentation_entries.py` y `016_ep09_doc_approvals.py`. Rutas HTTP en `app/orchestration/documentation_routes.py`.
-
-
-
-

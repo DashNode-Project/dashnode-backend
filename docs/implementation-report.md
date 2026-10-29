@@ -409,3 +409,42 @@ Validación local:
 
 
 
+
+---
+
+## Épica 09: Anclado de documentación destacada (HU_DN_06_87 y HU_DN_06_89)
+
+### Análisis del Orquestador (Modo Lote / Consolidación de HU)
+- **Fecha:** 2026-10-28
+- **Clasificación del lote:** FULL_STACK
+- **Complejidad:** MODERATE (Score: 78/100)
+- **Project Mode:** EXTEND_EXISTING
+- **Ramas:** `feature/ep-09-documentation-doc` (backend y frontend)
+- **Consolidación:** Ambas historias abordan la funcionalidad subyacente de anclar/desanclar entradas destacadas al inicio del listado en la pestaña "Conocimiento", restringida exclusivamente a Administrador y Gerente. Se consolidó una API unificada con conmutación directa o payload explícito.
+
+### Implementación Backend
+- **Modelo y Base de Datos:**
+  - Columna `is_pinned` (BOOLEAN NOT NULL DEFAULT FALSE) persistida en `documentation_entries` (definida en migración 015 y mantenida en el esquema activo).
+- **Módulo Documentation:**
+  - `domain/entities.py`: método `can_pin(user_role: str) -> bool` que restringe el anclado a `admin`, `manager`, `administrador` y `gerente` e invalida entradas eliminadas (`is_deleted`).
+  - `domain/messages.py`: constantes `ENTRY_PINNED` (`"Entrada anclada correctamente."`), `ENTRY_UNPINNED` (`"Entrada desanclada correctamente."`), `ENTRY_PINNED_SHORT` (`"Entrada anclada."`), `ENTRY_UNPINNED_SHORT` (`"Entrada desanclada."`).
+  - `application/dtos.py`: DTO `TogglePinCommand` con campo opcional `is_pinned: bool | None` y campo `can_pin: bool` en `DocumentationEntryDTO`.
+  - `application/use_cases.py`:
+    - `ToggleDocumentationPinUseCase`: valida pertenencia al proyecto, existencia de la entrada, rol permitido (`can_pin`), computa nuevo estado (alternando si no se pasa valor explícito), actualiza `updated_at`, persiste cambios en el repositorio y registra auditoría con acción `PIN` o `UNPIN` en `audit_logs` (RNF-SEG-07).
+    - `ListDocumentationEntriesUseCase`: actualiza ordenamiento para asegurar que las entradas ancladas (`is_pinned = True`) siempre aparezcan primero (`0 if e.is_pinned else 1`), seguido por orden cronológico descendente (`-e.created_at.timestamp()`).
+  - `infrastructure/repositories.py`: `list_by_project` ordena por `DocumentationEntryModel.is_pinned.desc(), DocumentationEntryModel.created_at.desc()`.
+- **Rutas de Orquestación (`app/orchestration/documentation_routes.py`):**
+  - `PATCH /api/v1/projects/{project_id}/documentation/{entry_id}/pin`
+  - `POST  /api/v1/projects/{project_id}/documentation/{entry_id}/pin`
+
+### Pruebas y Quality Gates Backend
+- **Pruebas unitarias:** `tests/unit/test_documentation_rules.py` (`test_documentation_can_pin_rules` validando permisos de admin/manager y bloqueo de desarrolladores/eliminados).
+- **Pruebas de API:** `tests/api/test_documentation_api.py` (`test_hu_87_89_toggle_pin_entry_success_and_ordering` y `test_hu_87_89_toggle_pin_restrictions_and_errors` con 100% de aserciones pasando).
+- **Resultados de Calidad:**
+  - `pytest`: 342 pruebas pasadas (0 fallos).
+  - `pytest --cov=app`: Cobertura del 87.08% (umbral mínimo CI de 80% superado; módulo `documentation_routes.py` con 99% de cobertura).
+  - `ruff check .`: 0 errores.
+  - `ruff format --check .`: 271 archivos formateados correctamente.
+  - `mypy . --strict`: 0 errores en 238 archivos.
+  - `lint-imports`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
+  - `scan_secrets.py`: 0 secretos detectados.
