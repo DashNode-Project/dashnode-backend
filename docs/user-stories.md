@@ -807,4 +807,99 @@ La invitación de desarrollador ya no entrega una contraseña en claro. El corre
 | HU_DN_05_68 | COMPLETED | Burndown ideal/real | `tests/unit/test_burndown.py`, API burndown |
 | HU_DN_05_69 | COMPLETED | Cierre sprint `CLOSED` | API close + inmutabilidad |
 | HU_DN_05_70 | COMPLETED | Migración masiva incompletas | API close (backlog / sprint destino) |
-| HU_DN_05_71 | COMPLETED | Historial sprints cerrados | API history |
+| HU_DN_05_71 | COMPLETED | Historial sprints cerrados | API history |
+
+---
+
+## EP-08 — Tablero Kanban (HU_DN_05_72 … HU_DN_05_76)
+
+| ID | Título | Estado |
+|---|---|---|
+| HU_DN_05_72 | Visualizar el tablero Kanban del sprint activo en columnas | COMPLETED |
+| HU_DN_05_73 | Mover tarjetas de tarea entre columnas mediante drag & drop o menú | COMPLETED |
+| HU_DN_05_74 | Aplicar límites de trabajo en progreso (WIP) por columna | COMPLETED |
+| HU_DN_05_75 | Filtrar las tarjetas del tablero Kanban | COMPLETED |
+| HU_DN_05_76 | Visualizar bloqueos o dependencias en las tarjetas del tablero | COMPLETED |
+
+### HU_DN_05_72 — Visualizar el tablero Kanban del sprint activo en columnas
+**Como** Administrador, Gerente o Desarrollador  
+**Quiero** Visualizar el tablero Kanban del sprint activo en columnas  
+**Para** monitorear el flujo visual de trabajo de las tareas del sprint en tiempo real
+**Criterios de aceptación:**
+1. Dónde: Pestaña “Tablero Kanban” dentro del proyecto activo.
+2. Campos: La vista organiza las tarjetas de tarea en 6 columnas estándar: 2.1 Por hacer (TODO), 2.2 En progreso (IN_PROGRESS), 2.3 Revisión de código (CODE_REVIEW), 2.4 Pruebas (TESTING), 2.5 Corrección (CORRECTION), 2.6 Completada (DONE).
+3. Validación: Cada tarjeta de tarea muestra: título, tipo de tarea, avatar del responsable, etiqueta de HU padre y contador de horas (estimadas vs. trabajadas).
+4. Restricción: El Desarrollador visualiza únicamente las tarjetas correspondientes a sus propias tareas dentro del proyecto; Administrador y Gerente visualizan la totalidad de tarjetas del sprint activo.
+5. Éxito: Muestra las columnas renderizadas con sus tarjetas; si no hay sprint activo: 'No hay ningún sprint activo en este proyecto.'
+6. Fallo técnico: Si la información no puede cargarse se muestra 'No fue posible cargar la información. Intente nuevamente.'
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_05_73 — Mover tarjetas de tarea entre columnas mediante drag & drop o menú
+**Como** Administrador, Gerente o Desarrollador (solo mis tareas)  
+**Quiero** Mover tarjetas de tarea entre columnas mediante drag & drop o menú  
+**Para** actualizar el estado del trabajo de manera ágil e intuitiva
+**Criterios de aceptación:**
+1. Dónde: Tablero Kanban del sprint activo.
+2. Campos: Arrastre de tarjeta o menú contextual de la tarjeta con opción "Mover a...".
+3. Validación: Al soltar la tarjeta en una nueva columna, el sistema invoca la transición de estado correspondiente (HU_DN_04_57).
+4. Restricción: El Desarrollador solo puede arrastrar o mover sus propias tareas. Si intenta mover una tarjeta ajena: 'Solo puede cambiar el estado de sus propias tareas.' No se permite arrastrar manualmente hacia o desde la columna Corrección (mensaje: 'El estado Corrección solo cambia al reportar o resolver un fix.').
+5. Éxito: 'Estado de la tarea actualizado.' y la tarjeta se fija en la columna destino.
+6. Fallo técnico: Si la API rechaza el movimiento, la tarjeta regresa automáticamente (rollback visual) a su columna de origen y se muestra el mensaje de error.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_05_74 — Aplicar límites de trabajo en progreso (WIP) por columna
+**Como** Administrador o Gerente  
+**Quiero** Aplicar límites de trabajo en progreso (WIP) por columna  
+**Para** prevenir cuellos de botella y evitar la sobrecarga de trabajo en fases del flujo
+**Criterios de aceptación:**
+1. Dónde: Configuración de cabecera de cada columna del tablero Kanban.
+2. Campos: 2.1 Límite WIP: campo numérico entero positivo o "Sin límite".
+3. Validación: Si el número de tarjetas en una columna supera su límite WIP configurado, la cabecera de la columna cambia a color de advertencia (rojo/naranja) y muestra 'Límite WIP superado ([Actual]/[Límite])'.
+4. Restricción: El límite WIP es de carácter informativo/advertencia (soft-limit) y no bloquea el movimiento de tarjetas, permitiendo flexibilidad operativa.
+5. Éxito: 'Límite WIP actualizado correctamente.'
+6. Fallo técnico: Ante un error no anticipado se muestra 'No fue posible completar la operación. Intente nuevamente.' sin alterar datos.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_05_75 — Filtrar las tarjetas del tablero Kanban
+**Como** Administrador, Gerente o Desarrollador  
+**Quiero** Filtrar las tarjetas del tablero Kanban  
+**Para** enfocar la vista en tareas específicas por responsable, historia o tipo
+**Criterios de aceptación:**
+1. Dónde: Barra superior de herramientas del tablero Kanban.
+2. Campos: 2.1 Texto libre: búsqueda por título de tarea. 2.2 Responsable: desplegable con miembros del proyecto. 2.3 Historia de Usuario: desplegable con HUs del sprint actual. 2.4 Tipo de tarea: Frontend, Backend, BD, QA, etc.
+3. Validación: Oculta dinámicamente las tarjetas que no coincidan con los criterios seleccionados.
+4. Restricción: El Desarrollador filtra únicamente entre las tarjetas que tiene visibles.
+5. Éxito: Muestra solo las tarjetas coincidentes en sus respectivas columnas.
+6. Fallo: Sin coincidencias: las columnas se muestran vacías con el aviso 'No se encontraron tarjetas con los filtros aplicados.'
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED
+
+---
+
+### HU_DN_05_76 — Visualizar bloqueos o dependencias en las tarjetas del tablero
+**Como** Administrador, Gerente o Desarrollador  
+**Quiero** Visualizar bloqueos o dependencias en las tarjetas del tablero  
+**Para** identificar rápidamente los impedimentos que detienen el avance del trabajo
+**Criterios de aceptación:**
+1. Dónde: Tarjeta de tarea dentro del tablero Kanban.
+2. Campos: 2.1 Badge de bloqueo: ícono distintivo (candado/alerta roja) en la esquina de la tarjeta. 2.2 Detalle al hacer clic/hover: muestra el motivo del bloqueo o la tarea dependiente no completada.
+3. Validación: Se activa cuando la tarea tiene un flag de impedimento reportado o una tarea predecesora pendiente.
+4. Restricción: Visible para todos los usuarios que tengan acceso a la tarjeta.
+5. Éxito: Muestra la insignia visual de bloqueo claramente diferenciada en la tarjeta.
+6. Fallo técnico: Si los datos del bloqueo no cargan se omiten los detalles adicionales manteniendo el ícono de alerta básico.
+
+**Fecha recepción:** 2026-10-28  
+**Estado:** COMPLETED

@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.database import Base
@@ -68,6 +68,11 @@ class StoryTaskModel(Base):
     created_by: Mapped[str] = mapped_column(String(36), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    blocked_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    blocked_by_task_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("story_tasks.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class TaskTimeLogModel(Base):

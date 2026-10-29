@@ -280,4 +280,46 @@ Validación local:
 
 **Evidencia:** `pytest` 316+ passed (SQLite/API); `test_migrated_schema_matches_orm_models` OK con Postgres local (Docker 5434).
 
+---
+
+## EP-08 — Tablero Kanban (HU_DN_05_72 … HU_DN_05_76)
+
+**Estado:** COMPLETED | **Rama:** `feature/ep-08-kanban-kan`
+
+### Análisis del Orquestador
+- **Clasificación global:** FULL_STACK (Lote de 5 HUs)
+- **Modo del proyecto:** EXTEND_EXISTING
+- **Complejidad:** MODERATE (score: 65/100)
+- **Alcance Backend:**
+  - Migración 014: tabla `kanban_column_settings` y columnas `is_blocked`, `blocked_reason`, `blocked_by_task_id` en `story_tasks`.
+  - Endpoint `GET /api/v1/projects/{project_id}/kanban`: resolución de tareas del sprint activo, columnas estándar, filtros por rol (desarrollador solo sus tareas; admin/gerente todas), bloqueos/dependencias y límites WIP.
+  - Endpoint `PUT /api/v1/projects/{project_id}/kanban/columns/{column_id}/wip`: gestión de límites WIP (soft-limit informativo para admin/gerente).
+  - Endpoint `PATCH /api/v1/projects/{project_id}/tasks/{task_id}/block`: reporte/resolución de impedimentos y tareas dependientes.
+  - Reutilización de `PATCH /api/v1/projects/{project_id}/tasks/{task_id}/status` (HU_DN_04_57) para transiciones de estado y validación de columna Corrección.
+
+### Implementación Backend
+- **Migración de esquema:** `migrations/versions/014_ep08_kanban_wip_and_blocks.py`
+  - Campos agregados a `story_tasks`: `is_blocked` (BOOLEAN DEFAULT FALSE), `blocked_reason` (VARCHAR 255 NULL), `blocked_by_task_id` (VARCHAR 36 NULL con ForeignKey a `story_tasks.id`).
+  - Tabla `kanban_column_settings`: `id`, `project_id`, `column_id`, `wip_limit`, `created_at`, `updated_at`, con restricción única `(project_id, column_id)`.
+- **Módulo Kanban:**
+  - `app/modules/kanban/domain/entities.py`: Entidades `KanbanColumnSettings`, `KanbanCard`, `KanbanColumn`, `KanbanBoard`.
+  - `app/modules/kanban/domain/messages.py`: Mensajes literales de advertencia y confirmación.
+  - `app/modules/kanban/domain/ports.py`: Puerto `KanbanRepository`.
+  - `app/modules/kanban/infrastructure/models.py`: Modelo SQLAlchemy `KanbanColumnSettingsModel`.
+  - `app/modules/kanban/infrastructure/repositories.py`: Adaptador `SqlAlchemyKanbanRepository` con inyección de `IdGenerator` y `Clock`.
+  - `app/modules/kanban/application/use_cases.py`: Casos de uso `GetKanbanBoardUseCase`, `UpdateColumnWipLimitUseCase`, `UpdateTaskBlockUseCase`.
+- **Rutas de Orquestación:**
+  - `app/orchestration/kanban_routes.py`: Endpoints REST con autenticación, permisos RBAC y manejo de errores.
+  - Registro en `app/main.py`.
+  - Aislamiento modular en `pyproject.toml` (contrato BR-4).
+
+### Pruebas y Quality Gates Backend
+- **Pruebas unitarias:** `tests/unit/test_kanban_rules.py` (3 tests: validación de límites WIP, advertencia soft-limit, reglas de bloqueo).
+- **Pruebas de API:** `tests/api/test_kanban_api.py` (5 tests completos cubriendo HU_DN_05_72 a HU_DN_05_76).
+- **Resultados de Calidad:**
+  - `pytest`: 324 pruebas pasadas (0 fallos).
+  - `ruff check .`: 0 errores.
+  - `ruff format --check .`: 253 archivos formateados correctamente.
+  - `import-linter`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
+
 
