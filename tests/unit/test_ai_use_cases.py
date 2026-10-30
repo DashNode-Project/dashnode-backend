@@ -1,6 +1,6 @@
 """Unit tests for AI voice/text use cases (HU 91, 93, 95)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.orm import Session
@@ -46,7 +46,7 @@ class ExhaustedQuota:
 
 
 def _seed_project(db_session: Session, *, project_id: str = "p1", user_id: str = "u1") -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db_session.add(
         ProjectModel(
             id=project_id,

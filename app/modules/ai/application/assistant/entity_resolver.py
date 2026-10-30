@@ -80,9 +80,7 @@ def find_project_name_in_utterance(
         if not needle:
             continue
         score = 0
-        if needle == haystack:
-            score = 100
-        elif re.search(rf"(?<!\w){re.escape(needle)}(?!\w)", haystack):
+        if needle == haystack or re.search(rf"(?<!\w){re.escape(needle)}(?!\w)", haystack):
             score = 100
         else:
             score = max(

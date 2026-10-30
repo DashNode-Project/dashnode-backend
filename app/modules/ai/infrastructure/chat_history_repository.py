@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, timedelta
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -55,7 +55,7 @@ class SqlAlchemyChatHistoryRepository:
         self.purge_expired(user_id)
         now = self._clock.now()
         if now.tzinfo is None:
-            now = now.replace(tzinfo=timezone.utc)
+            now = now.replace(tzinfo=UTC)
         row = AiChatMessageModel(
             id=self._ids.generate(),
             user_id=user_id,

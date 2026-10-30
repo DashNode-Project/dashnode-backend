@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import Callable
+from typing import TypeVar
 
 from sqlalchemy.orm import Session
 
+from app.modules.ai.application.assistant.assistant_metrics import AssistantRequestMetrics
 from app.modules.ai.application.assistant.conversation_state import ConversationStateStore
 from app.modules.ai.application.assistant.data_queries import AssistantDataService
 from app.modules.ai.application.assistant.entity_resolver import (
@@ -21,6 +25,7 @@ from app.modules.ai.application.assistant.intent_models import (
     ParsedIntent,
 )
 from app.modules.ai.application.assistant.intent_parser import parse_intent
+from app.modules.ai.application.assistant.metrics_generation import MetricsGenerationPort
 from app.modules.ai.application.assistant.text_normalize import normalize_text
 from app.modules.ai.domain.errors import GeminiProcessingError, QuotaExhaustedError
 from app.modules.ai.domain.ports import GenerationPort, QuotaPort
@@ -39,6 +44,8 @@ _PROJECT_INTENTS = frozenset(
     }
 )
 
+_T = TypeVar("_T")
+
 
 class AssistantOrchestrator:
     def __init__(self, session: Session, generation: GenerationPort, quotas: QuotaPort) -> None:
@@ -55,24 +62,69 @@ class AssistantOrchestrator:
         role: str,
         optional_project_id: str | None,
     ) -> str:
-        state = self._state.load(user_id)
+        started = time.perf_counter()
+        metrics = AssistantRequestMetrics()
+        generation = MetricsGenerationPort(self._generation, metrics)
+        try:
+            response = self._answer_body(
+                text,
+                user_id,
+                role,
+                optional_project_id,
+                metrics,
+                generation,
+            )
+            metrics.path = metrics.path if metrics.path != "unknown" else "deterministic"
+            return response
+        finally:
+            metrics.orchestrator_ms = (time.perf_counter() - started) * 1000
+            metrics.total_ms = metrics.orchestrator_ms
+            metrics.log(user_id=user_id)
+
+    def _db_call(
+        self, metrics: AssistantRequestMetrics, fn: Callable[..., _T], *args, **kwargs
+    ) -> _T:
+        metrics.start_postgres()
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            metrics.stop_postgres()
+
+    def _answer_body(
+        self,
+        text: str,
+        user_id: str,
+        role: str,
+        optional_project_id: str | None,
+        metrics: AssistantRequestMetrics,
+        generation: MetricsGenerationPort,
+    ) -> str:
+        state = self._db_call(metrics, self._state.load, user_id)
         open_name = None
         if optional_project_id:
             try:
-                self._data.ensure_project_access(optional_project_id, user_id, role)
-                open_name = self._data.project_name(optional_project_id)
+                self._db_call(
+                    metrics, self._data.ensure_project_access, optional_project_id, user_id, role
+                )
+                open_name = self._db_call(metrics, self._data.project_name, optional_project_id)
             except (PermissionError, LookupError):
                 open_name = None
 
-        projects = self._data.accessible_projects(user_id, role)
+        projects = self._db_call(metrics, self._data.accessible_projects, user_id, role)
         candidates = [ProjectCandidate(row.id, row.name) for row in projects]
 
+        parse_started = time.perf_counter()
         intent = parse_intent(
             text,
             open_project_name=open_name,
             last_project_names=list(state.get("last_project_names", [])),
         )
+        metrics.intent_parse_ms = (time.perf_counter() - parse_started) * 1000
+
+        resolve_started = time.perf_counter()
         intent = self._enrich_intent(text, intent, candidates)
+        metrics.entity_resolve_ms = (time.perf_counter() - resolve_started) * 1000
+        metrics.path = intent.intent.value
 
         if intent.intent == IntentType.CHITCHAT:
             return (
@@ -85,9 +137,11 @@ class AssistantOrchestrator:
                 return "No tiene proyectos visibles en DashNode."
             lines = [f"Tienes {len(projects)} proyecto(s):"]
             for project in projects:
-                hu, tasks, members = self._data.count_metrics(project.id)
+                hu, tasks, members = self._db_call(metrics, self._data.count_metrics, project.id)
                 lines.append(f"- {project.name} ({hu} HUs, {tasks} tareas, {members} miembros)")
-            self._state.save(
+            self._db_call(
+                metrics,
+                self._state.save,
                 user_id,
                 {
                     "last_project_ids": [p.id for p in projects],
@@ -97,7 +151,8 @@ class AssistantOrchestrator:
             return "\n".join(lines)
 
         if intent.intent == IntentType.UNKNOWN:
-            return self._fallback_llm(text, user_id, role, optional_project_id, projects)
+            metrics.path = "gemini_fallback"
+            return self._fallback_llm(text, user_id, projects, generation)
 
         project_id = self._resolve_project_id(intent, optional_project_id, candidates, state)
         if project_id is None:
@@ -105,32 +160,37 @@ class AssistantOrchestrator:
                 "Indique el proyecto (nombre aproximado) o abra un proyecto y use «este proyecto»."
             )
 
-        project_name = self._data.project_name(project_id)
-        self._remember_project(user_id, state, project_id, project_name)
+        project_name = self._db_call(metrics, self._data.project_name, project_id)
+        self._remember_project(user_id, state, project_id, project_name, metrics)
 
         if intent.intent == IntentType.PROJECT_FOCUS:
-            return self._project_summary(project_id, project_name)
+            return self._project_summary(project_id, project_name, metrics)
 
         if intent.intent == IntentType.LIST_PROJECT_MEMBERS:
-            members = self._data.list_members(project_id, user_id, role)
+            members = self._db_call(metrics, self._data.list_members, project_id, user_id, role)
             if not members:
                 return f"El proyecto {project_name} no tiene miembros registrados."
             return f"Miembros de {project_name}:\n" + "\n".join(f"- {m}" for m in members)
 
         if intent.intent == IntentType.LIST_SPRINTS:
-            sprints = self._data.list_sprints(project_id, user_id, role)
+            sprints = self._db_call(metrics, self._data.list_sprints, project_id, user_id, role)
             if not sprints:
                 return f"El proyecto {project_name} no tiene sprints registrados."
             return f"Sprints de {project_name}:\n" + "\n".join(f"- {s}" for s in sprints)
 
         if intent.intent == IntentType.COUNT_PROJECT_HUS:
-            hu_count, _, _ = self._data.count_metrics(project_id)
+            hu_count, _, _ = self._db_call(metrics, self._data.count_metrics, project_id)
             return f"El proyecto {project_name} tiene {hu_count} historia(s) de usuario."
 
         if intent.intent == IntentType.LIST_SPRINT_STORIES:
-            sprint_id = self._resolve_sprint_id(intent, project_id)
-            stories = self._data.list_stories(
-                project_id, user_id, role, sprint_id=sprint_id
+            sprint_id = self._resolve_sprint_id(intent, project_id, metrics)
+            stories = self._db_call(
+                metrics,
+                self._data.list_stories,
+                project_id,
+                user_id,
+                role,
+                sprint_id=sprint_id,
             )
             if not stories:
                 scope = "ese sprint" if sprint_id else project_name
@@ -141,7 +201,9 @@ class AssistantOrchestrator:
             return header + ":\n" + "\n".join(f"- {line}" for line in stories)
 
         if intent.intent == IntentType.LIST_TASKS:
-            lines = self._data.list_tasks(
+            lines = self._db_call(
+                metrics,
+                self._data.list_tasks,
                 project_id,
                 user_id,
                 role,
@@ -152,7 +214,7 @@ class AssistantOrchestrator:
             return f"Tareas en {project_name}:\n" + "\n".join(f"- {line}" for line in lines)
 
         if intent.intent == IntentType.LIST_DOCUMENTATION:
-            docs = self._data.list_documentation(project_id, user_id, role)
+            docs = self._db_call(metrics, self._data.list_documentation, project_id, user_id, role)
             if not docs:
                 return f"El proyecto {project_name} no tiene documentación visible para usted."
             return f"Documentación de {project_name}:\n" + "\n".join(f"- {d}" for d in docs)
@@ -194,15 +256,22 @@ class AssistantOrchestrator:
                 return intent.model_copy(update={"project_ref": embedded.value.name})
         return intent
 
-    def _project_summary(self, project_id: str, project_name: str) -> str:
-        hu, tasks, members = self._data.count_metrics(project_id)
+    def _project_summary(
+        self, project_id: str, project_name: str, metrics: AssistantRequestMetrics
+    ) -> str:
+        hu, tasks, members = self._db_call(metrics, self._data.count_metrics, project_id)
         return (
             f"{project_name}: {hu} HUs, {tasks} tareas, {members} miembros. "
             "Puede preguntar por historias de usuario, tareas pendientes, miembros o sprints."
         )
 
     def _remember_project(
-        self, user_id: str, state: dict, project_id: str, project_name: str
+        self,
+        user_id: str,
+        state: dict,
+        project_id: str,
+        project_name: str,
+        metrics: AssistantRequestMetrics,
     ) -> None:
         ids = list(state.get("last_project_ids", []))
         names = list(state.get("last_project_names", []))
@@ -212,7 +281,9 @@ class AssistantOrchestrator:
             names.pop(idx)
         ids.insert(0, project_id)
         names.insert(0, project_name)
-        self._state.save(
+        self._db_call(
+            metrics,
+            self._state.save,
             user_id,
             {"last_project_ids": ids[:10], "last_project_names": names[:10]},
         )
@@ -247,10 +318,12 @@ class AssistantOrchestrator:
             return candidates[0].id
         return None
 
-    def _resolve_sprint_id(self, intent: ParsedIntent, project_id: str) -> str | None:
+    def _resolve_sprint_id(
+        self, intent: ParsedIntent, project_id: str, metrics: AssistantRequestMetrics
+    ) -> str | None:
         if not intent.sprint_ref:
             return None
-        sprint_rows = self._data.sprint_candidates(project_id)
+        sprint_rows = self._db_call(metrics, self._data.sprint_candidates, project_id)
         candidates = [
             SprintCandidate(sid, name, project_id) for sid, name in sprint_rows
         ]
@@ -264,21 +337,19 @@ class AssistantOrchestrator:
         self,
         text: str,
         user_id: str,
-        role: str,
-        optional_project_id: str | None,
         projects: list,
+        generation: MetricsGenerationPort,
     ) -> str:
-        summary_lines = [f"- {p.name}" for p in projects[:10]]
+        names = ", ".join(p.name for p in projects[:8]) or "ninguno"
         prompt = (
-            "Eres el asistente de DashNode. Responde en español en 1-3 oraciones.\n"
-            f"Proyectos visibles del usuario:\n{chr(10).join(summary_lines) or '(ninguno)'}\n"
-            f"Consulta: {text.strip()}\n"
-            "Si no puedes responder con certeza, pide una pregunta más específica sobre "
-            "proyectos, HUs, tareas, sprints, miembros o documentación."
+            "Asistente DashNode. Español, máximo 2 oraciones.\n"
+            f"Proyectos visibles: {names}.\n"
+            f"Pregunta: {text.strip()}\n"
+            "Si falta contexto, pida detalle sobre proyectos, HUs, tareas o sprints."
         )
         try:
             self._quotas.check_and_consume("GEMINI")
-            return self._generation.generate(prompt).strip()
+            return generation.generate(prompt).strip()
         except QuotaExhaustedError:
             raise
         except GeminiProcessingError as exc:

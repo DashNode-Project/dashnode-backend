@@ -1,6 +1,6 @@
 """Chat history isolation and retention (EP-10)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
@@ -29,8 +29,8 @@ def test_chat_history_purges_entries_older_than_retention(db_session: Session) -
     repo = SqlAlchemyChatHistoryRepository(db_session)
     ids = UuidGenerator()
     user_id = ids.generate()
-    old = datetime.now(timezone.utc) - timedelta(hours=30)
-    recent = datetime.now(timezone.utc) - timedelta(hours=1)
+    old = datetime.now(UTC) - timedelta(hours=30)
+    recent = datetime.now(UTC) - timedelta(hours=1)
     db_session.add(
         AiChatMessageModel(
             id=ids.generate(),

@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.modules.auth.infrastructure.models import UserModel
 from app.modules.backlog.domain.entities import StoryTaskStatus
 from app.modules.backlog.infrastructure.models import StoryTaskModel, UserStoryModel
-from app.modules.documentation.domain.entities import DocumentationApprovalStatus
 from app.modules.documentation.infrastructure.models import DocumentationEntryModel
 from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
 from app.modules.projects.infrastructure.repositories import SqlAlchemyProjectRepository
@@ -92,16 +91,17 @@ class AssistantDataService:
         }
         lines: list[str] = []
         for story in stories:
-            sprint_label = sprint_names.get(story.sprint_id, "sin sprint") if story.sprint_id else "sin sprint"
+            if story.sprint_id:
+                sprint_label = sprint_names.get(story.sprint_id, "sin sprint")
+            else:
+                sprint_label = "sin sprint"
             tasks = self._session.scalars(
                 select(StoryTaskModel).where(StoryTaskModel.user_story_id == story.id)
             ).all()
             done = all(t.status == StoryTaskStatus.DONE.value for t in tasks) if tasks else False
             status = "completada" if done else "pendiente"
-            lines.append(
-                f"{story.title} — sprint: {sprint_label}, creada {story.created_at.date().isoformat()}, "
-                f"{status}"
-            )
+            created = story.created_at.date().isoformat()
+            lines.append(f"{story.title} — sprint: {sprint_label}, creada {created}, {status}")
         return lines
 
     def list_tasks(

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
 from google.genai import errors as genai_errors
 
@@ -48,6 +47,7 @@ def test_generate_success_via_interactions(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(gc.settings, "API_GEMINI_MODEL", "gemini-3.8-flash")
 
     client = GenAiGeminiClient(client=mock_client)
+    monkeypatch.setattr(GenAiGeminiClient, "_run_blocking", lambda self, fn: fn())
     assert client.generate("ping") == "Hola"
     mock_interactions.create.assert_called_once()
     kwargs = mock_interactions.create.call_args.kwargs
@@ -73,6 +73,7 @@ def test_generate_maps_api_errors(
     monkeypatch.setattr(gc, "resolve_gemini_api_key", lambda: "AQ.test")
     monkeypatch.setattr(gc.settings, "API_GEMINI_MODEL", "gemini-3.8-flash")
 
+    monkeypatch.setattr(GenAiGeminiClient, "_run_blocking", lambda self, fn: fn())
     with pytest.raises(GeminiProcessingError, match=code):
         GenAiGeminiClient(client=mock_client).generate("ping")
 

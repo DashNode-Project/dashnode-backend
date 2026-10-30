@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 import httpx
@@ -19,8 +21,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
-_GEMINI_TIMEOUT_SECONDS = 180.0
+_GEMINI_TIMEOUT_SECONDS = 90.0
 _RETRYABLE_STATUS = {502, 503, 504}
+_INTERPRETATION_GENERATION_CONFIG: dict[str, object] = {
+    "thinking_level": "low",
+    "max_output_tokens": 512,
+}
+_GEMINI_HTTP_OPTIONS: dict[str, object] = {
+    "timeout": int(_GEMINI_TIMEOUT_SECONDS * 1000),
+    "retry_options": {
+        "attempts": 2,
+        "initial_delay": 0.4,
+        "max_delay": 2.0,
+        "http_status_codes": [408, 429, 500, 502, 503, 504],
+    },
+}
+_GEMINI_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="gemini-io")
 
 
 def _normalize_model_id(model: str) -> str:
@@ -79,6 +95,17 @@ def _extract_output_text(interaction: Interaction) -> str:
     raise GeminiProcessingError("empty_response")
 
 
+def _create_interaction(client: genai.Client, *, model_id: str, prompt: str, stream: bool):
+    return client.interactions.create(
+        model=model_id,
+        input=prompt,
+        stream=stream,
+        timeout=_GEMINI_TIMEOUT_SECONDS,
+        automatic_continuation=False,
+        generation_config=_INTERPRETATION_GENERATION_CONFIG,
+    )
+
+
 class GenAiGeminiClient:
     """GenerationPort adapter using client.interactions.create()."""
 
@@ -91,49 +118,70 @@ class GenAiGeminiClient:
         key = resolve_gemini_api_key()
         if not key:
             raise GeminiProcessingError("missing_api_key")
-        return genai.Client(
-            api_key=key,
-            http_options={"timeout": int(_GEMINI_TIMEOUT_SECONDS * 1000)},
-        )
+        return genai.Client(api_key=key, http_options=_GEMINI_HTTP_OPTIONS)
+
+    def _run_blocking(self, fn: Callable[[], str]) -> str:
+        """Keep synchronous FastAPI routes off the event loop when called from async parents."""
+        return _GEMINI_EXECUTOR.submit(fn).result()
 
     def generate(self, prompt: str) -> str:
+        return self._run_blocking(lambda: self._generate_sync(prompt))
+
+    def _generate_sync(self, prompt: str) -> str:
         key = resolve_gemini_api_key()
         if not key:
             raise GeminiProcessingError("missing_api_key")
         model_id = _normalize_model_id(settings.API_GEMINI_MODEL)
         client = self._build_client()
-        last_exc: Exception | None = None
-        for attempt in range(2):
-            try:
-                interaction = client.interactions.create(
-                    model=model_id,
-                    input=prompt,
-                    stream=False,
-                    timeout=_GEMINI_TIMEOUT_SECONDS,
-                )
-                return _extract_output_text(interaction)
-            except genai_errors.APIError as exc:
-                mapped = _map_api_error(exc)
-                if mapped.args[0] in {f"http_{s}" for s in _RETRYABLE_STATUS} and attempt == 0:
-                    time.sleep(2.0)
-                    last_exc = mapped
-                    continue
-                raise mapped from exc
-            except httpx.TimeoutException as exc:
-                raise GeminiProcessingError("timeout") from exc
-            except httpx.HTTPError as exc:
-                raise GeminiProcessingError("network") from exc
-            except genai_errors.ClientError as exc:
-                raise GeminiProcessingError("client_error") from exc
-            except genai_errors.ServerError as exc:
-                if attempt == 0:
-                    time.sleep(2.0)
-                    last_exc = exc
-                    continue
-                raise GeminiProcessingError("server_error") from exc
-        if last_exc:
-            raise last_exc
-        raise GeminiProcessingError("unknown")
+        try:
+            interaction = _create_interaction(
+                client, model_id=model_id, prompt=prompt, stream=False
+            )
+            return _extract_output_text(interaction)
+        except genai_errors.APIError as exc:
+            raise _map_api_error(exc) from exc
+        except httpx.TimeoutException as exc:
+            raise GeminiProcessingError("timeout") from exc
+        except httpx.HTTPError as exc:
+            raise GeminiProcessingError("network") from exc
+        except genai_errors.ClientError as exc:
+            raise GeminiProcessingError("client_error") from exc
+        except genai_errors.ServerError as exc:
+            raise GeminiProcessingError("server_error") from exc
+
+    def generate_stream(
+        self,
+        prompt: str,
+        *,
+        on_first_token: Callable[[], None] | None = None,
+    ) -> Iterator[str]:
+        """Stream text deltas (for future SSE); marks first token via callback."""
+        key = resolve_gemini_api_key()
+        if not key:
+            raise GeminiProcessingError("missing_api_key")
+        model_id = _normalize_model_id(settings.API_GEMINI_MODEL)
+        client = self._build_client()
+        first = False
+        try:
+            stream = _create_interaction(client, model_id=model_id, prompt=prompt, stream=True)
+            for event in stream:
+                if getattr(event, "event_type", None) == "content.delta":
+                    delta = getattr(event, "delta", None)
+                    text = getattr(delta, "text", None) if delta is not None else None
+                    if text:
+                        if not first:
+                            first = True
+                            if on_first_token:
+                                on_first_token()
+                        yield text
+                interaction = getattr(event, "interaction", None)
+                if interaction is not None and interaction.output_text and not first:
+                    if on_first_token:
+                        on_first_token()
+                    yield interaction.output_text
+                    return
+        except genai_errors.APIError as exc:
+            raise _map_api_error(exc) from exc
 
 
 # Backward-compatible alias for wiring and tests migrating to the SDK client.
@@ -155,18 +203,15 @@ def validate_gemini_text_generation(
         return False, "missing_api_key", None
 
     model_id = _normalize_model_id(model or settings.API_GEMINI_MODEL)
-    client = genai.Client(
-        api_key=raw_key,
-        http_options={"timeout": 120_000},
-    )
+    client = genai.Client(api_key=raw_key, http_options=_GEMINI_HTTP_OPTIONS)
     try:
-        interaction = client.interactions.create(
-            model=model_id,
-            input=prompt,
-            stream=False,
-            timeout=120.0,
+        started = time.perf_counter()
+        interaction = _create_interaction(
+            client, model_id=model_id, prompt=prompt, stream=False
         )
+        elapsed_ms = (time.perf_counter() - started) * 1000
         text = _extract_output_text(interaction)
+        logger.info("gemini_validate_ok model=%s latency_ms=%.1f", model_id, elapsed_ms)
         return True, text[:120], 200
     except GeminiProcessingError as exc:
         code = str(exc)

@@ -28,6 +28,4 @@ def is_low_quality_transcription(text: str) -> bool:
     if _REPEATED_PHRASE.search(cleaned):
         return True
     tokens = re.findall(r"[a-záéíóúñ]+", cleaned.lower())
-    if len(tokens) >= 6 and len(set(tokens)) <= 3:
-        return True
-    return False
+    return bool(len(tokens) >= 6 and len(set(tokens)) <= 3)

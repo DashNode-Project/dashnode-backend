@@ -52,6 +52,7 @@ ignore = ["S101", "B008"]
 "tests/*" = ["S101", "S105", "S106", "TID251"]
 "app/cli/*" = ["T201", "TID251"]
 "app/modules/auth/domain/messages.py" = ["S105"]  # literal user-facing texts, not secrets
+"app/modules/ai/application/assistant/intent_models.py" = ["N818"]  # domain clarification flow
 "scripts/*" = ["T201", "S105", "S106", "S603", "S607", "TID251", "E402", "E501"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

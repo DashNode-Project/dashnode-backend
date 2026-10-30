@@ -59,7 +59,10 @@ def project_metrics_summary(session: Session, project_id: str) -> str:
         lines.append(f"Historias de usuario ({len(stories)} listadas, orden cronológico):")
         sprint_names = _sprint_name_map(session, {s.sprint_id for s in stories if s.sprint_id})
         for story in stories:
-            sprint_label = sprint_names.get(story.sprint_id, "sin sprint") if story.sprint_id else "sin sprint"
+            if story.sprint_id:
+                sprint_label = sprint_names.get(story.sprint_id, "sin sprint")
+            else:
+                sprint_label = "sin sprint"
             created = story.created_at.date().isoformat()
             title = story.title.strip() or story.label or "Sin título"
             lines.append(f"- {title} (creada {created}, sprint: {sprint_label})")

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.modules.ai.application.dtos import (
@@ -92,7 +93,7 @@ async def voice_transcribe(
         user_id=actor.id,
         user_role=actor.role,
     )
-    text = use_case.execute(cmd)
+    text = await run_in_threadpool(use_case.execute, cmd)
     _chat_history(db).append(actor.id, role="user", text=text, input_source="voice")
     db.commit()
     return VoiceTranscribeResponse(recognized_text=text)
@@ -117,7 +118,7 @@ async def voice_process(
         user_id=actor.id,
         user_role=actor.role,
     )
-    result = use_case.execute(cmd)
+    result = await run_in_threadpool(use_case.execute, cmd)
     chat = _chat_history(db)
     if result.recognized_text:
         chat.append(actor.id, role="user", text=result.recognized_text, input_source="voice")

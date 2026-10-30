@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.orm import Session
@@ -24,7 +23,7 @@ class _Quota:
 
 
 def _seed_two_projects(db_session: Session, user_id: str = "u1") -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for pid, name in (("p1", "VozNotAI"), ("p2", "DashNode Initial Project")):
         db_session.add(
             ProjectModel(
