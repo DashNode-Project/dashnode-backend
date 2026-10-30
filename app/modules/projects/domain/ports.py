@@ -44,6 +44,12 @@ class ActiveUserLookup(Protocol):
     def list_active_users(self, *, query: str = "") -> list[MemberProfile]: ...
 
 
+class ProjectHealthSnapshotProvider(Protocol):
+    """Cross-module health metrics (implemented in orchestration, BR-4)."""
+
+    def get_health_snapshot(self, project_id: str) -> ProjectHealthSnapshot: ...
+
+
 class ProjectRepository(Protocol):
     """Port for persisting and retrieving projects and members."""
 
@@ -66,8 +72,6 @@ class ProjectRepository(Protocol):
     def user_can_access(self, project_id: str, user_id: str, role: str) -> bool: ...
 
     def clear_assignee_tasks(self, project_id: str, user_id: str, *, when: datetime) -> None: ...
-
-    def get_health_snapshot(self, project_id: str) -> ProjectHealthSnapshot: ...
 
     def soft_delete_cascade(self, project_id: str, when: datetime) -> None: ...
 

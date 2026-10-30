@@ -21,6 +21,7 @@ from app.modules.projects.application.use_cases import (
 )
 from app.modules.projects.infrastructure.repositories import SqlAlchemyProjectRepository
 from app.orchestration.project_active_user_lookup import SqlAlchemyActiveUserLookup
+from app.orchestration.project_health_adapter import SqlAlchemyProjectHealthSnapshotProvider
 from app.orchestration.project_meeting_cleanup import MeetingCleanupOnProjectDelete
 from app.shared.infrastructure.clock import SystemClock
 from app.shared.infrastructure.database import SqlAlchemyUnitOfWork
@@ -100,7 +101,10 @@ def get_list_project_members_use_case(
 def get_project_health_use_case(
     db: Session = Depends(get_db),
 ) -> GetProjectHealthUseCase:
-    return GetProjectHealthUseCase(project_repo=SqlAlchemyProjectRepository(session=db))
+    return GetProjectHealthUseCase(
+        project_repo=SqlAlchemyProjectRepository(session=db),
+        health=SqlAlchemyProjectHealthSnapshotProvider(session=db),
+    )
 
 
 def get_list_projects_use_case(
