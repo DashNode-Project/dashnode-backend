@@ -46,6 +46,26 @@ def _manager(db: Session) -> UserModel:
 _TASK_TYPES = ("frontend", "backend", "qa", "documentacion", "devops")
 
 
+def _repair_documentation_categories(db: Session, project_id: str) -> None:
+    legacy = {
+        "Arquitectura": "Técnica",
+        "Requisitos": "Funcional",
+        "Planificación": "General",
+        "Planificacion": "General",
+        "Actas": "Reunión",
+    }
+    repaired = False
+    for entry in db.scalars(
+        select(DocumentationEntryModel).where(DocumentationEntryModel.project_id == project_id)
+    ).all():
+        mapped = legacy.get(entry.category)
+        if mapped:
+            entry.category = mapped
+            repaired = True
+    if repaired:
+        print("[repair] Documentation categories normalized for NovaTech")
+
+
 def _repair_global_invalid_enums(db: Session) -> None:
     valid_status = {item.value for item in ProjectStatus}
     for project in db.query(ProjectModel).filter(ProjectModel.deleted_at.is_(None)).all():
@@ -94,10 +114,39 @@ def _repair_novatech_integrity(db: Session, project: ProjectModel) -> None:
         print(f"[repair] Domain values normalized for {project.name} ({project.id})")
 
 
+def _ensure_project_members(db: Session, project: ProjectModel, manager: UserModel) -> None:
+    now = datetime.now(UTC)
+    existing_ids = set(
+        db.scalars(
+            select(ProjectMemberModel.user_id).where(ProjectMemberModel.project_id == project.id)
+        ).all()
+    )
+    if manager.id not in existing_ids:
+        db.add(
+            ProjectMemberModel(
+                project_id=project.id,
+                user_id=manager.id,
+                role="manager",
+                joined_at=now,
+            )
+        )
+    dev = db.query(UserModel).filter_by(role="developer").first()
+    if dev and dev.id != manager.id and dev.id not in existing_ids:
+        db.add(
+            ProjectMemberModel(
+                project_id=project.id,
+                user_id=dev.id,
+                role="developer",
+                joined_at=now,
+            )
+        )
+
+
 def _ensure_project(db: Session, manager: UserModel) -> ProjectModel:
     existing = db.query(ProjectModel).filter_by(name=PROJECT_NAME, deleted_at=None).first()
     if existing is not None:
         print(f"[skip] Project already exists: {PROJECT_NAME} ({existing.id})")
+        _ensure_project_members(db, existing, manager)
         return existing
     now = datetime.now(UTC)
     project = ProjectModel(
@@ -119,24 +168,7 @@ def _ensure_project(db: Session, manager: UserModel) -> ProjectModel:
     )
     db.add(project)
     db.flush()
-    db.add(
-        ProjectMemberModel(
-            project_id=project.id,
-            user_id=manager.id,
-            role="manager",
-            joined_at=now,
-        )
-    )
-    dev = db.query(UserModel).filter_by(role="developer").first()
-    if dev and dev.id != manager.id:
-        db.add(
-            ProjectMemberModel(
-                project_id=project.id,
-                user_id=dev.id,
-                role="developer",
-                joined_at=now,
-            )
-        )
+    _ensure_project_members(db, project, manager)
     print(f"[ok] Created project {PROJECT_NAME}")
     return project
 
@@ -317,22 +349,22 @@ def _seed_docs(db: Session, project: ProjectModel, manager: UserModel) -> None:
     docs = [
         (
             "Documento de arquitectura de software",
-            "Arquitectura",
+            "Técnica",
             "Capas API FastAPI, frontend React, PostgreSQL. Componentes: auth, projects, backlog, AI.",
         ),
         (
             "Especificación de requisitos",
-            "Requisitos",
+            "Funcional",
             "Requisitos funcionales para gestión empresarial, RBAC y trazabilidad sprint-HU-tarea.",
         ),
         (
             "Planificación del proyecto NovaTech",
-            "Planificación",
+            "General",
             "Roadmap en 2 sprints con entregables de autenticación, proyectos y documentación.",
         ),
         (
             "Acta de reunion - Kickoff",
-            "Actas",
+            "Reunión",
             "Se acordó alcance MVP, roles del equipo y fechas de sprint.",
         ),
     ]
@@ -367,6 +399,7 @@ def main() -> None:
         manager = _manager(db)
         project = _ensure_project(db, manager)
         _repair_novatech_integrity(db, project)
+        _repair_documentation_categories(db, project.id)
         for orphan in db.query(ProjectModel).filter(
             ProjectModel.name == PROJECT_NAME,
             ProjectModel.deleted_at.is_(None),
