@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -44,8 +44,6 @@ _PROJECT_INTENTS = frozenset(
     }
 )
 
-_T = TypeVar("_T")
-
 
 class AssistantOrchestrator:
     def __init__(self, session: Session, generation: GenerationPort, quotas: QuotaPort) -> None:
@@ -82,8 +80,12 @@ class AssistantOrchestrator:
             metrics.log(user_id=user_id)
 
     def _db_call(
-        self, metrics: AssistantRequestMetrics, fn: Callable[..., _T], *args, **kwargs
-    ) -> _T:
+        self,
+        metrics: AssistantRequestMetrics,
+        fn: Callable[..., Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
         metrics.start_postgres()
         try:
             return fn(*args, **kwargs)
@@ -268,7 +270,7 @@ class AssistantOrchestrator:
     def _remember_project(
         self,
         user_id: str,
-        state: dict,
+        state: dict[str, Any],
         project_id: str,
         project_name: str,
         metrics: AssistantRequestMetrics,
@@ -293,12 +295,13 @@ class AssistantOrchestrator:
         intent: ParsedIntent,
         optional_project_id: str | None,
         candidates: list[ProjectCandidate],
-        state: dict,
+        state: dict[str, Any],
     ) -> str | None:
         if intent.conversational_index is not None:
             ids = list(state.get("last_project_ids", []))
             if intent.conversational_index < len(ids):
-                return ids[intent.conversational_index]
+                project_id = ids[intent.conversational_index]
+                return str(project_id)
 
         if intent.use_open_project and optional_project_id:
             return optional_project_id
@@ -324,9 +327,7 @@ class AssistantOrchestrator:
         if not intent.sprint_ref:
             return None
         sprint_rows = self._db_call(metrics, self._data.sprint_candidates, project_id)
-        candidates = [
-            SprintCandidate(sid, name, project_id) for sid, name in sprint_rows
-        ]
+        candidates = [SprintCandidate(sid, name, project_id) for sid, name in sprint_rows]
         resolved = resolve_sprint_by_ref(intent.sprint_ref, candidates)
         if resolved.ambiguous:
             names = ", ".join(item.name for item in resolved.ambiguous[:5])
@@ -337,7 +338,7 @@ class AssistantOrchestrator:
         self,
         text: str,
         user_id: str,
-        projects: list,
+        projects: list[Any],
         generation: MetricsGenerationPort,
     ) -> str:
         names = ", ".join(p.name for p in projects[:8]) or "ninguno"

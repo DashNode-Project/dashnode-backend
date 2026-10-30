@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from google import genai
 from google.genai import errors as genai_errors
+from google.genai.types import HttpOptionsDict
 
 from app.config import settings
 from app.modules.ai.domain.errors import GeminiProcessingError
@@ -27,7 +27,7 @@ _INTERPRETATION_GENERATION_CONFIG: dict[str, object] = {
     "thinking_level": "low",
     "max_output_tokens": 512,
 }
-_GEMINI_HTTP_OPTIONS: dict[str, object] = {
+_GEMINI_HTTP_OPTIONS: HttpOptionsDict = {
     "timeout": int(_GEMINI_TIMEOUT_SECONDS * 1000),
     "retry_options": {
         "attempts": 2,
@@ -36,7 +36,6 @@ _GEMINI_HTTP_OPTIONS: dict[str, object] = {
         "http_status_codes": [408, 429, 500, 502, 503, 504],
     },
 }
-_GEMINI_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="gemini-io")
 
 
 def _normalize_model_id(model: str) -> str:
@@ -95,7 +94,7 @@ def _extract_output_text(interaction: Interaction) -> str:
     raise GeminiProcessingError("empty_response")
 
 
-def _create_interaction(client: genai.Client, *, model_id: str, prompt: str, stream: bool):
+def _create_interaction(client: genai.Client, *, model_id: str, prompt: str, stream: bool) -> Any:
     return client.interactions.create(
         model=model_id,
         input=prompt,
@@ -120,12 +119,10 @@ class GenAiGeminiClient:
             raise GeminiProcessingError("missing_api_key")
         return genai.Client(api_key=key, http_options=_GEMINI_HTTP_OPTIONS)
 
-    def _run_blocking(self, fn: Callable[[], str]) -> str:
-        """Keep synchronous FastAPI routes off the event loop when called from async parents."""
-        return _GEMINI_EXECUTOR.submit(fn).result()
-
     def generate(self, prompt: str) -> str:
-        return self._run_blocking(lambda: self._generate_sync(prompt))
+        # Voice/text AI runs inside Starlette's thread pool (see ai_routes); avoid a nested
+        # executor here — it deadlocked when all gemini-io workers waited on themselves.
+        return self._generate_sync(prompt)
 
     def _generate_sync(self, prompt: str) -> str:
         key = resolve_gemini_api_key()
@@ -206,9 +203,7 @@ def validate_gemini_text_generation(
     client = genai.Client(api_key=raw_key, http_options=_GEMINI_HTTP_OPTIONS)
     try:
         started = time.perf_counter()
-        interaction = _create_interaction(
-            client, model_id=model_id, prompt=prompt, stream=False
-        )
+        interaction = _create_interaction(client, model_id=model_id, prompt=prompt, stream=False)
         elapsed_ms = (time.perf_counter() - started) * 1000
         text = _extract_output_text(interaction)
         logger.info("gemini_validate_ok model=%s latency_ms=%.1f", model_id, elapsed_ms)

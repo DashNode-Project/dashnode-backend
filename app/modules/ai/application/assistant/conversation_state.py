@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -13,7 +14,7 @@ class ConversationStateStore:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def load(self, user_id: str) -> dict:
+    def load(self, user_id: str) -> dict[str, Any]:
         row = self._session.get(AiConversationStateModel, user_id)
         if row is None or not row.payload:
             return {"last_project_ids": [], "last_project_names": []}
@@ -25,7 +26,7 @@ class ConversationStateStore:
             return {"last_project_ids": [], "last_project_names": []}
         return data
 
-    def save(self, user_id: str, data: dict) -> None:
+    def save(self, user_id: str, data: dict[str, Any]) -> None:
         payload = json.dumps(data, ensure_ascii=False)
         row = self._session.get(AiConversationStateModel, user_id)
         if row is None:

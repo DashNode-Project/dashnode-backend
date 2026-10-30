@@ -205,7 +205,7 @@ def _extract_project_ref(text: str, open_project_name: str | None) -> str | None
         return open_project_name
     quoted = re.findall(r"[\"“](.+?)[\"”]", text)
     if quoted:
-        return quoted[0].strip()
+        return str(quoted[0].strip())
     match = re.search(
         r"(?:mi\s+)?(?:proyecto|project)\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,40}?)"
         r"(?:\s+ah[ií]|\s+alli|\s+all[ií]|$|[,.!?])",

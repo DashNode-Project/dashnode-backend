@@ -26,9 +26,7 @@ def metrics_line(session: Session, project_id: str) -> str:
         .select_from(ProjectMemberModel)
         .where(ProjectMemberModel.project_id == project_id)
     )
-    return (
-        f"{hu_count or 0} HUs, {task_count or 0} tareas, {member_count or 0} miembros"
-    )
+    return f"{hu_count or 0} HUs, {task_count or 0} tareas, {member_count or 0} miembros"
 
 
 def project_metrics_summary(session: Session, project_id: str) -> str:

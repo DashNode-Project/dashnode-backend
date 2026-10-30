@@ -54,7 +54,8 @@ def resolve_project(
         for item in candidates
     ]
     scored.sort(key=lambda pair: pair[1], reverse=True)
-    best_item, best_score = scored[0]
+    best_item, best_score_raw = scored[0]
+    best_score = int(best_score_raw)
     if best_score < limit:
         return ResolveResult(None, [], best_score)
     close = [item for item, score in scored if score >= limit and score >= best_score - 3]
@@ -83,15 +84,18 @@ def find_project_name_in_utterance(
         if needle == haystack or re.search(rf"(?<!\w){re.escape(needle)}(?!\w)", haystack):
             score = 100
         else:
-            score = max(
-                fuzz.partial_ratio(needle, haystack),
-                fuzz.token_set_ratio(needle, haystack),
+            score = int(
+                max(
+                    fuzz.partial_ratio(needle, haystack),
+                    fuzz.token_set_ratio(needle, haystack),
+                )
             )
         scored.append((item, score))
     if not scored:
         return ResolveResult(None, [], 0)
     scored.sort(key=lambda pair: pair[1], reverse=True)
-    best_item, best_score = scored[0]
+    best_item, best_score_raw = scored[0]
+    best_score = int(best_score_raw)
     if best_score < limit:
         return ResolveResult(None, [], best_score)
     close = [item for item, score in scored if score >= limit and score >= best_score - 3]
@@ -123,7 +127,8 @@ def resolve_sprint_by_ref(
         for sprint in candidates
     ]
     scored.sort(key=lambda pair: pair[1], reverse=True)
-    best, score = scored[0]
+    best, score_raw = scored[0]
+    score = int(score_raw)
     if score < settings.AI_FUZZY_MATCH_THRESHOLD:
         return ResolveResult(None, [], score)
     close = [

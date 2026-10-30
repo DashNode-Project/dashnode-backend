@@ -72,8 +72,12 @@ class SqlAlchemyChatHistoryRepository:
 def _to_dto(row: AiChatMessageModel) -> ChatHistoryMessage:
     return ChatHistoryMessage(
         id=row.id,
-        role=row.role,  # type: ignore[arg-type]
+        role="user" if row.role == "user" else "assistant",
         text=row.text,
-        input_source=row.input_source,  # type: ignore[arg-type]
+        input_source="text"
+        if row.input_source == "text"
+        else "voice"
+        if row.input_source == "voice"
+        else None,
         created_at=row.created_at,
     )
