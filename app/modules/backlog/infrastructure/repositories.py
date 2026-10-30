@@ -16,8 +16,8 @@ from app.modules.backlog.domain.entities import (
     UserStory,
     parse_story_task_status,
 )
-from app.modules.backlog.domain.rules import parse_moscow, parse_task_type
 from app.modules.backlog.domain.ports import BacklogRepository
+from app.modules.backlog.domain.rules import parse_moscow, parse_task_type
 from app.modules.backlog.infrastructure.models import (
     EpicModel,
     StoryTaskModel,

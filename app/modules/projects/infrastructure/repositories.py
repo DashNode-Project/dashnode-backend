@@ -244,9 +244,7 @@ class SqlAlchemyProjectRepository(ProjectRepository):
             velocity = 0.0
 
         open_issues = sum(
-            1
-            for task in tasks
-            if task.status == StoryTaskStatus.CORRECTION or task.is_blocked
+            1 for task in tasks if task.status == StoryTaskStatus.CORRECTION or task.is_blocked
         )
 
         return ProjectHealthSnapshot(
