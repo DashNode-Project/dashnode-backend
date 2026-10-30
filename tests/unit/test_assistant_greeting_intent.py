@@ -29,11 +29,11 @@ def _parse(text: str) -> ParsedIntent:
 @pytest.mark.parametrize(
     ("text", "expected_intent"),
     [
-        ("Hola", IntentType.CHITCHAT),
-        ("Hola Gemini, ¿cómo vas?", IntentType.CHITCHAT),
-        ("Hola, asistente DashNode. ¿Cómo estás?", IntentType.CHITCHAT),
-        ("Hola, necesito ayuda", IntentType.CHITCHAT),
-        ("Buenos días", IntentType.CHITCHAT),
+        ("Hola", IntentType.GREETING),
+        ("Hola Gemini, ¿cómo vas?", IntentType.GREETING),
+        ("Hola, asistente DashNode. ¿Cómo estás?", IntentType.GREETING),
+        ("Hola, necesito ayuda", IntentType.GREETING),
+        ("Buenos días", IntentType.GREETING),
         ("Hola, dime cuáles HUs tiene DashNode", LIST_USER_STORIES),
         ("Hola, dime cuáles HUs tiene Medifast", LIST_USER_STORIES),
         ("Hola, necesito saber las HUs de VozNotAI", LIST_USER_STORIES),

@@ -23,7 +23,7 @@ def test_chitchat_greeting() -> None:
         open_project_name=None,
         last_project_names=[],
     )
-    assert intent.intent == IntentType.CHITCHAT
+    assert intent.intent == IntentType.GREETING
 
 
 def test_tasks_correction_filter() -> None:

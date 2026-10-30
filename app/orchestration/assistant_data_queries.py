@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from rapidfuzz import fuzz
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.ai.application.assistant.data_models import ProjectRow, ProjectSummaryData
 from app.modules.ai.domain.ports import ProjectAiContext
 from app.modules.auth.infrastructure.models import UserModel
+from app.modules.availability.infrastructure.models import MeetingModel, MeetingParticipantModel
 from app.modules.backlog.domain.entities import StoryTaskStatus
 from app.modules.backlog.infrastructure.models import StoryTaskModel, UserStoryModel
 from app.modules.documentation.infrastructure.models import DocumentationEntryModel
@@ -15,25 +17,24 @@ from app.modules.projects.infrastructure.models import ProjectMemberModel, Proje
 from app.modules.projects.infrastructure.repositories import SqlAlchemyProjectRepository
 from app.modules.sprints.infrastructure.models import SprintModel
 from app.orchestration.ai_context import SqlAlchemyProjectContextBuilder
-from app.orchestration.backlog_adapters import SqlAlchemyProjectLookup
+from app.shared.infrastructure.clock import SystemClock
 
 
 class AssistantDataService:
     def __init__(self, session: Session) -> None:
         self._session = session
         self._projects = SqlAlchemyProjectRepository(session)
-        self._lookup = SqlAlchemyProjectLookup(session)
 
     def accessible_projects(self, user_id: str, role: str) -> list[ProjectRow]:
         rows = self._projects.list_visible_for_user(user_id, role=role)
         return [ProjectRow(id=row.id, name=row.name) for row in rows]
 
     def ensure_project_access(self, project_id: str, user_id: str, role: str) -> ProjectModel:
-        if role != "admin" and not self._lookup.is_member(project_id, user_id):
-            raise PermissionError(project_id)
         project = self._session.get(ProjectModel, project_id)
         if project is None or project.deleted_at is not None:
             raise LookupError(project_id)
+        if not self._projects.user_can_access(project_id, user_id, role):
+            raise PermissionError(project_id)
         return project
 
     def list_members(self, project_id: str, user_id: str, role: str) -> list[str]:
@@ -148,6 +149,169 @@ class AssistantDataService:
                 continue
             lines.append(f"{doc.title} — {doc.approval_status} ({doc.category})")
         return lines
+
+    def list_meetings(
+        self,
+        user_id: str,
+        role: str,
+        *,
+        project_id: str | None,
+        meeting_filter: str,
+    ) -> list[str]:
+        today = SystemClock().now().date().isoformat()
+        visible_ids = {row.id for row in self.accessible_projects(user_id, role)}
+        if project_id:
+            self.ensure_project_access(project_id, user_id, role)
+            scope_ids = {project_id}
+        else:
+            scope_ids = visible_ids
+
+        participant_ids = self._session.scalars(
+            select(MeetingParticipantModel.meeting_id).where(
+                MeetingParticipantModel.user_id == user_id
+            )
+        ).all()
+        participant_set = set(participant_ids)
+
+        scope_clauses = [MeetingModel.creator_id == user_id]
+        if participant_set:
+            scope_clauses.append(MeetingModel.id.in_(participant_set))
+        if scope_ids:
+            scope_clauses.append(MeetingModel.project_id.in_(scope_ids))
+        stmt = select(MeetingModel).where(or_(*scope_clauses))
+        meetings = self._session.scalars(stmt.order_by(MeetingModel.date.asc())).all()
+        lines: list[str] = []
+        for meeting in meetings:
+            if project_id and meeting.project_id != project_id:
+                continue
+            if (
+                not project_id
+                and meeting.project_id
+                and meeting.project_id not in scope_ids
+                and meeting.creator_id != user_id
+                and meeting.id not in participant_set
+            ):
+                continue
+            if meeting_filter == "cancelled" and meeting.status != "cancelled":
+                continue
+            if meeting_filter == "completed" and meeting.status != "completed":
+                continue
+            if meeting_filter in {"upcoming", "user_pending"} and meeting.status != "scheduled":
+                continue
+            if meeting_filter == "upcoming" and meeting.date < today:
+                continue
+            if meeting_filter == "pending_confirmation":
+                if meeting.status != "scheduled":
+                    continue
+                response = self._session.scalar(
+                    select(MeetingParticipantModel.response).where(
+                        MeetingParticipantModel.meeting_id == meeting.id,
+                        MeetingParticipantModel.user_id == user_id,
+                    )
+                )
+                if response != "pendiente":
+                    continue
+            if meeting_filter == "user_pending":
+                if meeting.date < today:
+                    continue
+                if meeting.creator_id != user_id and meeting.id not in participant_set:
+                    continue
+
+            project_label = "sin proyecto"
+            if meeting.project_id:
+                project = self._session.get(ProjectModel, meeting.project_id)
+                project_label = project.name if project else meeting.project_id
+            participants = self._session.scalars(
+                select(MeetingParticipantModel.user_id).where(
+                    MeetingParticipantModel.meeting_id == meeting.id
+                )
+            ).all()
+            participant_names: list[str] = []
+            for pid in participants[:8]:
+                user = self._session.get(UserModel, pid)
+                participant_names.append(user.name if user else pid)
+            part_text = ", ".join(participant_names) if participant_names else "sin participantes"
+            lines.append(
+                f"{meeting.title} — {meeting.date} {meeting.start_time}-{meeting.end_time}, "
+                f"estado: {meeting.status}, proyecto: {project_label}, participantes: {part_text}"
+            )
+        return lines
+
+    def count_meetings(
+        self,
+        user_id: str,
+        role: str,
+        *,
+        project_id: str | None,
+        meeting_filter: str,
+    ) -> int:
+        return len(
+            self.list_meetings(
+                user_id,
+                role,
+                project_id=project_id,
+                meeting_filter=meeting_filter,
+            )
+        )
+
+    def document_for_analysis(
+        self,
+        project_id: str,
+        user_id: str,
+        role: str,
+        *,
+        title_hint: str | None,
+        user_query: str,
+    ) -> tuple[str, str, bool]:
+        """Return (title, text_body, has_recoverable_content)."""
+        self.ensure_project_access(project_id, user_id, role)
+        docs = self._session.scalars(
+            select(DocumentationEntryModel).where(
+                DocumentationEntryModel.project_id == project_id,
+                DocumentationEntryModel.is_deleted.is_(False),
+            )
+        ).all()
+        visible = []
+        for doc in docs:
+            if role == "developer" and not doc.is_visible_to_devs and doc.author_id != user_id:
+                continue
+            visible.append(doc)
+        if not visible:
+            return ("", "No hay documentación visible para usted en este proyecto.", False)
+
+        needle = (title_hint or "").strip().lower()
+        if not needle:
+            for token in ("arquitectura", "requisitos", "planificacion", "acta", "seguimiento"):
+                if token in user_query.lower():
+                    needle = token
+                    break
+
+        chosen = visible[0]
+        if needle:
+            best_score = -1.0
+            for doc in visible:
+                score = float(fuzz.partial_ratio(needle, doc.title.lower()))
+                if needle in doc.title.lower():
+                    score = max(score, 95.0)
+                if score > best_score:
+                    best_score = score
+                    chosen = doc
+
+        body = (chosen.content or chosen.objective or "").strip()
+        has_body = bool(body)
+        if not has_body and chosen.external_url:
+            body = (
+                f"El documento «{chosen.title}» solo tiene metadatos y una URL externa "
+                f"({chosen.external_url}). No hay texto almacenado en DashNode para analizar."
+            )
+        elif not has_body:
+            body = (
+                f"El documento «{chosen.title}» no tiene contenido recuperable en la base de "
+                "datos (solo metadatos)."
+            )
+        else:
+            body = body[:12000]
+        return (chosen.title, body, has_body)
 
     def sprint_candidates(self, project_id: str) -> list[tuple[str, str]]:
         rows = self._session.scalars(

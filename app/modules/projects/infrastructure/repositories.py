@@ -160,6 +160,16 @@ class SqlAlchemyProjectRepository(ProjectRepository):
         )
         return self._session.execute(stmt).scalar_one_or_none() is not None
 
+    def user_can_access(self, project_id: str, user_id: str, role: str) -> bool:
+        project = self._session.get(ProjectModel, project_id)
+        if project is None or project.deleted_at is not None:
+            return False
+        if role == "admin":
+            return True
+        return any(
+            row.id == project_id for row in self.list_visible_for_user(user_id, role=role)
+        )
+
     def remove_member(self, project_id: str, user_id: str) -> None:
         self._session.execute(
             delete(ProjectMemberModel).where(

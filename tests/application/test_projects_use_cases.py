@@ -81,6 +81,11 @@ class FakeProjectRepository:
     def is_member(self, project_id: str, user_id: str) -> bool:
         return any(m.project_id == project_id and m.user_id == user_id for m in self.members)
 
+    def user_can_access(self, project_id: str, user_id: str, role: str) -> bool:
+        if self.get_by_id(project_id) is None:
+            return False
+        return any(p.id == project_id for p in self.list_visible_for_user(user_id, role=role))
+
     def soft_delete_cascade(self, project_id: str, when: datetime) -> None:
         project = self.projects.get(project_id)
         if project:

@@ -103,7 +103,7 @@ def test_parser_analyze_hus_ambiguous_without_project() -> None:
         open_project_name=None,
         last_project_names=[],
     )
-    assert intent.intent == IntentType.ANALYZE_USER_STORIES
+    assert intent.intent == IntentType.IMPROVE_USER_STORIES
     assert intent.project_ref is None
 
 
@@ -113,7 +113,7 @@ def test_parser_analyze_hus_extracts_dashnode_ref() -> None:
         open_project_name=None,
         last_project_names=[],
     )
-    assert intent.intent == IntentType.ANALYZE_USER_STORIES
+    assert intent.intent == IntentType.IMPROVE_USER_STORIES
     assert intent.project_ref is not None
     assert "dashnode" in intent.project_ref.lower()
 
@@ -149,7 +149,7 @@ def test_orchestrator_analyze_hus_needs_project_when_many(db_session: Session) -
     orch = AssistantOrchestrator(
         db_session, _NoGemini(), _Quota(), AssistantDataService(db_session)
     )
-    with pytest.raises(ClarificationNeeded, match="recomendaciones"):
+    with pytest.raises(ClarificationNeeded, match="historias de usuario"):
         orch.answer("Dime qué mejorar en las HUs", "u1", "admin", None)
 
 

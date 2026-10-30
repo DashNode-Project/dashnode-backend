@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import re
 
-from app.modules.ai.application.assistant.intent_models import IntentType, ParsedIntent, TaskFilter
+from app.modules.ai.application.assistant.intent_models import (
+    IntentType,
+    MeetingFilter,
+    ParsedIntent,
+    TaskFilter,
+)
 from app.modules.ai.application.assistant.text_normalize import normalize_text
 
 
@@ -34,6 +39,27 @@ def parse_intent(
             conversational_index=_summary_conversational_index(normalized, last_project_names),
         )
 
+    if _asks_project_opinion(normalized):
+        return ParsedIntent(
+            intent=IntentType.PROJECT_ANALYSIS,
+            project_ref=project_ref,
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
+    if _asks_explain_user_story_writing(normalized):
+        return ParsedIntent(
+            intent=IntentType.EXPLAIN_USER_STORY_WRITING,
+            project_ref=project_ref,
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
+    if _asks_generate_user_story_examples(normalized):
+        return ParsedIntent(
+            intent=IntentType.GENERATE_USER_STORY_EXAMPLES,
+            project_ref=project_ref,
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
     if _matches_projects(normalized):
         return ParsedIntent(intent=IntentType.LIST_PROJECTS)
 
@@ -55,14 +81,45 @@ def parse_intent(
             use_open_project=project_ref is None and _mentions_this_project(normalized),
         )
 
-    if _asks_hu_analysis(normalized):
+    if _asks_hu_improve(normalized):
         return ParsedIntent(
-            intent=IntentType.ANALYZE_USER_STORIES,
+            intent=IntentType.IMPROVE_USER_STORIES,
             project_ref=project_ref,
             use_open_project=project_ref is None and _mentions_this_project(normalized),
         )
 
-    if _asks_documentation(normalized):
+    if _asks_hu_review(normalized):
+        return ParsedIntent(
+            intent=IntentType.REVIEW_USER_STORIES,
+            project_ref=project_ref,
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
+    if _asks_analyze_document(normalized):
+        return ParsedIntent(
+            intent=IntentType.ANALYZE_DOCUMENT,
+            project_ref=project_ref,
+            document_ref=_extract_document_ref(raw),
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
+    if _asks_count_meetings(normalized):
+        return ParsedIntent(
+            intent=IntentType.COUNT_MEETINGS,
+            project_ref=project_ref,
+            meeting_filter=_meeting_filter(normalized),
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
+    if _asks_meetings(normalized):
+        return ParsedIntent(
+            intent=IntentType.LIST_MEETINGS,
+            project_ref=project_ref,
+            meeting_filter=_meeting_filter(normalized),
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
+    if _asks_documentation(normalized) and not _asks_analyze_document(normalized):
         return ParsedIntent(
             intent=IntentType.LIST_DOCUMENTATION,
             project_ref=project_ref,
@@ -109,7 +166,7 @@ def parse_intent(
         )
 
     if _is_chitchat(normalized):
-        return ParsedIntent(intent=IntentType.CHITCHAT)
+        return ParsedIntent(intent=IntentType.GREETING)
 
     return ParsedIntent(intent=IntentType.UNKNOWN, project_ref=project_ref, sprint_ref=sprint_ref)
 
@@ -166,11 +223,18 @@ def _has_functional_request(normalized: str) -> bool:
             or _asks_count_stories(segment)
             or (_asks_members(segment) and _asks_all_projects_scope(segment))
             or _asks_gemini_grounded(segment)
-            or _asks_hu_analysis(segment)
+            or _asks_hu_review(segment)
+            or _asks_hu_improve(segment)
+            or _asks_explain_user_story_writing(segment)
+            or _asks_generate_user_story_examples(segment)
+            or _asks_project_opinion(segment)
+            or _asks_analyze_document(segment)
             or _asks_documentation(segment)
             or _asks_members(segment)
             or _asks_stories(segment)
             or _asks_sprints(segment)
+            or _asks_meetings(segment)
+            or _asks_count_meetings(segment)
             or _asks_tasks(segment)
             or _is_bare_hu_query(segment)
         ):
@@ -272,17 +336,116 @@ def _asks_all_projects_scope(normalized: str) -> bool:
 
 
 def _asks_hu_analysis(normalized: str) -> bool:
+    return _asks_hu_review(normalized) or _asks_hu_improve(normalized)
+
+
+def _asks_hu_review(normalized: str) -> bool:
     has_hu = bool(re.search(r"\b(hu|hus|historias? de usuario|historias)\b", normalized))
     has_review = bool(
         re.search(
-            r"(mejorar|mejora|recomend|suger|analiz|optimiz|que falta|como puedo|que falta|"
-            r"redactad|evalu|revis|calidad|claridad|ambig|verificab|consistenc|estructur|"
+            r"(redactad|evalu|revis|calidad|claridad|ambig|verificab|consistenc|estructur|"
             r"bien escrita|bien formulada|estan bien|están bien|si estan|si están|"
-            r"que mejorar|que mejorarias|como estan redactad|como están redactad)",
+            r"como estan redactad|como están redactad|analiz.*historias)",
             normalized,
         )
     )
-    return has_hu and has_review
+    return has_hu and has_review and not _asks_hu_improve(normalized)
+
+
+def _asks_hu_improve(normalized: str) -> bool:
+    has_hu = bool(re.search(r"\b(hu|hus|historias? de usuario|historias)\b", normalized))
+    has_improve = bool(
+        re.search(
+            r"(mejorar|mejora|recomend|suger|optimiz|que falta|como puedo|que mejorar|"
+            r"que mejorarias)",
+            normalized,
+        )
+    )
+    return has_hu and has_improve
+
+
+def _asks_explain_user_story_writing(normalized: str) -> bool:
+    if _asks_generate_user_story_examples(normalized):
+        return False
+    return bool(
+        re.search(
+            r"(como redact|como escrib|explic.*historia|formato de.*historia|"
+            r"diferencia entre.*historia|que es una hu|que es una historia de usuario)",
+            normalized,
+        )
+    )
+
+
+def _asks_generate_user_story_examples(normalized: str) -> bool:
+    return bool(
+        re.search(
+            r"(ejemplo|ejemplos|muestrame.*historia|dame.*historia)",
+            normalized,
+        )
+        and re.search(r"\b(hu|hus|historias? de usuario|historias)\b", normalized)
+        and not _asks_hu_review(normalized)
+    )
+
+
+def _asks_project_opinion(normalized: str) -> bool:
+    if _asks_hu_analysis(normalized) or _asks_analyze_document(normalized):
+        return False
+    return bool(
+        re.search(
+            r"(que opinas|que piensas|que te parece|evalua el proyecto|analiza el proyecto|"
+            r"vision general del proyecto)",
+            normalized,
+        )
+    )
+
+
+def _asks_analyze_document(normalized: str) -> bool:
+    has_doc = bool(re.search(r"(documento|documentacion|doc)\b", normalized))
+    has_action = bool(
+        re.search(
+            r"(analiza|resume|resumir|de que trata|que tecnolog|componentes|riesgos|"
+            r"recomendaciones sobre)",
+            normalized,
+        )
+    )
+    return has_doc and has_action
+
+
+def _asks_meetings(normalized: str) -> bool:
+    return bool(re.search(r"\b(reunion|reuniones|meeting|meetings)\b", normalized))
+
+
+def _asks_count_meetings(normalized: str) -> bool:
+    return _asks_meetings(normalized) and bool(
+        re.search(r"(cuant(a|o)s|numero de|cantidad de|cuenta)", normalized)
+    )
+
+
+def _meeting_filter(normalized: str) -> MeetingFilter:
+    if re.search(r"cancelad", normalized):
+        return MeetingFilter.CANCELLED
+    if re.search(r"(finaliz|completad|terminad)", normalized):
+        return MeetingFilter.COMPLETED
+    if re.search(r"(confirm|confirmacion)", normalized):
+        return MeetingFilter.PENDING_CONFIRMATION
+    if re.search(r"(proxim|siguiente)", normalized):
+        return MeetingFilter.UPCOMING
+    if re.search(r"pendient", normalized):
+        return MeetingFilter.USER_PENDING
+    if re.search(r"\btodas\b", normalized):
+        return MeetingFilter.ALL
+    return MeetingFilter.UPCOMING
+
+
+def _extract_document_ref(text: str) -> str | None:
+    normalized = normalize_text(text)
+    match = re.search(
+        r"documento(?: de)?\s+([a-z0-9\s\-]{3,80})",
+        normalized,
+    )
+    if match:
+        return match.group(1).strip()
+    return None
 
 
 def _asks_gemini_grounded(normalized: str) -> bool:
@@ -334,12 +497,17 @@ def _asks_count_stories(normalized: str) -> bool:
 
 
 def _asks_tasks(normalized: str) -> bool:
-    return bool(
-        re.search(
-            r"\b(tarea|tareas|tasks|pendiente|pendientes|por hacer|tengo pendiente)\b",
-            normalized,
-        )
-    )
+    if _asks_meetings(normalized):
+        return False
+    if re.search(r"\b(reunion|reuniones)\b", normalized):
+        return False
+    if re.search(r"\b(tarea|tareas|tasks)\b", normalized):
+        return True
+    if re.search(r"tengo pendiente", normalized):
+        return True
+    if re.search(r"\b(pendiente|pendientes|por hacer)\b", normalized):
+        return bool(re.search(r"\b(tarea|tareas)\b", normalized))
+    return False
 
 
 def _asks_documentation(normalized: str) -> bool:

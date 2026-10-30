@@ -13,6 +13,7 @@ from app.modules.ai.application.assistant.intent_models import ClarificationNeed
 from app.modules.ai.application.assistant.intent_parser import parse_intent
 from app.modules.ai.application.assistant.orchestrator import AssistantOrchestrator
 from app.modules.ai.domain.errors import GeminiProcessingError
+from app.modules.auth.infrastructure.models import UserModel
 from app.modules.backlog.infrastructure.models import EpicModel, UserStoryModel
 from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
 from app.orchestration.assistant_data_queries import AssistantDataService
@@ -87,9 +88,53 @@ def _seed_medifast_with_story(db_session: Session) -> None:
     db_session.flush()
 
 
+def test_manager_can_query_project_without_membership_row(db_session: Session) -> None:
+    now = datetime.now(UTC)
+    db_session.add(
+        UserModel(
+            id="mgr-only",
+            email="mgr-only@test.local",
+            name="Manager Solo",
+            role="manager",
+            hashed_password="x",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.add(
+        ProjectModel(
+            id="legacy-medifast",
+            name="Medifast",
+            description="Proyecto legado",
+            owner_id="owner-x",
+            manager_id="mgr-only",
+            priority="media",
+            tech_stack="[]",
+            meeting_link=None,
+            status="planificacion",
+            deleted_at=None,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.flush()
+
+    class _NoGemini:
+        def generate(self, prompt: str) -> str:
+            raise AssertionError("Gemini should not be called")
+
+    orch = AssistantOrchestrator(
+        db_session, _NoGemini(), _Quota(), AssistantDataService(db_session)
+    )
+    answer = orch.answer("Cuántas HUs tiene Medifast", "mgr-only", "manager", None)
+    assert "permiso" not in answer.lower()
+    assert "Medifast" in answer
+
+
 def test_medifast_redaction_query_classifies_as_analyze() -> None:
     intent = parse_intent(MEDIFAST_QUERY, open_project_name=None, last_project_names=[])
-    assert intent.intent == IntentType.ANALYZE_USER_STORIES
+    assert intent.intent == IntentType.REVIEW_USER_STORIES
     assert intent.project_ref is not None
     assert "medifast" in intent.project_ref.lower()
 
@@ -215,7 +260,7 @@ def test_voznotai_improvement_query(db_session: Session) -> None:
         open_project_name=None,
         last_project_names=[],
     )
-    assert intent.intent == IntentType.ANALYZE_USER_STORIES
+    assert intent.intent == IntentType.IMPROVE_USER_STORIES
 
 
 def test_ambiguous_analysis_requests_clarification(db_session: Session) -> None:

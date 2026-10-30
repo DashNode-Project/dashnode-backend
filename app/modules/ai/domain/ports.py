@@ -79,3 +79,31 @@ class AssistantDataPort(Protocol):
     ) -> ProjectAiContext: ...
 
     def story_analysis_detail(self, project_id: str, user_id: str, role: str) -> str: ...
+
+    def list_meetings(
+        self,
+        user_id: str,
+        role: str,
+        *,
+        project_id: str | None,
+        meeting_filter: str,
+    ) -> list[str]: ...
+
+    def count_meetings(
+        self,
+        user_id: str,
+        role: str,
+        *,
+        project_id: str | None,
+        meeting_filter: str,
+    ) -> int: ...
+
+    def document_for_analysis(
+        self,
+        project_id: str,
+        user_id: str,
+        role: str,
+        *,
+        title_hint: str | None,
+        user_query: str,
+    ) -> tuple[str, str, bool]: ...

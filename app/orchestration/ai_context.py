@@ -10,13 +10,12 @@ from app.modules.projects.infrastructure.models import ProjectModel
 from app.modules.projects.infrastructure.repositories import SqlAlchemyProjectRepository
 from app.modules.sprints.infrastructure.models import SprintModel
 from app.orchestration.ai_context_metrics import metrics_line, project_metrics_summary
-from app.orchestration.backlog_adapters import SqlAlchemyProjectLookup
 
 
 class SqlAlchemyProjectContextBuilder:
     def __init__(self, session: Session) -> None:
         self._session = session
-        self._projects = SqlAlchemyProjectLookup(session)
+        self._projects = SqlAlchemyProjectRepository(session)
 
     def build_context(
         self, project_id: str | None, user_id: str, user_role: str
@@ -31,7 +30,7 @@ class SqlAlchemyProjectContextBuilder:
                 workspace_summary=workspace,
                 project_metrics_summary=None,
             )
-        if user_role != "admin" and not self._projects.is_member(project_id, user_id):
+        if not self._projects.user_can_access(project_id, user_id, user_role):
             return ProjectAiContext(
                 None, None, None, (), workspace_summary=workspace, project_metrics_summary=None
             )
