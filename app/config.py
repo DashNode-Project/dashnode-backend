@@ -76,6 +76,7 @@ class Settings(BaseSettings):
 
     # --- EP-10 AI assistant (Whisper + Gemini free tier only) --------------------
     API_TRANSCRIPTION_WHISPER: SecretStr | None = None
+    GEMINI_API_KEY: SecretStr | None = None
     API_GEMINI: SecretStr | None = None
     API_GEMINI_MODEL: str = "gemini-3.8-flash"
     AI_WHISPER_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from rapidfuzz import fuzz
@@ -52,6 +53,45 @@ def resolve_project(
         )
         for item in candidates
     ]
+    scored.sort(key=lambda pair: pair[1], reverse=True)
+    best_item, best_score = scored[0]
+    if best_score < limit:
+        return ResolveResult(None, [], best_score)
+    close = [item for item, score in scored if score >= limit and score >= best_score - 3]
+    if len(close) > 1:
+        return ResolveResult(None, close, best_score)
+    return ResolveResult(best_item, [], best_score)
+
+
+def find_project_name_in_utterance(
+    text: str,
+    candidates: list[ProjectCandidate],
+    *,
+    threshold: int | None = None,
+) -> ResolveResult[ProjectCandidate]:
+    """Locate an authorized project name embedded in free-form user text."""
+    limit = threshold or settings.AI_FUZZY_MATCH_THRESHOLD
+    if not text.strip() or not candidates:
+        return ResolveResult(None, [], 0)
+    haystack = normalize_text(text)
+    scored: list[tuple[ProjectCandidate, int]] = []
+    for item in sorted(candidates, key=lambda c: len(c.name), reverse=True):
+        needle = normalize_text(item.name)
+        if not needle:
+            continue
+        score = 0
+        if needle == haystack:
+            score = 100
+        elif re.search(rf"(?<!\w){re.escape(needle)}(?!\w)", haystack):
+            score = 100
+        else:
+            score = max(
+                fuzz.partial_ratio(needle, haystack),
+                fuzz.token_set_ratio(needle, haystack),
+            )
+        scored.append((item, score))
+    if not scored:
+        return ResolveResult(None, [], 0)
     scored.sort(key=lambda pair: pair[1], reverse=True)
     best_item, best_score = scored[0]
     if best_score < limit:

@@ -33,6 +33,13 @@ def parse_intent(
     project_ref = _extract_project_ref(raw, open_project_name)
     sprint_ref = _extract_sprint_ref(raw)
 
+    if _asks_count_stories(normalized):
+        return ParsedIntent(
+            intent=IntentType.COUNT_PROJECT_HUS,
+            project_ref=project_ref,
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
     if _asks_documentation(normalized):
         return ParsedIntent(
             intent=IntentType.LIST_DOCUMENTATION,
@@ -84,10 +91,25 @@ def _is_chitchat(normalized: str) -> bool:
 
 
 def _matches_projects(normalized: str) -> bool:
+    if re.match(
+        r"^(que\s+)?proyectos(\s+(disponibles|tengo|estoy|hay))?[!.?]*$",
+        normalized,
+    ):
+        return True
+    if normalized in {
+        "proyectos",
+        "mis proyectos",
+        "proyectos disponibles",
+        "que proyectos",
+        "que proyectos tengo",
+    }:
+        return True
     return bool(
         re.search(
             r"(mis proyectos|cuales son mis proyectos|que proyectos tengo|lista.*proyectos|"
-            r"cuantos proyectos|nombres de mis proyectos|proyectos estoy)",
+            r"cuantos proyectos|nombres de mis proyectos|proyectos estoy|"
+            r"que proyectos tengo disponibles|proyectos tengo disponibles|"
+            r"proyectos disponibles|que tengo disponible)",
             normalized,
         )
     )
@@ -104,11 +126,36 @@ def _asks_sprints(normalized: str) -> bool:
 
 
 def _asks_stories(normalized: str) -> bool:
-    return bool(re.search(r"\b(hu|hus|historias? de usuario|historias)\b", normalized))
+    if _asks_count_stories(normalized):
+        return False
+    return bool(
+        re.search(
+            r"\b(hu|hus|historias? de usuario|historias de usuario|historias)\b",
+            normalized,
+        )
+    )
+
+
+def _asks_count_stories(normalized: str) -> bool:
+    return bool(
+        re.search(
+            r"(cuant(a|o)s|numero de|cantidad de|cuenta).*(hu|hus|historias? de usuario|historias)",
+            normalized,
+        )
+        or re.search(
+            r"(hu|hus|historias).*(cuant(a|o)s|numero|cantidad)",
+            normalized,
+        )
+    )
 
 
 def _asks_tasks(normalized: str) -> bool:
-    return "tarea" in normalized or "tasks" in normalized
+    return bool(
+        re.search(
+            r"\b(tarea|tareas|tasks|pendiente|pendientes|por hacer|tengo pendiente)\b",
+            normalized,
+        )
+    )
 
 
 def _asks_documentation(normalized: str) -> bool:
@@ -128,7 +175,7 @@ def _task_filter(normalized: str) -> TaskFilter:
         return TaskFilter.UNASSIGNED
     if re.search(r"(asignadas? a mi|mis tareas)", normalized):
         return TaskFilter.ASSIGNED_TO_ME
-    if re.search(r"(pendiente|por hacer|todo|abiertas?)", normalized):
+    if re.search(r"(pendiente|por hacer|todo|abiertas?|tengo pendiente)", normalized):
         return TaskFilter.PENDING
     return TaskFilter.ALL
 
@@ -153,20 +200,29 @@ def _extract_sprint_ref(text: str) -> str | None:
 
 
 def _extract_project_ref(text: str, open_project_name: str | None) -> str | None:
-    if _mentions_this_project(normalize_text(text)) and open_project_name:
+    normalized = normalize_text(text)
+    if _mentions_this_project(normalized) and open_project_name:
         return open_project_name
     quoted = re.findall(r"[\"“](.+?)[\"”]", text)
     if quoted:
         return quoted[0].strip()
     match = re.search(
-        r"(?:proyecto|project)\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{2,60})",
+        r"(?:mi\s+)?(?:proyecto|project)\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,40}?)"
+        r"(?:\s+ah[ií]|\s+alli|\s+all[ií]|$|[,.!?])",
         text,
         flags=re.IGNORECASE,
     )
     if match:
         return match.group(1).strip()
+    en_match = re.search(
+        r"\ben\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{2,50})\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if en_match:
+        return en_match.group(1).strip()
     for token in ("dashnode", "dash node", "mundo pinturas"):
-        if token in normalize_text(text):
+        if token in normalized:
             return token
     return None
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.modules.ai.application.assistant.conversation_state import ConversationStateStore
@@ -9,6 +11,7 @@ from app.modules.ai.application.assistant.data_queries import AssistantDataServi
 from app.modules.ai.application.assistant.entity_resolver import (
     ProjectCandidate,
     SprintCandidate,
+    find_project_name_in_utterance,
     resolve_project,
     resolve_sprint_by_ref,
 )
@@ -16,11 +19,25 @@ from app.modules.ai.application.assistant.intent_models import (
     ClarificationNeeded,
     IntentType,
     ParsedIntent,
-    TaskFilter,
 )
 from app.modules.ai.application.assistant.intent_parser import parse_intent
-from app.modules.ai.domain.ports import GenerationPort, QuotaPort
+from app.modules.ai.application.assistant.text_normalize import normalize_text
 from app.modules.ai.domain.errors import GeminiProcessingError, QuotaExhaustedError
+from app.modules.ai.domain.ports import GenerationPort, QuotaPort
+
+logger = logging.getLogger(__name__)
+
+_PROJECT_INTENTS = frozenset(
+    {
+        IntentType.LIST_PROJECT_MEMBERS,
+        IntentType.LIST_SPRINTS,
+        IntentType.LIST_SPRINT_STORIES,
+        IntentType.COUNT_PROJECT_HUS,
+        IntentType.LIST_TASKS,
+        IntentType.LIST_DOCUMENTATION,
+        IntentType.PROJECT_FOCUS,
+    }
+)
 
 
 class AssistantOrchestrator:
@@ -47,13 +64,15 @@ class AssistantOrchestrator:
             except (PermissionError, LookupError):
                 open_name = None
 
+        projects = self._data.accessible_projects(user_id, role)
+        candidates = [ProjectCandidate(row.id, row.name) for row in projects]
+
         intent = parse_intent(
             text,
             open_project_name=open_name,
             last_project_names=list(state.get("last_project_names", [])),
         )
-        projects = self._data.accessible_projects(user_id, role)
-        candidates = [ProjectCandidate(row.id, row.name) for row in projects]
+        intent = self._enrich_intent(text, intent, candidates)
 
         if intent.intent == IntentType.CHITCHAT:
             return (
@@ -77,6 +96,9 @@ class AssistantOrchestrator:
             )
             return "\n".join(lines)
 
+        if intent.intent == IntentType.UNKNOWN:
+            return self._fallback_llm(text, user_id, role, optional_project_id, projects)
+
         project_id = self._resolve_project_id(intent, optional_project_id, candidates, state)
         if project_id is None:
             raise ClarificationNeeded(
@@ -84,6 +106,10 @@ class AssistantOrchestrator:
             )
 
         project_name = self._data.project_name(project_id)
+        self._remember_project(user_id, state, project_id, project_name)
+
+        if intent.intent == IntentType.PROJECT_FOCUS:
+            return self._project_summary(project_id, project_name)
 
         if intent.intent == IntentType.LIST_PROJECT_MEMBERS:
             members = self._data.list_members(project_id, user_id, role)
@@ -97,6 +123,10 @@ class AssistantOrchestrator:
                 return f"El proyecto {project_name} no tiene sprints registrados."
             return f"Sprints de {project_name}:\n" + "\n".join(f"- {s}" for s in sprints)
 
+        if intent.intent == IntentType.COUNT_PROJECT_HUS:
+            hu_count, _, _ = self._data.count_metrics(project_id)
+            return f"El proyecto {project_name} tiene {hu_count} historia(s) de usuario."
+
         if intent.intent == IntentType.LIST_SPRINT_STORIES:
             sprint_id = self._resolve_sprint_id(intent, project_id)
             stories = self._data.list_stories(
@@ -107,7 +137,7 @@ class AssistantOrchestrator:
                 return f"No hay historias de usuario registradas para {scope}."
             header = f"Historias de usuario — {project_name}"
             if sprint_id:
-                header += f" (sprint filtrado)"
+                header += " (sprint filtrado)"
             return header + ":\n" + "\n".join(f"- {line}" for line in stories)
 
         if intent.intent == IntentType.LIST_TASKS:
@@ -127,12 +157,64 @@ class AssistantOrchestrator:
                 return f"El proyecto {project_name} no tiene documentación visible para usted."
             return f"Documentación de {project_name}:\n" + "\n".join(f"- {d}" for d in docs)
 
-        if intent.intent == IntentType.UNKNOWN:
-            return self._fallback_llm(text, user_id, role, optional_project_id, projects)
-
         return (
             "Puedo ayudarle a consultar proyectos, miembros, sprints, HUs, tareas o documentación. "
             "Reformule su pregunta con más detalle."
+        )
+
+    def _enrich_intent(
+        self,
+        text: str,
+        intent: ParsedIntent,
+        candidates: list[ProjectCandidate],
+    ) -> ParsedIntent:
+        needs_project = intent.intent in _PROJECT_INTENTS or (
+            intent.intent == IntentType.UNKNOWN and intent.project_ref
+        )
+        if needs_project and not intent.project_ref and intent.intent != IntentType.UNKNOWN:
+            embedded = find_project_name_in_utterance(text, candidates)
+            if embedded.ambiguous:
+                names = ", ".join(item.name for item in embedded.ambiguous[:5])
+                raise ClarificationNeeded(
+                    f"Hay varios proyectos similares: {names}. ¿Cuál desea consultar?"
+                )
+            if embedded.value:
+                return intent.model_copy(update={"project_ref": embedded.value.name})
+
+        if intent.intent == IntentType.UNKNOWN:
+            embedded = find_project_name_in_utterance(text, candidates)
+            normalized = normalize_text(text)
+            word_count = len(normalized.split())
+            if embedded.value and word_count <= 3 and embedded.score >= 90:
+                return ParsedIntent(
+                    intent=IntentType.PROJECT_FOCUS,
+                    project_ref=embedded.value.name,
+                )
+            if embedded.value and not embedded.ambiguous and word_count <= 6:
+                return intent.model_copy(update={"project_ref": embedded.value.name})
+        return intent
+
+    def _project_summary(self, project_id: str, project_name: str) -> str:
+        hu, tasks, members = self._data.count_metrics(project_id)
+        return (
+            f"{project_name}: {hu} HUs, {tasks} tareas, {members} miembros. "
+            "Puede preguntar por historias de usuario, tareas pendientes, miembros o sprints."
+        )
+
+    def _remember_project(
+        self, user_id: str, state: dict, project_id: str, project_name: str
+    ) -> None:
+        ids = list(state.get("last_project_ids", []))
+        names = list(state.get("last_project_names", []))
+        if project_id in ids:
+            idx = ids.index(project_id)
+            ids.pop(idx)
+            names.pop(idx)
+        ids.insert(0, project_id)
+        names.insert(0, project_name)
+        self._state.save(
+            user_id,
+            {"last_project_ids": ids[:10], "last_project_names": names[:10]},
         )
 
     def _resolve_project_id(
@@ -161,7 +243,7 @@ class AssistantOrchestrator:
                 return resolved.value.id
             return None
 
-        if len(candidates) == 1:
+        if intent.intent in _PROJECT_INTENTS and len(candidates) == 1:
             return candidates[0].id
         return None
 
@@ -199,7 +281,12 @@ class AssistantOrchestrator:
             return self._generation.generate(prompt).strip()
         except QuotaExhaustedError:
             raise
-        except GeminiProcessingError:
+        except GeminiProcessingError as exc:
+            logger.warning(
+                "assistant_gemini_fallback_failed user_id=%s reason=%s",
+                user_id,
+                str(exc),
+            )
             return (
                 "No pude procesar la consulta con IA en este momento. Intente preguntar, por "
                 "ejemplo: «¿Cuáles son mis proyectos?» o «Lista las HUs del sprint 1»."

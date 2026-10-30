@@ -19,7 +19,7 @@ from app.modules.ai.application.use_cases import (
     VoiceProcessCommand,
 )
 from app.modules.ai.infrastructure.chat_history_repository import SqlAlchemyChatHistoryRepository
-from app.modules.ai.infrastructure.gemini_client import HttpGeminiClient
+from app.modules.ai.infrastructure.gemini_client import GenAiGeminiClient
 from app.modules.ai.infrastructure.quota_repository import SqlAlchemyQuotaRepository
 from app.modules.ai.infrastructure.whisper_client import HttpWhisperClient
 from app.orchestration.security import get_current_user
@@ -37,7 +37,7 @@ def _voice_use_case(db: Session = Depends(get_db_session)) -> ProcessVoiceUseCas
     return ProcessVoiceUseCase(
         session=db,
         transcription=HttpWhisperClient(),
-        generation=HttpGeminiClient(),
+        generation=GenAiGeminiClient(),
         quotas=SqlAlchemyQuotaRepository(db),
         min_bytes=settings.AI_VOICE_MIN_BYTES,
         max_bytes=settings.AI_VOICE_MAX_BYTES,
@@ -58,7 +58,7 @@ def _transcribe_use_case(db: Session = Depends(get_db_session)) -> TranscribeVoi
 def _text_use_case(db: Session = Depends(get_db_session)) -> GenerateTextUseCase:
     return GenerateTextUseCase(
         session=db,
-        generation=HttpGeminiClient(),
+        generation=GenAiGeminiClient(),
         quotas=SqlAlchemyQuotaRepository(db),
     )
 

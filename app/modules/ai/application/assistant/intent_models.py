@@ -12,8 +12,10 @@ class IntentType(StrEnum):
     LIST_PROJECT_MEMBERS = "list_project_members"
     LIST_SPRINTS = "list_sprints"
     LIST_SPRINT_STORIES = "list_sprint_stories"
+    COUNT_PROJECT_HUS = "count_project_hus"
     LIST_TASKS = "list_tasks"
     LIST_DOCUMENTATION = "list_documentation"
+    PROJECT_FOCUS = "project_focus"
     CHITCHAT = "chitchat"
     UNKNOWN = "unknown"
 
