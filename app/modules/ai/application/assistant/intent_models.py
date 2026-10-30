@@ -16,6 +16,7 @@ class IntentType(StrEnum):
     LIST_TASKS = "list_tasks"
     LIST_DOCUMENTATION = "list_documentation"
     PROJECT_FOCUS = "project_focus"
+    PROJECT_SUMMARY = "project_summary"
     CHITCHAT = "chitchat"
     UNKNOWN = "unknown"
 

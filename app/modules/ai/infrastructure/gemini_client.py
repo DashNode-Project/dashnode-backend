@@ -40,9 +40,9 @@ def _gemini_http_options() -> HttpOptionsDict:
     return {
         "timeout": timeout_ms,
         "retry_options": {
-            "attempts": 1,
-            "initial_delay": 0.2,
-            "max_delay": 1.0,
+            "attempts": 2,
+            "initial_delay": 0.4,
+            "max_delay": 2.0,
             "http_status_codes": [408, 429, 500, 502, 503, 504],
         },
     }
@@ -70,6 +70,13 @@ def resolve_gemini_api_key() -> str | None:
 
 def _map_api_error(exc: genai_errors.APIError) -> GeminiProcessingError:
     code = getattr(exc, "code", None) or 0
+    message = getattr(exc, "message", None) or str(exc)
+    logger.warning(
+        "gemini_api_error_mapped http_code=%s error_type=%s message_len=%s",
+        code,
+        type(exc).__name__,
+        len(str(message)),
+    )
     if code == 401:
         return GeminiProcessingError("auth_401")
     if code == 403:
@@ -155,9 +162,10 @@ class GenAiGeminiClient:
             pool.shutdown(wait=False, cancel_futures=True)
 
     def _generate_sync_inner(self, prompt: str) -> str:
-        key = resolve_gemini_api_key()
-        if not key:
-            raise GeminiProcessingError("missing_api_key")
+        if self._client is None:
+            key = resolve_gemini_api_key()
+            if not key:
+                raise GeminiProcessingError("missing_api_key")
         model_id = _normalize_model_id(settings.API_GEMINI_MODEL)
         client = self._build_client()
         try:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.modules.ai.application.assistant.data_models import ProjectRow
+from app.modules.ai.application.assistant.data_models import ProjectRow, ProjectSummaryData
 from app.modules.auth.infrastructure.models import UserModel
 from app.modules.backlog.domain.entities import StoryTaskStatus
 from app.modules.backlog.infrastructure.models import StoryTaskModel, UserStoryModel
@@ -156,6 +156,21 @@ class AssistantDataService:
     def project_name(self, project_id: str) -> str:
         project = self._session.get(ProjectModel, project_id)
         return project.name if project else project_id
+
+    def project_summary(self, project_id: str, user_id: str, role: str) -> ProjectSummaryData:
+        project = self.ensure_project_access(project_id, user_id, role)
+        hu, tasks, members = self.count_metrics(project_id)
+        sprint_count = len(self.sprint_candidates(project_id))
+        description = (project.description or "").strip()
+        return ProjectSummaryData(
+            name=project.name,
+            description=description,
+            status=project.status,
+            hu_count=hu,
+            task_count=tasks,
+            member_count=members,
+            sprint_count=sprint_count,
+        )
 
     def count_metrics(self, project_id: str) -> tuple[int, int, int]:
         hu = self._session.scalar(

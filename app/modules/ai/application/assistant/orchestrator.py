@@ -41,6 +41,7 @@ _PROJECT_INTENTS = frozenset(
         IntentType.LIST_TASKS,
         IntentType.LIST_DOCUMENTATION,
         IntentType.PROJECT_FOCUS,
+        IntentType.PROJECT_SUMMARY,
     }
 )
 
@@ -174,6 +175,9 @@ class AssistantOrchestrator:
         project_name = self._db_call(metrics, self._data.project_name, project_id)
         self._remember_project(user_id, state, project_id, project_name, metrics)
 
+        if intent.intent == IntentType.PROJECT_SUMMARY:
+            return self._project_summary_detailed(project_id, project_name, user_id, role, metrics)
+
         if intent.intent == IntentType.PROJECT_FOCUS:
             return self._project_summary(project_id, project_name, metrics)
 
@@ -275,6 +279,25 @@ class AssistantOrchestrator:
             f"{project_name}: {hu} HUs, {tasks} tareas, {members} miembros. "
             "Puede preguntar por historias de usuario, tareas pendientes, miembros o sprints."
         )
+
+    def _project_summary_detailed(
+        self,
+        project_id: str,
+        project_name: str,
+        user_id: str,
+        role: str,
+        metrics: AssistantRequestMetrics,
+    ) -> str:
+        summary = self._db_call(metrics, self._data.project_summary, project_id, user_id, role)
+        lines = [f"Resumen de {summary.name}:"]
+        if summary.description:
+            lines.append(f"- Descripción: {summary.description}")
+        lines.append(f"- Estado: {summary.status}")
+        lines.append(f"- Miembros: {summary.member_count}")
+        lines.append(f"- Historias de usuario: {summary.hu_count}")
+        lines.append(f"- Tareas: {summary.task_count}")
+        lines.append(f"- Sprints registrados: {summary.sprint_count}")
+        return "\n".join(lines)
 
     def _remember_project(
         self,

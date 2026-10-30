@@ -16,6 +16,8 @@ def parse_intent(
 ) -> ParsedIntent:
     raw = text.strip()
     normalized = normalize_text(raw)
+    project_ref = _clean_project_ref(_extract_project_ref(raw, open_project_name))
+    sprint_ref = _extract_sprint_ref(raw)
 
     conv_index = _conversational_index(normalized, last_project_names)
     if conv_index is not None and _asks_members(normalized):
@@ -24,14 +26,19 @@ def parse_intent(
             conversational_index=conv_index,
         )
 
+    if _asks_project_summary(normalized):
+        return ParsedIntent(
+            intent=IntentType.PROJECT_SUMMARY,
+            project_ref=project_ref,
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+            conversational_index=_summary_conversational_index(normalized, last_project_names),
+        )
+
     if _is_chitchat(normalized):
         return ParsedIntent(intent=IntentType.CHITCHAT)
 
     if _matches_projects(normalized):
         return ParsedIntent(intent=IntentType.LIST_PROJECTS)
-
-    project_ref = _extract_project_ref(raw, open_project_name)
-    sprint_ref = _extract_sprint_ref(raw)
 
     if _asks_count_stories(normalized):
         return ParsedIntent(
@@ -82,7 +89,18 @@ def parse_intent(
     return ParsedIntent(intent=IntentType.UNKNOWN, project_ref=project_ref, sprint_ref=sprint_ref)
 
 
+def _asks_project_summary(normalized: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(resumen|resume|resumir|resúmen|panorama|estado general)\b",
+            normalized,
+        )
+    )
+
+
 def _is_chitchat(normalized: str) -> bool:
+    if _asks_project_summary(normalized):
+        return False
     if len(normalized) < 40 and re.search(
         r"\b(hola|buenos dias|buenas tardes|como estas|qué tal|que tal|gracias)\b", normalized
     ):
@@ -199,6 +217,18 @@ def _extract_sprint_ref(text: str) -> str | None:
     return None
 
 
+def _clean_project_ref(ref: str | None) -> str | None:
+    if ref is None:
+        return None
+    cleaned = ref.strip().strip("\"'“”")
+    lowered = cleaned.lower()
+    if lowered.startswith("de "):
+        cleaned = cleaned[3:].strip()
+    if lowered.startswith("del "):
+        cleaned = cleaned[4:].strip()
+    return cleaned or None
+
+
 def _extract_project_ref(text: str, open_project_name: str | None) -> str | None:
     normalized = normalize_text(text)
     if _mentions_this_project(normalized) and open_project_name:
@@ -206,6 +236,20 @@ def _extract_project_ref(text: str, open_project_name: str | None) -> str | None
     quoted = re.findall(r"[\"“](.+?)[\"”]", text)
     if quoted:
         return str(quoted[0].strip())
+    de_match = re.search(
+        r"(?:proyecto|project)\s+de\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,50})",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if de_match:
+        return de_match.group(1).strip()
+    resumen_match = re.search(
+        r"resumen\s+(?:del\s+)?(?:proyecto\s+)?(?:de\s+)?([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,50})",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if resumen_match:
+        return resumen_match.group(1).strip()
     match = re.search(
         r"(?:mi\s+)?(?:proyecto|project)\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,40}?)"
         r"(?:\s+ah[ií]|\s+alli|\s+all[ií]|$|[,.!?])",
@@ -237,3 +281,11 @@ def _conversational_index(normalized: str, last_project_names: list[str]) -> int
     if re.search(r"\b(ese proyecto|esa proyecto|el mismo)\b", normalized):
         return 0
     return None
+
+
+def _summary_conversational_index(normalized: str, last_project_names: list[str]) -> int | None:
+    if not last_project_names:
+        return None
+    if re.search(r"\b(proyecto anterior|el anterior|la anterior|ultimo proyecto)\b", normalized):
+        return 0
+    return _conversational_index(normalized, last_project_names)

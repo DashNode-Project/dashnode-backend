@@ -77,6 +77,16 @@ def test_voice_style_stories_with_project() -> None:
     assert "boss" in intent.project_ref.lower()
 
 
+def test_project_summary_phrases() -> None:
+    for text in (
+        "Dame el resumen de DashNode",
+        "Hola, dime el resumen del proyecto DashNode",
+        "Hola DashNode asistente, dime el resumen del proyecto de DashNode",
+    ):
+        intent = parse_intent(text, open_project_name=None, last_project_names=[])
+        assert intent.intent == IntentType.PROJECT_SUMMARY, text
+
+
 def test_stories_this_project() -> None:
     intent = parse_intent(
         "Cuáles son las HUs de este proyecto",

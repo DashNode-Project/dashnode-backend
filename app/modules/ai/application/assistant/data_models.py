@@ -9,3 +9,14 @@ from dataclasses import dataclass
 class ProjectRow:
     id: str
     name: str
+
+
+@dataclass(frozen=True)
+class ProjectSummaryData:
+    name: str
+    description: str
+    status: str
+    hu_count: int
+    task_count: int
+    member_count: int
+    sprint_count: int

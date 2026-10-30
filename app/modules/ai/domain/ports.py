@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from app.modules.ai.application.assistant.data_models import ProjectRow
+    from app.modules.ai.application.assistant.data_models import ProjectRow, ProjectSummaryData
 
 
 @dataclass(frozen=True)
@@ -71,3 +71,5 @@ class AssistantDataPort(Protocol):
     def project_name(self, project_id: str) -> str: ...
 
     def count_metrics(self, project_id: str) -> tuple[int, int, int]: ...
+
+    def project_summary(self, project_id: str, user_id: str, role: str) -> "ProjectSummaryData": ...

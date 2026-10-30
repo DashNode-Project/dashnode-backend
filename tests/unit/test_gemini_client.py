@@ -59,7 +59,13 @@ def test_generate_success_via_interactions(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.parametrize(
     ("status_code", "code"),
-    [(401, "auth_401"), (403, "forbidden_403"), (404, "not_found_404"), (429, "quota")],
+    [
+        (401, "auth_401"),
+        (403, "forbidden_403"),
+        (404, "not_found_404"),
+        (429, "quota"),
+        (503, "http_503"),
+    ],
 )
 def test_generate_maps_api_errors(
     monkeypatch: pytest.MonkeyPatch, status_code: int, code: str
