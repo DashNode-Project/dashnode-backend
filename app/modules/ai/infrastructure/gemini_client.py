@@ -7,7 +7,7 @@ import time
 import httpx
 
 from app.config import settings
-from app.modules.ai.application.use_cases import GeminiProcessingError
+from app.modules.ai.domain.errors import GeminiProcessingError
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"

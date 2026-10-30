@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.modules.ai.application.use_cases import QuotaExhaustedError
+from app.modules.ai.domain.errors import QuotaExhaustedError
 from app.modules.ai.infrastructure.models import AiDailyUsageModel, SystemConfigModel
 from app.shared.application.ports import Clock
 from app.shared.infrastructure.clock import SystemClock

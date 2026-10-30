@@ -2,35 +2,31 @@
 
 from dataclasses import dataclass
 
+from sqlalchemy.orm import Session
+
+from app.modules.ai.application.assistant.intent_models import ClarificationNeeded
+from app.modules.ai.application.assistant.orchestrator import AssistantOrchestrator
 from app.modules.ai.application.dtos import (
     AssistantResponseStatus,
     TextGenerateResponse,
     VoiceProcessResponse,
 )
-from app.modules.ai.application.prompt_builder import build_assistant_prompt
 from app.modules.ai.application.transcription_quality import is_low_quality_transcription
 from app.modules.ai.domain import messages as msg
-from app.modules.ai.domain.ports import (
-    GenerationPort,
-    ProjectContextPort,
-    QuotaPort,
-    TranscriptionPort,
+from app.modules.ai.domain.errors import (
+    GeminiProcessingError,
+    QuotaExhaustedError,
+    WhisperProcessingError,
 )
+from app.modules.ai.domain.ports import GenerationPort, QuotaPort, TranscriptionPort
 from app.shared.domain.errors import AppError, ErrorKind
 
-
-class WhisperProcessingError(Exception):
-    pass
-
-
-class GeminiProcessingError(Exception):
-    pass
-
-
-class QuotaExhaustedError(Exception):
-    def __init__(self, service: str) -> None:
-        self.service = service
-        super().__init__(service)
+# Re-export for backward compatibility in tests and infrastructure imports.
+__all__ = [
+    "GeminiProcessingError",
+    "QuotaExhaustedError",
+    "WhisperProcessingError",
+]
 
 
 @dataclass
@@ -68,19 +64,23 @@ def validate_voice_audio(
 
 
 def generate_assistant_response(
+    session: Session,
     generation: GenerationPort,
     quotas: QuotaPort,
-    project_context: ProjectContextPort,
     recognized: str,
     project_id: str | None,
     user_id: str,
     user_role: str,
 ) -> VoiceProcessResponse:
-    context = project_context.build_context(project_id, user_id, user_role)
-    prompt = build_assistant_prompt(context, recognized)
+    orchestrator = AssistantOrchestrator(session, generation, quotas)
     try:
-        quotas.check_and_consume("GEMINI")
-        answer = generation.generate(prompt).strip()
+        answer = orchestrator.answer(recognized, user_id, user_role, project_id).strip()
+    except ClarificationNeeded as exc:
+        return VoiceProcessResponse(
+            recognized_text=recognized,
+            assistant_response=exc.message,
+            status=AssistantResponseStatus.RESPONDED,
+        )
     except QuotaExhaustedError as exc:
         raise AppError(
             "FREE_QUOTA_EXHAUSTED",
@@ -88,13 +88,6 @@ def generate_assistant_response(
             ErrorKind.RATE_LIMITED,
             fields={"service": exc.service},
         ) from exc
-    except GeminiProcessingError:
-        return VoiceProcessResponse(
-            recognized_text=recognized,
-            assistant_response=None,
-            status=AssistantResponseStatus.ERROR,
-            error=msg.AI_PROCESSING_ERROR,
-        )
 
     if not answer:
         return VoiceProcessResponse(
@@ -113,19 +106,19 @@ def generate_assistant_response(
 class ProcessVoiceUseCase:
     def __init__(
         self,
+        session: Session,
         transcription: TranscriptionPort,
         generation: GenerationPort,
         quotas: QuotaPort,
-        project_context: ProjectContextPort,
         *,
         min_bytes: int,
         max_bytes: int,
         max_seconds: float,
     ) -> None:
+        self._session = session
         self._transcription = transcription
         self._generation = generation
         self._quotas = quotas
-        self._project_context = project_context
         self._min_bytes = min_bytes
         self._max_bytes = max_bytes
         self._max_seconds = max_seconds
@@ -153,9 +146,9 @@ class ProcessVoiceUseCase:
         recognized = _validated_recognized_text(recognized)
 
         return generate_assistant_response(
+            self._session,
             self._generation,
             self._quotas,
-            self._project_context,
             recognized,
             cmd.project_id,
             cmd.user_id,
@@ -221,19 +214,19 @@ class TranscribeVoiceUseCase:
 class GenerateTextUseCase:
     def __init__(
         self,
+        session: Session,
         generation: GenerationPort,
         quotas: QuotaPort,
-        project_context: ProjectContextPort,
     ) -> None:
+        self._session = session
         self._generation = generation
         self._quotas = quotas
-        self._project_context = project_context
 
     def execute(self, cmd: TextGenerateCommand) -> TextGenerateResponse:
         result = generate_assistant_response(
+            self._session,
             self._generation,
             self._quotas,
-            self._project_context,
             cmd.text.strip(),
             cmd.project_id,
             cmd.user_id,

@@ -3,7 +3,7 @@
 import httpx
 
 from app.config import settings
-from app.modules.ai.application.use_cases import WhisperProcessingError
+from app.modules.ai.domain.errors import WhisperProcessingError
 
 _WHISPER_PROMPT = (
     "Consulta en español sobre proyectos DashNode, historias de usuario, tareas, sprints y miembros."

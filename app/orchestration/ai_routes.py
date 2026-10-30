@@ -22,7 +22,6 @@ from app.modules.ai.infrastructure.chat_history_repository import SqlAlchemyChat
 from app.modules.ai.infrastructure.gemini_client import HttpGeminiClient
 from app.modules.ai.infrastructure.quota_repository import SqlAlchemyQuotaRepository
 from app.modules.ai.infrastructure.whisper_client import HttpWhisperClient
-from app.orchestration.ai_context import SqlAlchemyProjectContextBuilder
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
 from app.shared.infrastructure.database import get_db_session
@@ -36,10 +35,10 @@ def _chat_history(db: Session) -> SqlAlchemyChatHistoryRepository:
 
 def _voice_use_case(db: Session = Depends(get_db_session)) -> ProcessVoiceUseCase:
     return ProcessVoiceUseCase(
+        session=db,
         transcription=HttpWhisperClient(),
         generation=HttpGeminiClient(),
         quotas=SqlAlchemyQuotaRepository(db),
-        project_context=SqlAlchemyProjectContextBuilder(db),
         min_bytes=settings.AI_VOICE_MIN_BYTES,
         max_bytes=settings.AI_VOICE_MAX_BYTES,
         max_seconds=float(settings.AI_VOICE_MAX_SECONDS),
@@ -58,9 +57,9 @@ def _transcribe_use_case(db: Session = Depends(get_db_session)) -> TranscribeVoi
 
 def _text_use_case(db: Session = Depends(get_db_session)) -> GenerateTextUseCase:
     return GenerateTextUseCase(
+        session=db,
         generation=HttpGeminiClient(),
         quotas=SqlAlchemyQuotaRepository(db),
-        project_context=SqlAlchemyProjectContextBuilder(db),
     )
 
 

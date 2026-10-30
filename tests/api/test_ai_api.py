@@ -14,7 +14,6 @@ from app.modules.ai.application.use_cases import (
     TranscribeVoiceUseCase,
 )
 from app.orchestration import ai_routes
-from app.orchestration.ai_context import SqlAlchemyProjectContextBuilder
 from tests.support import login_as
 
 
@@ -44,10 +43,10 @@ def _voice_use_case(
     from app.config import settings
 
     return ProcessVoiceUseCase(
+        session=db,
         transcription=StubTranscription(),
         generation=generation,
         quotas=NoQuota(),
-        project_context=SqlAlchemyProjectContextBuilder(db),
         min_bytes=settings.AI_VOICE_MIN_BYTES,
         max_bytes=settings.AI_VOICE_MAX_BYTES,
         max_seconds=float(settings.AI_VOICE_MAX_SECONDS),
@@ -64,18 +63,18 @@ def test_text_generate_success(client: TestClient, db_engine: Engine, db_session
 
     def override_text() -> GenerateTextUseCase:
         return GenerateTextUseCase(
+            session=db_session,
             generation=StubGeneration(),
             quotas=NoQuota(),
-            project_context=SqlAlchemyProjectContextBuilder(db_session),
         )
 
     app.dependency_overrides[ai_routes._text_use_case] = override_text
-    response = client.post("/api/v1/ai/text-generate", json={"text": "Estado del sprint"})
+    response = client.post("/api/v1/ai/text-generate", json={"text": "Hola"})
     app.dependency_overrides.pop(ai_routes._text_use_case, None)
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "RESPONDED"
-    assert body["assistant_response"] == "respuesta contextual"
+    assert "asistente" in body["assistant_response"].lower()
 
 
 def test_voice_transcribe_success(
@@ -119,5 +118,5 @@ def test_voice_process_partial_gemini_failure(
     assert response.status_code == 200
     body = response.json()
     assert body["recognized_text"] == "consulta de voz"
-    assert body["assistant_response"] is None
-    assert body["error"]
+    assert body["status"] == "RESPONDED"
+    assert body["assistant_response"]

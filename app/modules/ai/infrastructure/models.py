@@ -23,6 +23,13 @@ class AiDailyUsageModel(Base):
     count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
 
 
+class AiConversationStateModel(Base):
+    __tablename__ = "ai_conversation_state"
+
+    user_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    payload: Mapped[str] = mapped_column(Text(), nullable=False, default="{}")
+
+
 class AiChatMessageModel(Base):
     __tablename__ = "ai_chat_messages"
 
