@@ -16,6 +16,7 @@ from pathlib import Path
 backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -24,6 +25,7 @@ from app.modules.availability.infrastructure.models import MeetingModel, Meeting
 from app.modules.backlog.infrastructure.models import EpicModel, StoryTaskModel, UserStoryModel
 from app.modules.documentation.domain.entities import DocumentationApprovalStatus
 from app.modules.documentation.infrastructure.models import DocumentationEntryModel
+from app.modules.projects.domain.entities import ProjectStatus
 from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
 from app.modules.sprints.infrastructure.models import SprintModel
 from app.shared.infrastructure.database import SessionLocal
@@ -39,6 +41,57 @@ def _manager(db: Session) -> UserModel:
     if user is None:
         raise RuntimeError(f"Manager seed user not found: {email}")
     return user
+
+
+_TASK_TYPES = ("frontend", "backend", "qa", "documentacion", "devops")
+
+
+def _repair_global_invalid_enums(db: Session) -> None:
+    valid_status = {item.value for item in ProjectStatus}
+    for project in db.query(ProjectModel).filter(ProjectModel.deleted_at.is_(None)).all():
+        if project.status not in valid_status:
+            project.status = ProjectStatus.ACTIVO.value
+
+    for task in db.scalars(
+        select(StoryTaskModel).where(StoryTaskModel.task_type == "development")
+    ).all():
+        task.task_type = "backend"
+
+    for story in db.scalars(
+        select(UserStoryModel).where(UserStoryModel.moscow_priority == "must")
+    ).all():
+        story.moscow_priority = "must_have"
+
+
+def _repair_novatech_integrity(db: Session, project: ProjectModel) -> None:
+    """Fix invalid enum values written by earlier seed versions."""
+    repaired = False
+    valid_status = {item.value for item in ProjectStatus}
+    if project.status not in valid_status:
+        project.status = ProjectStatus.ACTIVO.value
+        repaired = True
+
+    for sprint in db.scalars(select(SprintModel).where(SprintModel.project_id == project.id)).all():
+        if sprint.status == "PLANNED":
+            sprint.status = "PLANNING"
+            repaired = True
+
+    for story in db.scalars(
+        select(UserStoryModel).where(UserStoryModel.project_id == project.id)
+    ).all():
+        if story.moscow_priority == "must":
+            story.moscow_priority = "must_have"
+            repaired = True
+
+    for index, task in enumerate(
+        db.scalars(select(StoryTaskModel).where(StoryTaskModel.project_id == project.id)).all()
+    ):
+        if task.task_type == "development":
+            task.task_type = _TASK_TYPES[index % len(_TASK_TYPES)]
+            repaired = True
+
+    if repaired:
+        print(f"[repair] Domain values normalized for {project.name} ({project.id})")
 
 
 def _ensure_project(db: Session, manager: UserModel) -> ProjectModel:
@@ -59,7 +112,7 @@ def _ensure_project(db: Session, manager: UserModel) -> ProjectModel:
         priority="alta",
         tech_stack='["FastAPI","React","PostgreSQL"]',
         meeting_link="https://meet.example/novatech",
-        status="en_progreso",
+        status=ProjectStatus.ACTIVO.value,
         deleted_at=None,
         created_at=now,
         updated_at=now,
@@ -111,7 +164,7 @@ def _seed_backlog(db: Session, project: ProjectModel, manager: UserModel) -> Non
         goal="Tareas, reuniones y documentación",
         start_date=today + timedelta(days=2),
         end_date=today + timedelta(days=16),
-        status="PLANNED",
+        status="PLANNING",
         created_at=now,
     )
     db.add_all([sprint1, sprint2])
@@ -182,7 +235,7 @@ def _seed_backlog(db: Session, project: ProjectModel, manager: UserModel) -> Non
                 user_role=role,
                 reason=f"Quiero {reason} para operar en NovaTech.",
                 acceptance_criteria=f"Dado el contexto, {criteria}.",
-                moscow_priority="must",
+                moscow_priority="must_have",
                 story_points=3,
                 estimation_mode="story",
                 sprint_id=sprint_id,
@@ -199,7 +252,7 @@ def _seed_backlog(db: Session, project: ProjectModel, manager: UserModel) -> Non
                     user_story_id=story.id,
                     project_id=project.id,
                     name=f"Tarea: {title}",
-                    task_type="development",
+                    task_type=_TASK_TYPES[story_idx % len(_TASK_TYPES)],
                     notes="Generada para escenario NovaTech",
                     status=["TODO", "IN_PROGRESS", "DONE", "TESTING"][story_idx % 4],
                     assignee_id=manager.id,
@@ -310,8 +363,16 @@ def _seed_docs(db: Session, project: ProjectModel, manager: UserModel) -> None:
 def main() -> None:
     db = SessionLocal()
     try:
+        _repair_global_invalid_enums(db)
         manager = _manager(db)
         project = _ensure_project(db, manager)
+        _repair_novatech_integrity(db, project)
+        for orphan in db.query(ProjectModel).filter(
+            ProjectModel.name == PROJECT_NAME,
+            ProjectModel.deleted_at.is_(None),
+            ProjectModel.id != project.id,
+        ):
+            _repair_novatech_integrity(db, orphan)
         _seed_backlog(db, project, manager)
         _seed_meetings(db, project, manager)
         _seed_docs(db, project, manager)
