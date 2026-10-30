@@ -103,7 +103,6 @@ def _seed_backlog(db: Session, project: ProjectModel, manager: UserModel) -> Non
         end_date=today + timedelta(days=1),
         status="ACTIVE",
         created_at=now,
-        updated_at=now,
     )
     sprint2 = SprintModel(
         id=id_gen.generate(),
@@ -114,9 +113,9 @@ def _seed_backlog(db: Session, project: ProjectModel, manager: UserModel) -> Non
         end_date=today + timedelta(days=16),
         status="PLANNED",
         created_at=now,
-        updated_at=now,
     )
     db.add_all([sprint1, sprint2])
+    db.flush()
     epics = [
         ("EP-01", "Gestión de usuarios y autenticación"),
         ("EP-02", "Gestión de proyectos y equipos"),
@@ -149,7 +148,12 @@ def _seed_backlog(db: Session, project: ProjectModel, manager: UserModel) -> Non
             ("Programar reuniones", "manager", "coordinar encuentros", "Participantes invitados"),
             ("Invitar participantes", "manager", "confirmar asistencia", "Estados de respuesta"),
             ("Consultar reuniones", "developer", "ver agenda", "Filtros por estado"),
-            ("Adjuntar documentación", "manager", "centralizar conocimiento", "Metadatos completos"),
+            (
+                "Adjuntar documentación",
+                "manager",
+                "centralizar conocimiento",
+                "Metadatos completos",
+            ),
             ("Descargar documentos", "developer", "acceder a archivos", "Permisos respetados"),
         ],
     }
@@ -313,6 +317,9 @@ def main() -> None:
         _seed_docs(db, project, manager)
         db.commit()
         print(f"NovaTech demo ready for manager {manager.email} (project id={project.id})")
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

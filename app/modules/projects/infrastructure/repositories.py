@@ -166,9 +166,7 @@ class SqlAlchemyProjectRepository(ProjectRepository):
             return False
         if role == "admin":
             return True
-        return any(
-            row.id == project_id for row in self.list_visible_for_user(user_id, role=role)
-        )
+        return any(row.id == project_id for row in self.list_visible_for_user(user_id, role=role))
 
     def remove_member(self, project_id: str, user_id: str) -> None:
         self._session.execute(

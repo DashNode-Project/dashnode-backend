@@ -270,9 +270,7 @@ class AssistantOrchestrator:
         if intent.intent == IntentType.GENERATE_USER_STORY_EXAMPLES:
             metrics.path = "gemini_examples"
             if project_id is None:
-                return self._llm_user_story_examples(
-                    text, user_id, role, None, generation, metrics
-                )
+                return self._llm_user_story_examples(text, user_id, role, None, generation, metrics)
             return self._gemini_with_project_context(
                 text,
                 user_id,
