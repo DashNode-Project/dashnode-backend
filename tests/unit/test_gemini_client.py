@@ -18,6 +18,7 @@ def test_normalize_model_id_strips_prefix_and_default() -> None:
     assert gc._normalize_model_id("models/gemini-3.8-flash") == "gemini-3.8-flash"
     assert gc._normalize_model_id("  gemini-3.8-flash  ") == "gemini-3.8-flash"
     assert gc._normalize_model_id("") == gc.DEFAULT_GEMINI_MODEL
+    assert gc.DEFAULT_GEMINI_MODEL == "gemini-3.1-flash-lite"
 
 
 def test_resolve_gemini_api_key_prefers_gemini_api_key(monkeypatch: pytest.MonkeyPatch) -> None:

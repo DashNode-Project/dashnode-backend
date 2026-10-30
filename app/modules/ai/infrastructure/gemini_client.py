@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 _RETRYABLE_STATUS = {502, 503, 504}
 _INTERPRETATION_GENERATION_CONFIG: dict[str, object] = {
     "thinking_level": "low",
@@ -40,12 +40,26 @@ def _gemini_http_options() -> HttpOptionsDict:
     return {
         "timeout": timeout_ms,
         "retry_options": {
-            "attempts": 2,
+            "attempts": int(settings.AI_GEMINI_SDK_RETRY_ATTEMPTS),
             "initial_delay": 0.4,
             "max_delay": 2.0,
             "http_status_codes": [408, 429, 500, 502, 503, 504],
         },
     }
+
+
+def gemini_model_chain() -> tuple[str, ...]:
+    """Primary model first, then configured fallbacks (deduplicated, Interactions API ids)."""
+    seen: set[str] = set()
+    chain: list[str] = []
+    raw_models = [settings.API_GEMINI_MODEL, *settings.AI_GEMINI_FALLBACK_MODELS.split(",")]
+    for raw in raw_models:
+        model_id = _normalize_model_id(raw.strip())
+        if not model_id or model_id in seen:
+            continue
+        seen.add(model_id)
+        chain.append(model_id)
+    return tuple(chain or (DEFAULT_GEMINI_MODEL,))
 
 
 def _normalize_model_id(model: str) -> str:
@@ -166,31 +180,29 @@ class GenAiGeminiClient:
             key = resolve_gemini_api_key()
             if not key:
                 raise GeminiProcessingError("missing_api_key")
-        model_id = _normalize_model_id(settings.API_GEMINI_MODEL)
         client = self._build_client()
+        chain: tuple[str, ...]
+        if self._client is not None:
+            chain = (_normalize_model_id(settings.API_GEMINI_MODEL),)
+        else:
+            chain = gemini_model_chain()
+        from app.modules.ai.infrastructure.llm_provider_router import (
+            LLMProviderRouter,
+            ModelAvailabilityRegistry,
+        )
+
+        registry = ModelAvailabilityRegistry() if self._client is not None else None
+        router = LLMProviderRouter(client=client, model_chain=chain, registry=registry)
         try:
-            interaction = _create_interaction(
-                client, model_id=model_id, prompt=prompt, stream=False
-            )
-            text = _extract_output_text(interaction)
+            text = router.generate(prompt)
             log_ai_stage("gemini_output_text_ok", chars=len(text))
             return text
-        except GeminiProcessingError:
-            raise
-        except genai_errors.APIError as exc:
-            mapped = _map_api_error(exc)
-            log_ai_stage("gemini_api_error", reason=str(mapped))
-            raise mapped from exc
         except httpx.TimeoutException as exc:
             log_ai_stage("gemini_http_timeout")
             raise GeminiProcessingError("timeout") from exc
         except httpx.HTTPError as exc:
             log_ai_stage("gemini_network_error")
             raise GeminiProcessingError("network") from exc
-        except genai_errors.ClientError as exc:
-            raise GeminiProcessingError("client_error") from exc
-        except genai_errors.ServerError as exc:
-            raise GeminiProcessingError("server_error") from exc
 
     def generate_stream(
         self,
