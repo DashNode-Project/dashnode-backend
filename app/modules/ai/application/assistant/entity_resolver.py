@@ -43,16 +43,18 @@ def resolve_project(
     if not ref or not ref.strip():
         return ResolveResult(None, [], 0)
     needle = normalize_text(ref)
-    scored = [
-        (
-            item,
-            max(
-                fuzz.token_set_ratio(needle, normalize_text(item.name)),
-                fuzz.partial_ratio(needle, normalize_text(item.name)),
-            ),
+    scored: list[tuple[ProjectCandidate, float]] = []
+    for item in candidates:
+        hay = normalize_text(item.name)
+        score = max(
+            fuzz.token_set_ratio(needle, hay),
+            fuzz.partial_ratio(needle, hay),
+            fuzz.WRatio(needle, hay),
         )
-        for item in candidates
-    ]
+        first_token = hay.split()[0] if hay else ""
+        if needle and (needle in hay or hay.startswith(needle) or first_token.startswith(needle)):
+            score = max(score, 92.0)
+        scored.append((item, score))
     scored.sort(key=lambda pair: pair[1], reverse=True)
     best_item, best_score_raw = scored[0]
     best_score = int(best_score_raw)

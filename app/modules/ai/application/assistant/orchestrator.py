@@ -26,6 +26,7 @@ from app.modules.ai.application.assistant.intent_models import (
 from app.modules.ai.application.assistant.intent_parser import parse_intent
 from app.modules.ai.application.assistant.metrics_generation import MetricsGenerationPort
 from app.modules.ai.application.assistant.text_normalize import normalize_text
+from app.modules.ai.application.prompt_builder import build_assistant_prompt
 from app.modules.ai.domain.errors import GeminiProcessingError, QuotaExhaustedError
 from app.modules.ai.domain.ports import AssistantDataPort, GenerationPort, QuotaPort
 from app.shared.infrastructure.ai_request_trace import log_ai_stage
@@ -42,6 +43,8 @@ _PROJECT_INTENTS = frozenset(
         IntentType.LIST_DOCUMENTATION,
         IntentType.PROJECT_FOCUS,
         IntentType.PROJECT_SUMMARY,
+        IntentType.ANALYZE_USER_STORIES,
+        IntentType.GEMINI_GROUNDED,
     }
 )
 
@@ -161,6 +164,18 @@ class AssistantOrchestrator:
             )
             return "\n".join(lines)
 
+        if intent.intent == IntentType.LIST_ALL_PROJECT_MEMBERS:
+            if not projects:
+                return "No tiene proyectos visibles en DashNode."
+            blocks: list[str] = ["Miembros por proyecto:"]
+            for project in projects:
+                members = self._db_call(metrics, self._data.list_members, project.id, user_id, role)
+                if members:
+                    blocks.append(f"\n{project.name}:\n" + "\n".join(f"- {m}" for m in members))
+                else:
+                    blocks.append(f"\n{project.name}: sin miembros registrados.")
+            return "\n".join(blocks)
+
         if intent.intent == IntentType.UNKNOWN:
             metrics.path = "gemini_fallback"
             log_ai_stage("orchestrator_gemini_fallback_enter")
@@ -168,8 +183,17 @@ class AssistantOrchestrator:
 
         project_id = self._resolve_project_id(intent, optional_project_id, candidates, state)
         if project_id is None:
-            raise ClarificationNeeded(
-                "Indique el proyecto (nombre aproximado) o abra un proyecto y use «este proyecto»."
+            raise ClarificationNeeded(self._clarify_project_message(intent, candidates))
+
+        if intent.intent in {IntentType.ANALYZE_USER_STORIES, IntentType.GEMINI_GROUNDED}:
+            metrics.path = "gemini_grounded"
+            return self._gemini_with_project_context(
+                text,
+                user_id,
+                role,
+                project_id,
+                generation,
+                metrics,
             )
 
         project_name = self._db_call(metrics, self._data.project_name, project_id)
@@ -208,7 +232,18 @@ class AssistantOrchestrator:
                 sprint_id=sprint_id,
             )
             if not stories:
+                hu_count, _, _ = self._db_call(metrics, self._data.count_metrics, project_id)
                 scope = "ese sprint" if sprint_id else project_name
+                if hu_count > 0 and sprint_id:
+                    return (
+                        f"No hay historias de usuario en el sprint indicado para {project_name}, "
+                        f"pero el proyecto tiene {hu_count} HU(s) en total."
+                    )
+                if hu_count > 0:
+                    return (
+                        f"No pude listar historias de usuario para {scope}, pero la base de datos "
+                        f"registra {hu_count} HU(s). Intente de nuevo o reformule la consulta."
+                    )
                 return f"No hay historias de usuario registradas para {scope}."
             header = f"Historias de usuario — {project_name}"
             if sprint_id:
@@ -248,6 +283,8 @@ class AssistantOrchestrator:
         needs_project = intent.intent in _PROJECT_INTENTS or (
             intent.intent == IntentType.UNKNOWN and intent.project_ref
         )
+        if intent.intent in {IntentType.ANALYZE_USER_STORIES, IntentType.GEMINI_GROUNDED}:
+            needs_project = True
         if needs_project and not intent.project_ref and intent.intent != IntentType.UNKNOWN:
             embedded = find_project_name_in_utterance(text, candidates)
             if embedded.ambiguous:
@@ -365,6 +402,73 @@ class AssistantOrchestrator:
             names = ", ".join(item.name for item in resolved.ambiguous[:5])
             raise ClarificationNeeded(f"Hay varios sprints similares: {names}. ¿Cuál desea?")
         return resolved.value.id if resolved.value else None
+
+    def _clarify_project_message(
+        self, intent: ParsedIntent, candidates: list[ProjectCandidate]
+    ) -> str:
+        names = ", ".join(item.name for item in candidates[:6])
+        if intent.intent == IntentType.ANALYZE_USER_STORIES:
+            return (
+                "Indique sobre qué proyecto desea recomendaciones de historias de usuario "
+                f"(por ejemplo: {names})."
+            )
+        if intent.intent == IntentType.GEMINI_GROUNDED:
+            return (
+                "Indique el proyecto sobre el que desea consultar con Gemini "
+                f"(por ejemplo: {names})."
+            )
+        return "Indique el proyecto (nombre aproximado) o abra un proyecto y use «este proyecto»."
+
+    def _gemini_with_project_context(
+        self,
+        text: str,
+        user_id: str,
+        role: str,
+        project_id: str,
+        generation: MetricsGenerationPort,
+        metrics: AssistantRequestMetrics,
+    ) -> str:
+        context = self._db_call(
+            metrics, self._data.build_project_ai_context, project_id, user_id, role
+        )
+        if context.project_name is None:
+            return (
+                "No tiene acceso al proyecto solicitado o no existe. "
+                "Verifique el nombre e intente de nuevo."
+            )
+        prompt = build_assistant_prompt(context, text)
+        log_ai_stage("orchestrator_gemini_grounded_enter", project=context.project_name)
+        try:
+            self._quotas.check_and_consume("GEMINI")
+            answer = generation.generate(prompt).strip()
+            log_ai_stage("orchestrator_gemini_grounded_ok", chars=len(answer))
+            return answer
+        except QuotaExhaustedError:
+            raise
+        except GeminiProcessingError as exc:
+            reason = str(exc)
+            logger.warning(
+                "assistant_gemini_grounded_failed user_id=%s reason=%s",
+                user_id,
+                reason,
+            )
+            log_ai_stage("orchestrator_gemini_grounded_failed", reason=reason)
+            if reason == "timeout":
+                return (
+                    "El servicio de IA tardó demasiado. Puede pedir un listado directo, por "
+                    "ejemplo: «Lista las HUs de VozNotAI»."
+                )
+            if reason in {"auth_401", "forbidden_403", "missing_api_key"}:
+                return (
+                    "El asistente de IA no está configurado correctamente en el servidor. "
+                    "Contacte al administrador."
+                )
+            if reason == "quota":
+                raise QuotaExhaustedError("GEMINI") from exc
+            return (
+                "No pude procesar la consulta con IA en este momento. Intente una consulta "
+                "directa sobre proyectos, HUs o tareas."
+            )
 
     def _fallback_llm(
         self,

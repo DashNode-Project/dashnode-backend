@@ -34,15 +34,30 @@ def parse_intent(
             conversational_index=_summary_conversational_index(normalized, last_project_names),
         )
 
-    if _is_chitchat(normalized):
-        return ParsedIntent(intent=IntentType.CHITCHAT)
-
     if _matches_projects(normalized):
         return ParsedIntent(intent=IntentType.LIST_PROJECTS)
 
     if _asks_count_stories(normalized):
         return ParsedIntent(
             intent=IntentType.COUNT_PROJECT_HUS,
+            project_ref=project_ref,
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
+    if _asks_members(normalized) and _asks_all_projects_scope(normalized):
+        return ParsedIntent(intent=IntentType.LIST_ALL_PROJECT_MEMBERS)
+
+    if _asks_gemini_grounded(normalized):
+        return ParsedIntent(
+            intent=IntentType.GEMINI_GROUNDED,
+            project_ref=project_ref,
+            sprint_ref=sprint_ref,
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
+    if _asks_hu_analysis(normalized):
+        return ParsedIntent(
+            intent=IntentType.ANALYZE_USER_STORIES,
             project_ref=project_ref,
             use_open_project=project_ref is None and _mentions_this_project(normalized),
         )
@@ -86,6 +101,16 @@ def parse_intent(
             use_open_project=project_ref is None and _mentions_this_project(normalized),
         )
 
+    if _is_bare_hu_query(normalized):
+        return ParsedIntent(
+            intent=IntentType.LIST_SPRINT_STORIES,
+            project_ref=project_ref,
+            use_open_project=project_ref is None and _mentions_this_project(normalized),
+        )
+
+    if _is_chitchat(normalized):
+        return ParsedIntent(intent=IntentType.CHITCHAT)
+
     return ParsedIntent(intent=IntentType.UNKNOWN, project_ref=project_ref, sprint_ref=sprint_ref)
 
 
@@ -98,14 +123,99 @@ def _asks_project_summary(normalized: str) -> bool:
     )
 
 
-def _is_chitchat(normalized: str) -> bool:
-    if _asks_project_summary(normalized):
+def _strip_leading_greeting(normalized: str) -> str:
+    """Remove leading salutations so the functional tail can be classified."""
+    remainder = normalized
+    for _ in range(4):
+        stripped = re.sub(
+            r"^(?:hola|hey|buenas)(?:\s+gemini)?(?:\s+asistente)?(?:\s+dashnode)?[,.!?\s]+",
+            "",
+            remainder,
+            count=1,
+        )
+        stripped = re.sub(
+            r"^(?:buenos dias|buenas tardes|buenas noches)[,.!?\s]+",
+            "",
+            stripped,
+            count=1,
+        )
+        if stripped == remainder:
+            break
+        remainder = stripped.strip()
+    return remainder
+
+
+def _has_functional_request(normalized: str) -> bool:
+    """True when the utterance asks for DashNode data or a deterministic action."""
+    if not normalized:
         return False
-    if len(normalized) < 40 and re.search(
-        r"\b(hola|buenos dias|buenas tardes|como estas|qué tal|que tal|gracias)\b", normalized
+    for segment in (normalized, _strip_leading_greeting(normalized)):
+        if not segment:
+            continue
+        if (
+            _asks_project_summary(segment)
+            or _matches_projects(segment)
+            or _asks_count_stories(segment)
+            or (_asks_members(segment) and _asks_all_projects_scope(segment))
+            or _asks_gemini_grounded(segment)
+            or _asks_hu_analysis(segment)
+            or _asks_documentation(segment)
+            or _asks_members(segment)
+            or _asks_stories(segment)
+            or _asks_sprints(segment)
+            or _asks_tasks(segment)
+            or _is_bare_hu_query(segment)
+        ):
+            return True
+        if re.search(
+            r"(dime|dame|muestrame|mostrar|lista|listar|necesito saber|quiero saber|"
+            r"cuales son|cuales|que tiene|quienes integran|quien integra)",
+            segment,
+        ) and re.search(
+            r"\b(hu|hus|historias?|miembros|integrantes|tareas|sprints?|proyecto|proyectos)\b",
+            segment,
+        ):
+            return True
+    return False
+
+
+def _is_bare_hu_query(normalized: str) -> bool:
+    return normalized in {
+        "hu",
+        "hus",
+        "historias",
+        "historias de usuario",
+        "historia de usuario",
+    }
+
+
+def _is_chitchat(normalized: str) -> bool:
+    if _has_functional_request(normalized):
+        return False
+    remainder = _strip_leading_greeting(normalized)
+    if remainder and _has_functional_request(remainder):
+        return False
+    if re.search(
+        r"\b(como estas|como vas|que tal|gracias|necesito ayuda)\b",
+        normalized,
     ):
         return True
-    return bool(re.match(r"^(hola|hey|buenas)( assistente| dashnode)?[!.?]*$", normalized))
+    if re.match(
+        r"^(hola|hey|buenas)(?:\s+gemini)?(?:\s+asistente)?(?:\s+dashnode)?[!.?,\s]*$",
+        normalized,
+    ):
+        return True
+    if remainder and re.match(
+        r"^(como estas|como vas|que tal|necesito ayuda)[!.?,\s]*$",
+        remainder,
+    ):
+        return True
+    return bool(
+        re.match(
+            r"^(buenos dias|buenas tardes|buenas noches)[!.?,\s]*$",
+            normalized,
+        )
+    )
 
 
 def _matches_projects(normalized: str) -> bool:
@@ -135,7 +245,50 @@ def _matches_projects(normalized: str) -> bool:
 
 def _asks_members(normalized: str) -> bool:
     return bool(
-        re.search(r"(miembros|integrantes|equipo|quienes participan|quien forma parte)", normalized)
+        re.search(
+            r"(miembros|integrantes|equipo|quienes participan|quien forma parte|"
+            r"quienes integran|quien integra|quienes forman)",
+            normalized,
+        )
+    )
+
+
+def _asks_all_projects_scope(normalized: str) -> bool:
+    return bool(
+        re.search(
+            r"(cada proyecto|todos los proyectos|todos mis proyectos|en cada proyecto|"
+            r"por proyecto|en todos|todos mis projectos)",
+            normalized,
+        )
+    )
+
+
+def _asks_hu_analysis(normalized: str) -> bool:
+    has_hu = bool(re.search(r"\b(hu|hus|historias? de usuario|historias)\b", normalized))
+    has_advice = bool(
+        re.search(
+            r"(mejorar|mejora|recomend|suger|analiz|optimiz|que falta|como puedo|qué falta)",
+            normalized,
+        )
+    )
+    return has_hu and has_advice
+
+
+def _asks_gemini_grounded(normalized: str) -> bool:
+    wants_gemini = bool(
+        re.search(
+            r"(preguntale a gemini|pregunta a gemini|consulta gemini|preguntar a gemini|"
+            r"que diga gemini|que responda gemini)",
+            normalized,
+        )
+    )
+    if not wants_gemini:
+        return False
+    return bool(
+        re.search(
+            r"\b(hu|hus|historias?|miembros|integrantes|tareas|sprints?|proyecto)\b",
+            normalized,
+        )
     )
 
 
@@ -145,6 +298,8 @@ def _asks_sprints(normalized: str) -> bool:
 
 def _asks_stories(normalized: str) -> bool:
     if _asks_count_stories(normalized):
+        return False
+    if _asks_hu_analysis(normalized):
         return False
     return bool(
         re.search(
@@ -217,6 +372,27 @@ def _extract_sprint_ref(text: str) -> str | None:
     return None
 
 
+_EN_REF_STOPWORDS = frozenset(
+    {
+        "las",
+        "los",
+        "la",
+        "el",
+        "cada",
+        "todos",
+        "mis",
+        "ese",
+        "esa",
+        "este",
+        "esta",
+        "les",
+        "hus",
+        "hu",
+        "historias",
+    }
+)
+
+
 def _clean_project_ref(ref: str | None) -> str | None:
     if ref is None:
         return None
@@ -243,6 +419,51 @@ def _extract_project_ref(text: str, open_project_name: str | None) -> str | None
     )
     if de_match:
         return de_match.group(1).strip()
+    hu_de_match = re.search(
+        r"(?:hus|historias(?:\s+de\s+usuario)?)\s+(?:de|del)\s+"
+        r"([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,50})",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if hu_de_match:
+        return hu_de_match.group(1).strip()
+    improve_de_match = re.search(
+        r"(?:mejorar|mejora|recomend(?:ar|aciones)?|analiz(?:ar|a)?)\s+.*?\b(?:de|del)\s+"
+        r"([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,50})\s*[.!?]?$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if improve_de_match:
+        return improve_de_match.group(1).strip()
+    trailing_de_match = re.search(
+        r"\bde\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,50})\s*[.!?]?$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if trailing_de_match:
+        return trailing_de_match.group(1).strip()
+    resume_short = re.search(
+        r"\b(?:resume|resumen|resumir)\s+(?:el\s+)?(?:proyecto\s+)?"
+        r"([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,50})\s*[.!?]?$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if resume_short:
+        return resume_short.group(1).strip()
+    tiene_match = re.search(
+        r"\b(?:tiene|tienen)\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,50})\s*[.!?]?$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if tiene_match:
+        return tiene_match.group(1).strip()
+    integran_match = re.search(
+        r"\b(?:integran|integra)\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,50})\s*[.!?]?$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if integran_match:
+        return integran_match.group(1).strip()
     resumen_match = re.search(
         r"resumen\s+(?:del\s+)?(?:proyecto\s+)?(?:de\s+)?([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,50})",
         text,
@@ -259,15 +480,14 @@ def _extract_project_ref(text: str, open_project_name: str | None) -> str | None
     if match:
         return match.group(1).strip()
     en_match = re.search(
-        r"\ben\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{2,50})\b",
+        r"\ben\s+([a-zA-Z0-9][a-zA-Z0-9\-_]{2,40})\b",
         text,
         flags=re.IGNORECASE,
     )
     if en_match:
-        return en_match.group(1).strip()
-    for token in ("dashnode", "dash node", "mundo pinturas"):
-        if token in normalized:
-            return token
+        candidate = en_match.group(1).strip()
+        if normalize_text(candidate) not in _EN_REF_STOPWORDS:
+            return candidate
     return None
 
 

@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 class IntentType(StrEnum):
     LIST_PROJECTS = "list_projects"
     LIST_PROJECT_MEMBERS = "list_project_members"
+    LIST_ALL_PROJECT_MEMBERS = "list_all_project_members"
+    ANALYZE_USER_STORIES = "analyze_user_stories"
+    GEMINI_GROUNDED = "gemini_grounded"
     LIST_SPRINTS = "list_sprints"
     LIST_SPRINT_STORIES = "list_sprint_stories"
     COUNT_PROJECT_HUS = "count_project_hus"

@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.ai.application.assistant.data_models import ProjectRow, ProjectSummaryData
+from app.modules.ai.domain.ports import ProjectAiContext
 from app.modules.auth.infrastructure.models import UserModel
 from app.modules.backlog.domain.entities import StoryTaskStatus
 from app.modules.backlog.infrastructure.models import StoryTaskModel, UserStoryModel
@@ -13,6 +14,7 @@ from app.modules.documentation.infrastructure.models import DocumentationEntryMo
 from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
 from app.modules.projects.infrastructure.repositories import SqlAlchemyProjectRepository
 from app.modules.sprints.infrastructure.models import SprintModel
+from app.orchestration.ai_context import SqlAlchemyProjectContextBuilder
 from app.orchestration.backlog_adapters import SqlAlchemyProjectLookup
 
 
@@ -170,6 +172,14 @@ class AssistantDataService:
             task_count=tasks,
             member_count=members,
             sprint_count=sprint_count,
+        )
+
+    def build_project_ai_context(
+        self, project_id: str, user_id: str, role: str
+    ) -> ProjectAiContext:
+        self.ensure_project_access(project_id, user_id, role)
+        return SqlAlchemyProjectContextBuilder(self._session).build_context(
+            project_id, user_id, role
         )
 
     def count_metrics(self, project_id: str) -> tuple[int, int, int]:

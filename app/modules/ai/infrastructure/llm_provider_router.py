@@ -127,10 +127,10 @@ class LLMProviderRouter:
 
     client: genai.Client
     registry: ModelAvailabilityRegistry | None = None
+    model_chain: tuple[str, ...] | None = None
 
     def _registry(self) -> ModelAvailabilityRegistry:
         return self.registry if self.registry is not None else _registry
-    model_chain: tuple[str, ...] | None = None
 
     def ordered_models(self) -> tuple[str, ...]:
         if self.model_chain is not None:
