@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -14,6 +16,7 @@ from google.genai.types import HttpOptionsDict
 
 from app.config import settings
 from app.modules.ai.domain.errors import GeminiProcessingError
+from app.shared.infrastructure.ai_request_trace import log_ai_stage
 
 if TYPE_CHECKING:
     from google.genai._gaos.types.interactions.interaction import Interaction
@@ -21,21 +24,28 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
-_GEMINI_TIMEOUT_SECONDS = 90.0
 _RETRYABLE_STATUS = {502, 503, 504}
 _INTERPRETATION_GENERATION_CONFIG: dict[str, object] = {
     "thinking_level": "low",
     "max_output_tokens": 512,
 }
-_GEMINI_HTTP_OPTIONS: HttpOptionsDict = {
-    "timeout": int(_GEMINI_TIMEOUT_SECONDS * 1000),
-    "retry_options": {
-        "attempts": 2,
-        "initial_delay": 0.4,
-        "max_delay": 2.0,
-        "http_status_codes": [408, 429, 500, 502, 503, 504],
-    },
-}
+
+
+def _gemini_timeout_seconds() -> float:
+    return float(settings.AI_GEMINI_TIMEOUT_SECONDS)
+
+
+def _gemini_http_options() -> HttpOptionsDict:
+    timeout_ms = int(_gemini_timeout_seconds() * 1000)
+    return {
+        "timeout": timeout_ms,
+        "retry_options": {
+            "attempts": 1,
+            "initial_delay": 0.2,
+            "max_delay": 1.0,
+            "http_status_codes": [408, 429, 500, 502, 503, 504],
+        },
+    }
 
 
 def _normalize_model_id(model: str) -> str:
@@ -95,14 +105,25 @@ def _extract_output_text(interaction: Interaction) -> str:
 
 
 def _create_interaction(client: genai.Client, *, model_id: str, prompt: str, stream: bool) -> Any:
-    return client.interactions.create(
-        model=model_id,
-        input=prompt,
-        stream=stream,
-        timeout=_GEMINI_TIMEOUT_SECONDS,
-        automatic_continuation=False,
-        generation_config=_INTERPRETATION_GENERATION_CONFIG,
-    )
+    timeout = _gemini_timeout_seconds()
+    log_ai_stage("gemini_interactions_create_start", model=model_id, timeout_s=timeout)
+    started = time.perf_counter()
+    try:
+        interaction = client.interactions.create(
+            model=model_id,
+            input=prompt,
+            stream=stream,
+            timeout=timeout,
+            automatic_continuation=False,
+            generation_config=_INTERPRETATION_GENERATION_CONFIG,
+        )
+    except Exception:
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        log_ai_stage("gemini_interactions_create_failed", elapsed_ms=f"{elapsed_ms:.1f}")
+        raise
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    log_ai_stage("gemini_interactions_create_done", elapsed_ms=f"{elapsed_ms:.1f}")
+    return interaction
 
 
 class GenAiGeminiClient:
@@ -117,14 +138,23 @@ class GenAiGeminiClient:
         key = resolve_gemini_api_key()
         if not key:
             raise GeminiProcessingError("missing_api_key")
-        return genai.Client(api_key=key, http_options=_GEMINI_HTTP_OPTIONS)
+        return genai.Client(api_key=key, http_options=_gemini_http_options())
 
     def generate(self, prompt: str) -> str:
-        # Voice/text AI runs inside Starlette's thread pool (see ai_routes); avoid a nested
-        # executor here — it deadlocked when all gemini-io workers waited on themselves.
-        return self._generate_sync(prompt)
+        # Hard wall-clock cap: the SDK may ignore HTTP timeouts on interactions.create().
+        wall_limit = _gemini_timeout_seconds() + 5.0
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gemini-call")
+        future = pool.submit(self._generate_sync_inner, prompt)
+        try:
+            return future.result(timeout=wall_limit)
+        except FuturesTimeoutError as exc:
+            log_ai_stage("gemini_wall_clock_timeout", limit_s=wall_limit)
+            raise GeminiProcessingError("timeout") from exc
+        finally:
+            # Do not wait on shutdown: a timed-out SDK call may never return.
+            pool.shutdown(wait=False, cancel_futures=True)
 
-    def _generate_sync(self, prompt: str) -> str:
+    def _generate_sync_inner(self, prompt: str) -> str:
         key = resolve_gemini_api_key()
         if not key:
             raise GeminiProcessingError("missing_api_key")
@@ -134,12 +164,20 @@ class GenAiGeminiClient:
             interaction = _create_interaction(
                 client, model_id=model_id, prompt=prompt, stream=False
             )
-            return _extract_output_text(interaction)
+            text = _extract_output_text(interaction)
+            log_ai_stage("gemini_output_text_ok", chars=len(text))
+            return text
+        except GeminiProcessingError:
+            raise
         except genai_errors.APIError as exc:
-            raise _map_api_error(exc) from exc
+            mapped = _map_api_error(exc)
+            log_ai_stage("gemini_api_error", reason=str(mapped))
+            raise mapped from exc
         except httpx.TimeoutException as exc:
+            log_ai_stage("gemini_http_timeout")
             raise GeminiProcessingError("timeout") from exc
         except httpx.HTTPError as exc:
+            log_ai_stage("gemini_network_error")
             raise GeminiProcessingError("network") from exc
         except genai_errors.ClientError as exc:
             raise GeminiProcessingError("client_error") from exc
@@ -200,12 +238,11 @@ def validate_gemini_text_generation(
         return False, "missing_api_key", None
 
     model_id = _normalize_model_id(model or settings.API_GEMINI_MODEL)
-    client = genai.Client(api_key=raw_key, http_options=_GEMINI_HTTP_OPTIONS)
+    injected = genai.Client(api_key=raw_key, http_options=_gemini_http_options())
     try:
         started = time.perf_counter()
-        interaction = _create_interaction(client, model_id=model_id, prompt=prompt, stream=False)
+        text = GenAiGeminiClient(client=injected).generate(prompt)
         elapsed_ms = (time.perf_counter() - started) * 1000
-        text = _extract_output_text(interaction)
         logger.info("gemini_validate_ok model=%s latency_ms=%.1f", model_id, elapsed_ms)
         return True, text[:120], 200
     except GeminiProcessingError as exc:

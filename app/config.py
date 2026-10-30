@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     AI_VOICE_MIN_BYTES: int = Field(default=64, ge=1, le=4096)
     AI_CHAT_RETENTION_HOURS: int = Field(default=24, ge=1, le=168)
     AI_FUZZY_MATCH_THRESHOLD: int = Field(default=75, ge=50, le=95)
+    AI_GEMINI_TIMEOUT_SECONDS: float = Field(default=45.0, ge=5.0, le=120.0)
+    AI_TEXT_GENERATE_TIMEOUT_SECONDS: float = Field(
+        default=60.0,
+        ge=10.0,
+        le=180.0,
+        description="Wall-clock limit for POST /ai/text-generate (includes orchestrator + Gemini).",
+    )
 
     @model_validator(mode="after")
     def _validate_security_profile(self) -> Self:

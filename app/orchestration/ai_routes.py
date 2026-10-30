@@ -1,5 +1,8 @@
 """AI assistant HTTP routes (EP-10)."""
 
+import asyncio
+import secrets
+
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -19,12 +22,20 @@ from app.modules.ai.application.use_cases import (
     TranscribeVoiceUseCase,
     VoiceProcessCommand,
 )
+from app.modules.ai.domain import messages as ai_msg
 from app.modules.ai.infrastructure.chat_history_repository import SqlAlchemyChatHistoryRepository
 from app.modules.ai.infrastructure.gemini_client import GenAiGeminiClient
 from app.modules.ai.infrastructure.quota_repository import SqlAlchemyQuotaRepository
 from app.modules.ai.infrastructure.whisper_client import HttpWhisperClient
+from app.orchestration.assistant_data_queries import AssistantDataService
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
+from app.shared.domain.errors import AppError, ErrorKind
+from app.shared.infrastructure.ai_request_trace import (
+    bind_request_id,
+    log_ai_stage,
+    reset_request_id,
+)
 from app.shared.infrastructure.database import get_db_session
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -40,6 +51,7 @@ def _voice_use_case(db: Session = Depends(get_db_session)) -> ProcessVoiceUseCas
         transcription=HttpWhisperClient(),
         generation=GenAiGeminiClient(),
         quotas=SqlAlchemyQuotaRepository(db),
+        data=AssistantDataService(db),
         min_bytes=settings.AI_VOICE_MIN_BYTES,
         max_bytes=settings.AI_VOICE_MAX_BYTES,
         max_seconds=float(settings.AI_VOICE_MAX_SECONDS),
@@ -61,6 +73,7 @@ def _text_use_case(db: Session = Depends(get_db_session)) -> GenerateTextUseCase
         session=db,
         generation=GenAiGeminiClient(),
         quotas=SqlAlchemyQuotaRepository(db),
+        data=AssistantDataService(db),
     )
 
 
@@ -129,24 +142,53 @@ async def voice_process(
 
 
 @router.post("/text-generate", response_model=TextGenerateResponse)
-def text_generate(
+async def text_generate(
     body: TextGenerateRequest,
     actor: CurrentUser = Depends(get_current_user),
     use_case: GenerateTextUseCase = Depends(_text_use_case),
     db: Session = Depends(get_db_session),
 ) -> TextGenerateResponse:
-    cmd = TextGenerateCommand(
-        text=body.text,
-        project_id=body.project_id,
-        user_id=actor.id,
-        user_role=actor.role,
-    )
-    chat = _chat_history(db)
-    trimmed = body.text.strip()
-    if body.persist_user_message and trimmed:
-        chat.append(actor.id, role="user", text=trimmed, input_source="text")
-    result = use_case.execute(cmd)
-    if result.assistant_response:
-        chat.append(actor.id, role="assistant", text=result.assistant_response)
-    db.commit()
-    return result
+    request_id = secrets.token_hex(6)
+    trace_token = bind_request_id(request_id)
+    log_ai_stage("route_enter", endpoint="text-generate", user_id=actor.id)
+    try:
+        cmd = TextGenerateCommand(
+            text=body.text,
+            project_id=body.project_id,
+            user_id=actor.id,
+            user_role=actor.role,
+        )
+        chat = _chat_history(db)
+        trimmed = body.text.strip()
+        if body.persist_user_message and trimmed:
+            chat.append(actor.id, role="user", text=trimmed, input_source="text")
+            log_ai_stage("chat_user_persisted")
+
+        def _run_use_case() -> TextGenerateResponse:
+            log_ai_stage("orchestrator_dispatch")
+            return use_case.execute(cmd)
+
+        try:
+            result = await asyncio.wait_for(
+                run_in_threadpool(_run_use_case),
+                timeout=float(settings.AI_TEXT_GENERATE_TIMEOUT_SECONDS),
+            )
+        except TimeoutError as exc:
+            log_ai_stage(
+                "route_timeout",
+                limit_s=settings.AI_TEXT_GENERATE_TIMEOUT_SECONDS,
+            )
+            raise AppError(
+                "AI_REQUEST_TIMEOUT",
+                ai_msg.AI_REQUEST_TIMEOUT,
+                ErrorKind.UNAVAILABLE,
+            ) from exc
+
+        if result.assistant_response:
+            chat.append(actor.id, role="assistant", text=result.assistant_response)
+            log_ai_stage("chat_assistant_persisted")
+        db.commit()
+        log_ai_stage("route_response", status=result.status.value)
+        return result
+    finally:
+        reset_request_id(trace_token)

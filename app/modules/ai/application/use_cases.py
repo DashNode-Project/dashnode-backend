@@ -18,8 +18,14 @@ from app.modules.ai.domain.errors import (
     QuotaExhaustedError,
     WhisperProcessingError,
 )
-from app.modules.ai.domain.ports import GenerationPort, QuotaPort, TranscriptionPort
+from app.modules.ai.domain.ports import (
+    AssistantDataPort,
+    GenerationPort,
+    QuotaPort,
+    TranscriptionPort,
+)
 from app.shared.domain.errors import AppError, ErrorKind
+from app.shared.infrastructure.ai_request_trace import log_ai_stage
 
 # Re-export for backward compatibility in tests and infrastructure imports.
 __all__ = [
@@ -67,12 +73,13 @@ def generate_assistant_response(
     session: Session,
     generation: GenerationPort,
     quotas: QuotaPort,
+    data: AssistantDataPort,
     recognized: str,
     project_id: str | None,
     user_id: str,
     user_role: str,
 ) -> VoiceProcessResponse:
-    orchestrator = AssistantOrchestrator(session, generation, quotas)
+    orchestrator = AssistantOrchestrator(session, generation, quotas, data)
     try:
         answer = orchestrator.answer(recognized, user_id, user_role, project_id).strip()
     except ClarificationNeeded as exc:
@@ -110,6 +117,7 @@ class ProcessVoiceUseCase:
         transcription: TranscriptionPort,
         generation: GenerationPort,
         quotas: QuotaPort,
+        data: AssistantDataPort,
         *,
         min_bytes: int,
         max_bytes: int,
@@ -119,6 +127,7 @@ class ProcessVoiceUseCase:
         self._transcription = transcription
         self._generation = generation
         self._quotas = quotas
+        self._data = data
         self._min_bytes = min_bytes
         self._max_bytes = max_bytes
         self._max_seconds = max_seconds
@@ -149,6 +158,7 @@ class ProcessVoiceUseCase:
             self._session,
             self._generation,
             self._quotas,
+            self._data,
             recognized,
             cmd.project_id,
             cmd.user_id,
@@ -217,24 +227,34 @@ class GenerateTextUseCase:
         session: Session,
         generation: GenerationPort,
         quotas: QuotaPort,
+        data: AssistantDataPort,
     ) -> None:
         self._session = session
         self._generation = generation
         self._quotas = quotas
+        self._data = data
 
     def execute(self, cmd: TextGenerateCommand) -> TextGenerateResponse:
+        log_ai_stage("generate_text_use_case_start", user_id=cmd.user_id)
         result = generate_assistant_response(
             self._session,
             self._generation,
             self._quotas,
+            self._data,
             cmd.text.strip(),
             cmd.project_id,
             cmd.user_id,
             cmd.user_role,
         )
-        return TextGenerateResponse(
+        response = TextGenerateResponse(
             recognized_text=cmd.text.strip(),
             assistant_response=result.assistant_response,
             status=result.status,
             error=result.error,
         )
+        log_ai_stage(
+            "generate_text_use_case_done",
+            status=response.status.value,
+            has_answer=bool(response.assistant_response),
+        )
+        return response

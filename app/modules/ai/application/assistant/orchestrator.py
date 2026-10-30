@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.modules.ai.application.assistant.assistant_metrics import AssistantRequestMetrics
 from app.modules.ai.application.assistant.conversation_state import ConversationStateStore
-from app.modules.ai.application.assistant.data_queries import AssistantDataService
 from app.modules.ai.application.assistant.entity_resolver import (
     ProjectCandidate,
     SprintCandidate,
@@ -28,7 +27,8 @@ from app.modules.ai.application.assistant.intent_parser import parse_intent
 from app.modules.ai.application.assistant.metrics_generation import MetricsGenerationPort
 from app.modules.ai.application.assistant.text_normalize import normalize_text
 from app.modules.ai.domain.errors import GeminiProcessingError, QuotaExhaustedError
-from app.modules.ai.domain.ports import GenerationPort, QuotaPort
+from app.modules.ai.domain.ports import AssistantDataPort, GenerationPort, QuotaPort
+from app.shared.infrastructure.ai_request_trace import log_ai_stage
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +46,17 @@ _PROJECT_INTENTS = frozenset(
 
 
 class AssistantOrchestrator:
-    def __init__(self, session: Session, generation: GenerationPort, quotas: QuotaPort) -> None:
+    def __init__(
+        self,
+        session: Session,
+        generation: GenerationPort,
+        quotas: QuotaPort,
+        data: AssistantDataPort,
+    ) -> None:
         self._session = session
         self._generation = generation
         self._quotas = quotas
-        self._data = AssistantDataService(session)
+        self._data = data
         self._state = ConversationStateStore(session)
 
     def answer(
@@ -60,6 +66,7 @@ class AssistantOrchestrator:
         role: str,
         optional_project_id: str | None,
     ) -> str:
+        log_ai_stage("orchestrator_enter", user_id=user_id)
         started = time.perf_counter()
         metrics = AssistantRequestMetrics()
         generation = MetricsGenerationPort(self._generation, metrics)
@@ -127,6 +134,7 @@ class AssistantOrchestrator:
         intent = self._enrich_intent(text, intent, candidates)
         metrics.entity_resolve_ms = (time.perf_counter() - resolve_started) * 1000
         metrics.path = intent.intent.value
+        log_ai_stage("intent_parsed", intent=intent.intent.value)
 
         if intent.intent == IntentType.CHITCHAT:
             return (
@@ -154,6 +162,7 @@ class AssistantOrchestrator:
 
         if intent.intent == IntentType.UNKNOWN:
             metrics.path = "gemini_fallback"
+            log_ai_stage("orchestrator_gemini_fallback_enter")
             return self._fallback_llm(text, user_id, projects, generation)
 
         project_id = self._resolve_project_id(intent, optional_project_id, candidates, state)
@@ -350,15 +359,31 @@ class AssistantOrchestrator:
         )
         try:
             self._quotas.check_and_consume("GEMINI")
-            return generation.generate(prompt).strip()
+            answer = generation.generate(prompt).strip()
+            log_ai_stage("orchestrator_gemini_fallback_ok", chars=len(answer))
+            return answer
         except QuotaExhaustedError:
             raise
         except GeminiProcessingError as exc:
+            reason = str(exc)
             logger.warning(
                 "assistant_gemini_fallback_failed user_id=%s reason=%s",
                 user_id,
-                str(exc),
+                reason,
             )
+            log_ai_stage("orchestrator_gemini_fallback_failed", reason=reason)
+            if reason == "timeout":
+                return (
+                    "El servicio de IA tardó demasiado en responder. Reformule la pregunta o "
+                    "intente una consulta directa como «¿Cuáles son mis proyectos?»."
+                )
+            if reason in {"auth_401", "forbidden_403", "missing_api_key"}:
+                return (
+                    "El asistente de IA no está configurado correctamente en el servidor. "
+                    "Contacte al administrador."
+                )
+            if reason == "quota":
+                raise QuotaExhaustedError("GEMINI") from exc
             return (
                 "No pude procesar la consulta con IA en este momento. Intente preguntar, por "
                 "ejemplo: «¿Cuáles son mis proyectos?» o «Lista las HUs del sprint 1»."

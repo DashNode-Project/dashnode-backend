@@ -14,6 +14,7 @@ from app.modules.ai.application.use_cases import (
     TranscribeVoiceUseCase,
 )
 from app.orchestration import ai_routes
+from app.orchestration.assistant_data_queries import AssistantDataService
 from tests.support import login_as
 
 
@@ -47,6 +48,7 @@ def _voice_use_case(
         transcription=StubTranscription(),
         generation=generation,
         quotas=NoQuota(),
+        data=AssistantDataService(db),
         min_bytes=settings.AI_VOICE_MIN_BYTES,
         max_bytes=settings.AI_VOICE_MAX_BYTES,
         max_seconds=float(settings.AI_VOICE_MAX_SECONDS),
@@ -66,6 +68,7 @@ def test_text_generate_success(client: TestClient, db_engine: Engine, db_session
             session=db_session,
             generation=StubGeneration(),
             quotas=NoQuota(),
+            data=AssistantDataService(db_session),
         )
 
     app.dependency_overrides[ai_routes._text_use_case] = override_text

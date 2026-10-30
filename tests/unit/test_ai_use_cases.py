@@ -13,6 +13,7 @@ from app.modules.ai.application.use_cases import (
     WhisperProcessingError,
 )
 from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
+from app.orchestration.assistant_data_queries import AssistantDataService
 from app.shared.domain.errors import AppError
 
 
@@ -87,6 +88,7 @@ def _use_case(
         transcription=transcription_override or transcription or FakeTranscription(),  # type: ignore[arg-type]
         generation=generation or FakeGeneration(),
         quotas=quotas or FakeQuota(),
+        data=AssistantDataService(db_session),
         min_bytes=10,
         max_bytes=100_000,
         max_seconds=60.0,

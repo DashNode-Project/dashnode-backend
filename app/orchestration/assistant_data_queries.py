@@ -1,12 +1,11 @@
-"""Authorized read-only queries backing the AI assistant."""
+"""Authorized read-only SQL for the AI assistant (orchestration adapter)."""
 
 from __future__ import annotations
-
-from dataclasses import dataclass
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.modules.ai.application.assistant.data_models import ProjectRow
 from app.modules.auth.infrastructure.models import UserModel
 from app.modules.backlog.domain.entities import StoryTaskStatus
 from app.modules.backlog.infrastructure.models import StoryTaskModel, UserStoryModel
@@ -15,12 +14,6 @@ from app.modules.projects.infrastructure.models import ProjectMemberModel, Proje
 from app.modules.projects.infrastructure.repositories import SqlAlchemyProjectRepository
 from app.modules.sprints.infrastructure.models import SprintModel
 from app.orchestration.backlog_adapters import SqlAlchemyProjectLookup
-
-
-@dataclass(frozen=True)
-class ProjectRow:
-    id: str
-    name: str
 
 
 class AssistantDataService:

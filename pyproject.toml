@@ -64,7 +64,7 @@ ignore = ["S101", "B008"]
 strict = true
 plugins = ["pydantic.mypy"]
 warn_unused_ignores = true
-exclude = ["migrations/"]
+exclude = ["migrations/", "build/"]
 
 [tool.importlinter]
 root_packages = ["app"]
