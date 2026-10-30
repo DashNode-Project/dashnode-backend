@@ -145,6 +145,14 @@ def _strip_leading_greeting(normalized: str) -> str:
     return remainder
 
 
+def has_functional_request(normalized: str) -> bool:
+    return _has_functional_request(normalized)
+
+
+def asks_hu_analysis(normalized: str) -> bool:
+    return _asks_hu_analysis(normalized)
+
+
 def _has_functional_request(normalized: str) -> bool:
     """True when the utterance asks for DashNode data or a deterministic action."""
     if not normalized:
@@ -265,13 +273,16 @@ def _asks_all_projects_scope(normalized: str) -> bool:
 
 def _asks_hu_analysis(normalized: str) -> bool:
     has_hu = bool(re.search(r"\b(hu|hus|historias? de usuario|historias)\b", normalized))
-    has_advice = bool(
+    has_review = bool(
         re.search(
-            r"(mejorar|mejora|recomend|suger|analiz|optimiz|que falta|como puedo|qué falta)",
+            r"(mejorar|mejora|recomend|suger|analiz|optimiz|que falta|como puedo|que falta|"
+            r"redactad|evalu|revis|calidad|claridad|ambig|verificab|consistenc|estructur|"
+            r"bien escrita|bien formulada|estan bien|están bien|si estan|si están|"
+            r"que mejorar|que mejorarias|como estan redactad|como están redactad)",
             normalized,
         )
     )
-    return has_hu and has_advice
+    return has_hu and has_review
 
 
 def _asks_gemini_grounded(normalized: str) -> bool:
@@ -419,9 +430,18 @@ def _extract_project_ref(text: str, open_project_name: str | None) -> str | None
     )
     if de_match:
         return de_match.group(1).strip()
+    de_mi_proyecto = re.search(
+        r"\bde\s+(?:mi\s+)?proyecto\s+([A-Za-z0-9][A-Za-z0-9 \-_]{1,50}?)"
+        r"(?=\s+(?:est[aá]n|tiene|tienen|hay\b|de\s+las|de\s+los)|[,.!?]|$)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if de_mi_proyecto:
+        return de_mi_proyecto.group(1).strip()
     hu_de_match = re.search(
-        r"(?:hus|historias(?:\s+de\s+usuario)?)\s+(?:de|del)\s+"
-        r"([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,50})",
+        r"(?:hus|historias(?:\s+de\s+usuario)?)\s+(?:de|del)\s+(?!usuario\b)(?:mi\s+proyecto\s+)?"
+        r"([A-Za-z0-9][A-Za-z0-9 \-_]{1,50}?)"
+        r"(?=\s+(?:est[aá]n|tiene|tienen|hay\b|de\s+las)|[,.!?]|$)",
         text,
         flags=re.IGNORECASE,
     )
@@ -472,8 +492,9 @@ def _extract_project_ref(text: str, open_project_name: str | None) -> str | None
     if resumen_match:
         return resumen_match.group(1).strip()
     match = re.search(
-        r"(?:mi\s+)?(?:proyecto|project)\s+([a-zA-Z0-9][a-zA-Z0-9 \-_]{1,40}?)"
-        r"(?:\s+ah[ií]|\s+alli|\s+all[ií]|$|[,.!?])",
+        r"(?:mi\s+)?(?:proyecto|project)\s+([A-Za-z0-9][A-Za-z0-9 \-_]{0,50}?)"
+        r"(?=\s+(?:de\s+las|de\s+los|del?\s|\ben\b|est[aá]n|tiene|tienen|hay\b|"
+        r"est[aá]n\s+bien|sin\s+|con\s+|ah[ií]|alli|all[ií])|[,.!?]|$)",
         text,
         flags=re.IGNORECASE,
     )

@@ -1,5 +1,6 @@
 """Use cases for voice and text AI assistant flows (EP-10)."""
 
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
@@ -26,6 +27,8 @@ from app.modules.ai.domain.ports import (
 )
 from app.shared.domain.errors import AppError, ErrorKind
 from app.shared.infrastructure.ai_request_trace import log_ai_stage
+
+logger = logging.getLogger(__name__)
 
 # Re-export for backward compatibility in tests and infrastructure imports.
 __all__ = [
@@ -95,6 +98,14 @@ def generate_assistant_response(
             ErrorKind.RATE_LIMITED,
             fields={"service": exc.service},
         ) from exc
+    except Exception:
+        logger.exception("assistant_unhandled_error user_id=%s", user_id)
+        return VoiceProcessResponse(
+            recognized_text=recognized,
+            assistant_response=msg.AI_PROCESSING_ERROR,
+            status=AssistantResponseStatus.ERROR,
+            error=msg.AI_PROCESSING_ERROR,
+        )
 
     if not answer:
         return VoiceProcessResponse(

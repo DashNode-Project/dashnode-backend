@@ -42,3 +42,22 @@ def build_assistant_prompt(context: ProjectAiContext, user_query: str) -> str:
         "No inventes credenciales ni datos de otros proyectos."
     )
     return "\n".join(parts)
+
+
+def build_hu_analysis_prompt(
+    context: ProjectAiContext,
+    user_query: str,
+    story_details: str,
+) -> str:
+    """Prompt for reviewing user-story quality with PostgreSQL-backed content."""
+    base = build_assistant_prompt(context, user_query)
+    analysis_instructions = (
+        "Eres el asistente de DashNode (no te identifiques como Gemini). "
+        "Evalúa las historias de usuario del contexto en español: claridad, estructura, "
+        "ambigüedad, consistencia interna y verificabilidad de los criterios de aceptación. "
+        "Da recomendaciones concretas por HU cuando aplique. "
+        "Si no hay historias en el detalle, indícalo sin inventar títulos ni criterios. "
+        "No inventes datos fuera del contexto."
+    )
+    block = story_details.strip() or "Historias de usuario (detalle): ninguna registrada."
+    return f"{base}\n\n{analysis_instructions}\n\n{block}"

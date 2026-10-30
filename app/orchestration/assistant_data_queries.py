@@ -182,6 +182,35 @@ class AssistantDataService:
             project_id, user_id, role
         )
 
+    def story_analysis_detail(self, project_id: str, user_id: str, role: str) -> str:
+        self.ensure_project_access(project_id, user_id, role)
+        stories = self._session.scalars(
+            select(UserStoryModel)
+            .where(UserStoryModel.project_id == project_id)
+            .order_by(UserStoryModel.created_at.asc())
+            .limit(30)
+        ).all()
+        if not stories:
+            return ""
+        lines = ["Historias de usuario (detalle autorizado):"]
+        for index, story in enumerate(stories, start=1):
+            title = (story.title or story.label or "Sin título").strip()
+            role_text = story.user_role.strip()
+            reason = story.reason.strip()
+            criteria = story.acceptance_criteria.strip()
+            lines.append(f"{index}. Título: {title}")
+            if story.label:
+                lines.append(f"   Etiqueta: {story.label.strip()}")
+            if role_text:
+                lines.append(f"   Como: {role_text}")
+            if reason:
+                lines.append(f"   Para: {reason[:500]}")
+            if criteria:
+                lines.append(f"   Criterios de aceptación: {criteria[:1200]}")
+            else:
+                lines.append("   Criterios de aceptación: (no registrados)")
+        return "\n".join(lines)
+
     def count_metrics(self, project_id: str) -> tuple[int, int, int]:
         hu = self._session.scalar(
             select(func.count())

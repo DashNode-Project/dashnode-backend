@@ -155,6 +155,42 @@ def test_orchestrator_analyze_hus_needs_project_when_many(db_session: Session) -
 
 def test_orchestrator_analyze_hus_dashnode_uses_gemini_with_context(db_session: Session) -> None:
     _seed_projects(db_session)
+    _seed_voznotai_story(db_session)
+    now = datetime.now(UTC)
+    db_session.add(
+        EpicModel(
+            id="e2",
+            project_id="p2",
+            name="Core",
+            description="",
+            color=None,
+            sort_order=0,
+            created_by="u1",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.add(
+        UserStoryModel(
+            id="s2",
+            epic_id="e2",
+            project_id="p2",
+            title="HU Tablero",
+            user_role="Dev",
+            reason="Ver kanban",
+            acceptance_criteria="Columnas visibles",
+            moscow_priority="must_have",
+            story_points=3,
+            estimation_mode="story",
+            sprint_id=None,
+            sort_order=0,
+            created_by="u1",
+            created_at=now,
+            updated_at=now,
+            label="HU-02",
+        )
+    )
+    db_session.flush()
     captured: list[str] = []
 
     class _Gemini:
@@ -167,7 +203,7 @@ def test_orchestrator_analyze_hus_dashnode_uses_gemini_with_context(db_session: 
     assert "Revise" in answer
     assert captured
     assert "DashNode Initial Project" in captured[0]
-    assert "Historias de usuario" in captured[0]
+    assert "Criterios de aceptación" in captured[0]
 
 
 def test_orchestrator_list_hus_voznotai_from_db(db_session: Session) -> None:
