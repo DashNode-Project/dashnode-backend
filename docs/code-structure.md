@@ -178,3 +178,20 @@ tests/unit/test_documentation_rules.py                     (reglas de permisos, 
 tests/api/test_documentation_api.py                        (12 tests integrales para endpoints de documentación)
 ```
 
+## EP-10 — Asistente de IA por voz (HU_DN_06_90 … HU_DN_06_96)
+
+```
+app/modules/ai/
+  domain/          messages (literales), ports (TranscriptionPort, GenerationPort, QuotaPort, ProjectContextPort)
+  application/     prompt_builder (contexto RBAC + sanitización), use_cases (ProcessVoiceUseCase, GenerateTextUseCase)
+  infrastructure/  whisper_client, gemini_client, quota_repository, models (system_configs, ai_daily_usage)
+app/orchestration/ai_context.py                            (contexto de proyecto, sprint activo, docs aprobadas)
+app/orchestration/ai_routes.py
+  POST /ai/voice-process                                     (multipart audio + project_id opcional)
+  POST /ai/text-generate                                     (reintento Gemini / consulta por texto)
+migrations/versions/017_ep10_ai_quotas.py
+tests/unit/test_ai_prompt.py
+tests/unit/test_ai_use_cases.py
+tests/api/test_ai_api.py
+```
+

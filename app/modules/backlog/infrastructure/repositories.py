@@ -17,6 +17,7 @@ from app.modules.backlog.domain.entities import (
     parse_story_task_status,
 )
 from app.modules.backlog.domain.ports import BacklogRepository
+from app.modules.backlog.domain.rules import parse_moscow, parse_task_type
 from app.modules.backlog.infrastructure.models import (
     EpicModel,
     StoryTaskModel,
@@ -24,6 +25,13 @@ from app.modules.backlog.infrastructure.models import (
     TaskTimeLogModel,
     UserStoryModel,
 )
+
+
+def _parse_estimation_mode(value: str) -> EstimationMode:
+    try:
+        return EstimationMode(value)
+    except ValueError:
+        return EstimationMode.STORY
 
 
 class SqlAlchemyBacklogRepository(BacklogRepository):
@@ -54,9 +62,9 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
             user_role=model.user_role,
             reason=model.reason,
             acceptance_criteria=model.acceptance_criteria,
-            moscow_priority=MoscowPriority(model.moscow_priority),
+            moscow_priority=parse_moscow(model.moscow_priority) or MoscowPriority.MUST_HAVE,
             story_points=model.story_points,
-            estimation_mode=EstimationMode(model.estimation_mode),
+            estimation_mode=_parse_estimation_mode(model.estimation_mode),
             sprint_id=model.sprint_id,
             sort_order=model.sort_order,
             created_by=model.created_by,
@@ -75,7 +83,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
             user_story_id=model.user_story_id,
             project_id=model.project_id,
             name=model.name,
-            task_type=StoryTaskType(model.task_type),
+            task_type=parse_task_type(model.task_type) or StoryTaskType.BACKEND,
             notes=model.notes,
             status=parsed,
             assignee_id=model.assignee_id,
