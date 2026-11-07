@@ -317,3 +317,42 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | Frontend | `npm run test:coverage` | 333 pruebas pasadas en 42 suites (statements 81.3%, lines 84.25%) | APROBADO |
 | Frontend | `scan-secrets.mjs` | 0 secretos detectados | APROBADO |
 
+
+
+---
+
+## Épica 11: Issues y evidencias (HU_DN_07_97 … HU_DN_07_101)
+
+### Contrato Compartido de API y Respuestas
+
+| Método | Endpoint | Rol Mínimo | Propósito | Respuesta Esperada |
+|---|---|---|---|---|
+| `POST` | `/api/v1/projects/{project_id}/issues` | Miembro activo (Admin, Gerente, Dev) | Crear un nuevo issue (Fix) | 201 Created: `{"message": "Issue creado correctamente.", "issue": {...}}`; 400 Validation Error; Idempotency-Key soportada |
+| `GET` | `/api/v1/projects/{project_id}/issues` | Miembro activo | Listar issues con orden por defecto, filtros y cursor | 200 OK: `{"items": [...], "next_cursor": "...", "total": N}`; si vacío: `'El proyecto no tiene issues.'` o `'No se encontraron issues con los filtros aplicados.'` |
+| `GET` | `/api/v1/projects/{project_id}/issues/{issue_id}` | Miembro activo | Consultar detalle de un issue | 200 OK: `IssueDetail` con evidencias firmadas (expiran en 5 min) y resumen consultivo de IA; 404 si no existe |
+| `POST` | `/api/v1/projects/{project_id}/issues/{issue_id}/evidences` | Miembro activo | Adjuntar evidencia (multipart/form-data) | 201 Created: `{"message": "Evidencia adjuntada correctamente.", "evidence": {...}}`; 400 si formato no admitido o límite excedido; 409 si duplicado SHA-256 |
+| `GET` | `/api/v1/projects/{project_id}/issues/{issue_id}/evidences/{id}/content` | Público con URL firmada | Descarga/visualización de contenido | 200 OK con binary content y mime-type; 403 si firma HMAC alterada o timestamp expirado (> 5 min) |
+
+### Matriz de Trazabilidad y Verificación E2E
+
+| Historia de Usuario | Frontend | Backend | Reglas y Criterios Verificados |
+|---|---|---|---|
+| **HU_DN_07_97** | Botón "Nuevo fix" en pestaña "Issues", modal `CreateIssueModal`, validaciones locales de título (1-100), descripción (<=5000), severidad y tipo. Toast de éxito. | `CreateIssueUseCase`, `POST /projects/{id}/issues` | Título obligatorio, longitud máx 100 caracteres; descripción opcional máx 5000 caracteres; severidad obligatoria (Baja, Media, Alta, Crítica); tipo obligatorio (Bug, Regresión, Rendimiento, Seguridad, UX). Idempotency-Key devuelve el issue sin duplicar. Notificación encolada. Estado inicial `open`. |
+| **HU_DN_07_98** | Botón "Adjuntar evidencia", modal `AddEvidenceModal`, barra de progreso, validación de tipo y peso. Toast de éxito. | `AttachEvidenceUseCase`, `POST /projects/{id}/issues/{id}/evidences` | Formatos admitidos: Imagen (<= 5MB, JPG/PNG/WEBP), Video (<= 25MB y 60s, MP4/WEBM), Registro (<= 1MB, LOG/TXT). Rechazo de polyglots. Stripping de EXIF en imágenes. Detección de duplicados por hash SHA-256 (`'Ya existe una evidencia idéntica asociada a este issue.'`). Almacenamiento privado seguro con UUID. |
+| **HU_DN_07_99** | Pestaña `ProjectIssuesTab`, listado en columna izquierda con badges de severidad, estado, tipo, fecha, responsable y conteo de evidencias. Paginación con cursor. | `ListIssuesUseCase`, `GET /projects/{id}/issues` | Orden por defecto: abiertos primero (`open`, `in-progress`), severidad (`critical` > `high` > `medium` > `low`), fecha desc. Paginación por cursor de 25 elementos. Restricción para miembros activos. Estado vacío: `'El proyecto no tiene issues.'`. |
+| **HU_DN_07_100** | Vista de detalle de issue en columna derecha con campos generales, nota de resolución, responsable, previsualización de evidencias y sección consultiva de IA (DA-08). | `GetIssueDetailUseCase` y `DownloadEvidenceUseCase` | URLs de evidencia firmadas con HMAC SHA-256 y vencimiento estricto de 5 minutos (300 s). Rechazo con 403 Forbidden ante firmas inválidas o expiradas. Descarga y vista previa de evidencias funcional. |
+| **HU_DN_07_101** | Barra de filtros combinables (Estado, Severidad, Tipo) sincronizada en URL con `useSearchParams` y reseteo de cursor. | `ListIssuesUseCase` con filtros en queries | Filtrado combinado en servidor con AND lógico. Mensaje literal sin coincidencias: `'No se encontraron issues con los filtros aplicados.'`. |
+
+### Resumen de Quality Gates y Scripts QA
+
+| Repositorio | Verificación | Resultado | Estado |
+|---|---|---|---|
+| Backend | `tests/unit/test_fixes_domain.py` | 9 pruebas unitarias pasando | APROBADO |
+| Backend | `tests/api/test_issues_api.py` | 5 pruebas integrales de API pasando | APROBADO |
+| Backend | `scripts/qa_console_ep11_runner.py` | 7 pasos de QA automatizados (100% OK) | APROBADO |
+| Backend | `scripts/scan_secrets.py --all` | 0 secretos detectados (349 archivos) | APROBADO |
+| Backend | `BR-4 Module Isolation` | `app.modules.fixes` aislado e independiente | APROBADO |
+| Frontend | `src/features/issues/validation.test.ts` | Pruebas de validación unitarias pasando | APROBADO |
+| Frontend | `src/features/issues/api.test.ts` | Pruebas de cliente API pasando | APROBADO |
+| Frontend | `src/features/issues/ProjectIssuesTab.test.tsx` | Pruebas de integración de componentes pasando | APROBADO |
+| Frontend | Escaneo de secretos | 0 secretos detectados (213 archivos) | APROBADO |

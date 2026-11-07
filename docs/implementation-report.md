@@ -463,3 +463,48 @@ Validación local:
 ### Pruebas
 - `tests/unit/test_ai_prompt.py`, `tests/unit/test_ai_use_cases.py`, `tests/api/test_ai_api.py`.
 - Humo manual: `scripts/smoke_ep10_text_chat.py`.
+
+
+---
+
+## Épica 11: Issues y evidencias (HU_DN_07_97 … HU_DN_07_101)
+
+### Análisis del Orquestador (Modo Lote / Épica)
+- **Fecha:** 2026-11-07
+- **Clasificación del lote:** FULL_STACK
+- **Complejidad:** MODERATE (Score: 84/100)
+- **Project Mode:** EXTEND_EXISTING
+- **Ramas:** `feature/ep-11-issues-evidences` (backend y frontend, derivadas de `origin/feature/ep-10-ai-assistant`)
+- **Dependencias:** HU_DN_07_97 (Creación de Issue) cimenta la estructura de datos; HU_DN_07_98 (Evidencias) y HU_DN_07_100 (Detalle) dependen de la existencia de issues; HU_DN_07_99 (Listado) y HU_DN_07_101 (Filtros) gestionan la consulta y segmentación de datos.
+
+### Implementación Backend
+- **Migración de esquema:** `migrations/versions/020_ep11_issues_and_evidences.py`
+  - Tabla `fixes`: `id` (VARCHAR 36), `project_id` (FK projects, CASCADE), `title` (VARCHAR 100), `description` (VARCHAR 5000), `severity` (VARCHAR 20), `type` (VARCHAR 20), `status` (VARCHAR 20, default 'open'), `reporter_id` (FK users), `assignee_id` (FK users), `resolution_note` (TEXT), `resolved_at` (TIMESTAMP), `idempotency_key` (VARCHAR 255), `created_at`, `updated_at`.
+  - Tabla `evidences`: `id` (VARCHAR 36), `fix_id` (FK fixes, CASCADE), `project_id` (FK projects, CASCADE), `title` (VARCHAR 255), `file_name` (VARCHAR 255), `file_type` (VARCHAR 20), `mime_type` (VARCHAR 100), `file_size` (INTEGER), `storage_path` (VARCHAR 500), `sha256_hash` (VARCHAR 64), `duration_seconds` (FLOAT), `uploaded_by` (FK users), `created_at`.
+- **Módulo Fixes (`app/modules/fixes/`):**
+  - `domain/entities.py`: Entidades `Issue`, `Evidence`, enumeraciones `IssueSeverity`, `IssueType`, `IssueStatus`, `EvidenceType`. Validaciones de dominio de título (1-100), descripción (<= 5000), severidad y tipo.
+  - `domain/messages.py`: Literales exactos para mensajes de validación, error y éxito (`TITLE_REQUIRED`, `DESCRIPTION_TOO_LONG`, `SEVERITY_REQUIRED`, `TYPE_REQUIRED`, `UNSUPPORTED_FORMAT`, `FILE_TOO_LARGE`, `VIDEO_TOO_LONG`, `DUPLICATE_EVIDENCE`, `ISSUE_CREATED`, `EVIDENCE_ATTACHED`, `NO_ISSUES_FOUND`, `NO_FILTERED_ISSUES`, `GENERIC_ERROR`).
+  - `domain/ports.py`: Contratos de `IssueRepository`, `EvidenceRepository`, `EvidenceFileStorage`, `SignedUrlGenerator`, `ProjectLookupPort`, `UserDisplayLookupPort`, `IssueNotificationPort`.
+  - `application/file_validation.py`: Validación estricta de formato por firma binaria (magic bytes), stripping de metadata EXIF en JPEG y chunks auxiliares en PNG, parseo de duración en contenedores MP4 (`mvhd`) y WebM (EBML Duration <= 60s), prevención de archivos falsos/polyglots (rechazo de scripts embebidos PHP/HTML/JS y ejecutables PE/ELF/ZIP).
+  - `application/use_cases.py`:
+    - `CreateIssueUseCase`: Validación de pertenencia activa al proyecto, validaciones de dominio, soporte de idempotencia con `Idempotency-Key` (evita duplicados devolviendo el issue existente), estado inicial `open` y encolado de evento de notificación.
+    - `AttachEvidenceUseCase`: Validación de límites de peso (imagen <= 5MB, video <= 25MB y 60s, log <= 1MB), detección de duplicados por hash SHA-256 en el issue (`DUPLICATE_EVIDENCE`), almacenamiento privado con UUID y eliminación de archivos huérfanos/parciales ante fallo.
+    - `ListIssuesUseCase`: Paginación por cursor con límite de 25 elementos, orden por defecto (abiertos primero, luego severidad critical>high>medium>low, luego fecha desc).
+    - `GetIssueDetailUseCase`: Recuperación de datos generales, evidencias con URLs firmadas HMAC SHA-256 con vencimiento estricto de 5 minutos (300s) y resumen consultivo de respuestas de IA.
+    - `DownloadEvidenceUseCase`: Verificación criptográfica de firma HMAC y expiración de timestamp antes de servir el archivo binario.
+  - `infrastructure/repositories.py`: `SqlAlchemyFixRepository`, `SqlAlchemyEvidenceRepository`, `LocalEvidenceFileStorage` y `HmacSignedUrlGenerator`.
+- **Rutas de Orquestación (`app/orchestration/issue_routes.py`):**
+  - `POST /api/v1/projects/{project_id}/issues` (HU_DN_07_97)
+  - `GET  /api/v1/projects/{project_id}/issues` (HU_DN_07_99, HU_DN_07_101)
+  - `GET  /api/v1/projects/{project_id}/issues/{issue_id}` (HU_DN_07_100)
+  - `POST /api/v1/projects/{project_id}/issues/{issue_id}/evidences` (HU_DN_07_98)
+  - `GET  /api/v1/projects/{project_id}/issues/{issue_id}/evidences/{evidence_id}/content` (HU_DN_07_100)
+- **Seguridad y CORS (`app/main.py`):**
+  - Habilitada cabecera `Idempotency-Key` en `CORSMiddleware`.
+  - Aislamiento modular verificado en `pyproject.toml` (contrato BR-4 incluyendo `app.modules.fixes`).
+
+### Pruebas y Quality Gates Backend
+- **Pruebas unitarias:** `tests/unit/test_fixes_domain.py` (9 tests de reglas de negocio, validaciones de campos, desinfección de EXIF, límites de tamaño, verificación de duración de video y firmas HMAC).
+- **Pruebas de API:** `tests/api/test_issues_api.py` (5 tests de integración completos cubriendo HU_DN_07_97 a HU_DN_07_101, validando códigos de estado, mensajes literales exactos, idempotencia, rechazo de polyglots, URLs firmadas y filtros combinados).
+- **Script de QA local:** `scripts/qa_console_ep11_runner.py` (ejecución completa contra servidor HTTP uvicorn en memoria para comprobaciones locales y validación de casos borde).
+- **Escaneo de secretos:** `scripts/scan_secrets.py --all` limpio (349 archivos analizados, 0 secretos).
