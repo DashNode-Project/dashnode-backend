@@ -176,7 +176,9 @@ class SqlAlchemyFixRepository(IssueRepository):
 
         next_cursor = None
         if offset + len(issues) < total:
-            next_cursor = base64.urlsafe_b64encode(str(offset + limit).encode("utf-8")).decode("ascii")
+            next_cursor = base64.urlsafe_b64encode(str(offset + limit).encode("utf-8")).decode(
+                "ascii"
+            )
 
         return issues, next_cursor, total
 
@@ -259,7 +261,11 @@ class LocalEvidenceFileStorage(EvidenceFileStorage):
 
     def __init__(self, base_dir: Path | None = None) -> None:
         if base_dir is None:
-            self._base_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "uploads" / "evidences"
+            self._base_dir = (
+                Path(__file__).resolve().parent.parent.parent.parent.parent
+                / "uploads"
+                / "evidences"
+            )
         else:
             self._base_dir = base_dir
         self._base_dir.mkdir(parents=True, exist_ok=True)
@@ -303,7 +309,7 @@ class HmacSignedUrlGenerator(SignedUrlGenerator):
         expires_in_seconds: int = 300,
     ) -> str:
         expires = int(time.time()) + expires_in_seconds
-        msg = f"{evidence_id}:{expires}".encode("utf-8")
+        msg = f"{evidence_id}:{expires}".encode()
         sig = hmac.new(self._secret, msg, hashlib.sha256).hexdigest()
         return (
             f"/api/v1/projects/{project_id}/issues/{issue_id}/evidences/{evidence_id}/content"
@@ -316,6 +322,6 @@ class HmacSignedUrlGenerator(SignedUrlGenerator):
         expires_timestamp: int,
         signature: str,
     ) -> bool:
-        msg = f"{evidence_id}:{expires_timestamp}".encode("utf-8")
+        msg = f"{evidence_id}:{expires_timestamp}".encode()
         expected = hmac.new(self._secret, msg, hashlib.sha256).hexdigest()
         return hmac.compare_digest(signature, expected)

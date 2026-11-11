@@ -32,12 +32,6 @@ from app.modules.fixes.application.use_cases import (
     GetIssueDetailUseCase,
     ListIssuesUseCase,
 )
-from app.modules.fixes.domain.messages import (
-    EVIDENCE_NOT_FOUND,
-    ISSUE_NOT_FOUND,
-    NOT_MEMBER_ERROR,
-    SIGNATURE_INVALID_OR_EXPIRED,
-)
 from app.modules.fixes.infrastructure.repositories import (
     HmacSignedUrlGenerator,
     LocalEvidenceFileStorage,

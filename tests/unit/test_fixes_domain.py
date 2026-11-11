@@ -5,6 +5,7 @@
 """
 
 import struct
+
 import pytest
 
 from app.modules.fixes.application.file_validation import (
@@ -17,7 +18,6 @@ from app.modules.fixes.domain.entities import (
     EvidenceType,
     Issue,
     IssueSeverity,
-    IssueStatus,
     IssueType,
 )
 from app.modules.fixes.domain.messages import (
@@ -141,7 +141,7 @@ def test_file_validation_jpeg_exif_stripping() -> None:
     # Construct a valid minimal JPEG with an APP1 (EXIF) segment
     # SOI (\xff\xd8), APP1 (\xff\xe1, len 10, EXIF data), SOS (\xff\xda), image data, EOI (\xff\xd9)
     app1_marker = b"\xff\xe1" + struct.pack(">H", 10) + b"Exif\x00\x00\x01\x02"
-    raw_jpeg = b"\xff\xd8\xff" + app1_marker + b"\xff\xda\x00\x02\x12\x34\xff\xd9"
+    raw_jpeg = b"\xff\xd8" + app1_marker + b"\xff\xda\x00\x02\x12\x34\xff\xd9"
 
     validated = validate_and_sanitize_evidence_file("screenshot.jpg", raw_jpeg)
     assert validated.file_type == EvidenceType.IMAGE
@@ -175,7 +175,9 @@ def test_file_validation_video_duration_check() -> None:
     # Minimal MP4 with moov -> mvhd box indicating 75 seconds (timescale=1000, duration=75000)
     timescale = 1000
     duration = 75000  # 75s > 60s!
-    mvhd_payload = b"\x00" * 12 + struct.pack(">I", timescale) + struct.pack(">I", duration) + b"\x00" * 40
+    mvhd_payload = (
+        b"\x00" * 12 + struct.pack(">I", timescale) + struct.pack(">I", duration) + b"\x00" * 40
+    )
     mvhd_box = struct.pack(">I", len(mvhd_payload) + 8) + b"mvhd" + mvhd_payload
     moov_box = struct.pack(">I", len(mvhd_box) + 8) + b"moov" + mvhd_box
     ftyp_box = struct.pack(">I", 16) + b"ftypisom\x00\x00\x02\x00"
@@ -186,7 +188,12 @@ def test_file_validation_video_duration_check() -> None:
 
     # Valid duration 15s
     duration_valid = 15000  # 15s <= 60s
-    mvhd_payload_ok = b"\x00" * 12 + struct.pack(">I", timescale) + struct.pack(">I", duration_valid) + b"\x00" * 40
+    mvhd_payload_ok = (
+        b"\x00" * 12
+        + struct.pack(">I", timescale)
+        + struct.pack(">I", duration_valid)
+        + b"\x00" * 40
+    )
     mvhd_box_ok = struct.pack(">I", len(mvhd_payload_ok) + 8) + b"mvhd" + mvhd_payload_ok
     moov_box_ok = struct.pack(">I", len(mvhd_box_ok) + 8) + b"moov" + mvhd_box_ok
 
@@ -198,7 +205,9 @@ def test_file_validation_video_duration_check() -> None:
 
 def test_signed_url_generator() -> None:
     gen = HmacSignedUrlGenerator(secret_key="my-secret-key-1234567890123456")
-    url = gen.generate(project_id="proj1", issue_id="iss1", evidence_id="ev1", expires_in_seconds=300)
+    url = gen.generate(
+        project_id="proj1", issue_id="iss1", evidence_id="ev1", expires_in_seconds=300
+    )
     assert "/api/v1/projects/proj1/issues/iss1/evidences/ev1/content" in url
     assert "signature=" in url
     assert "expires=" in url

@@ -9,10 +9,10 @@ from app.modules.fixes.infrastructure.repositories import (
 )
 
 __all__ = [
-    "FixModel",
     "EvidenceModel",
-    "SqlAlchemyFixRepository",
-    "SqlAlchemyEvidenceRepository",
-    "LocalEvidenceFileStorage",
+    "FixModel",
     "HmacSignedUrlGenerator",
+    "LocalEvidenceFileStorage",
+    "SqlAlchemyEvidenceRepository",
+    "SqlAlchemyFixRepository",
 ]

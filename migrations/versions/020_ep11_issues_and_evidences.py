@@ -30,7 +30,9 @@ def upgrade() -> None:
         sa.Column("description", sa.String(length=5000), nullable=True),
         sa.Column("severity", sa.String(length=20), nullable=False, index=True),
         sa.Column("type", sa.String(length=20), nullable=False, index=True),
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="open", index=True),
+        sa.Column(
+            "status", sa.String(length=20), nullable=False, server_default="open", index=True
+        ),
         sa.Column(
             "reporter_id",
             sa.String(length=36),

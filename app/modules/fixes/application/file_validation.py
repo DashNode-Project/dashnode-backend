@@ -15,9 +15,9 @@ from app.modules.fixes.domain.messages import (
     VIDEO_TOO_LONG,
 )
 
-MAX_IMAGE_SIZE = 5 * 1024 * 1024       # 5 MB
-MAX_VIDEO_SIZE = 25 * 1024 * 1024     # 25 MB
-MAX_LOG_SIZE = 1 * 1024 * 1024         # 1 MB
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
+MAX_VIDEO_SIZE = 25 * 1024 * 1024  # 25 MB
+MAX_LOG_SIZE = 1 * 1024 * 1024  # 1 MB
 MAX_VIDEO_DURATION_SECONDS = 60.0
 
 

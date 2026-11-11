@@ -504,7 +504,9 @@ Validación local:
   - Aislamiento modular verificado en `pyproject.toml` (contrato BR-4 incluyendo `app.modules.fixes`).
 
 ### Pruebas y Quality Gates Backend
-- **Pruebas unitarias:** `tests/unit/test_fixes_domain.py` (9 tests de reglas de negocio, validaciones de campos, desinfección de EXIF, límites de tamaño, verificación de duración de video y firmas HMAC).
+- **Pruebas unitarias:** `tests/unit/test_fixes_domain.py` (10 tests de reglas de negocio, validaciones de campos, desinfección de EXIF, límites de tamaño, verificación de duración de video y firmas HMAC).
 - **Pruebas de API:** `tests/api/test_issues_api.py` (5 tests de integración completos cubriendo HU_DN_07_97 a HU_DN_07_101, validando códigos de estado, mensajes literales exactos, idempotencia, rechazo de polyglots, URLs firmadas y filtros combinados).
-- **Script de QA local:** `scripts/qa_console_ep11_runner.py` (ejecución completa contra servidor HTTP uvicorn en memoria para comprobaciones locales y validación de casos borde).
-- **Escaneo de secretos:** `scripts/scan_secrets.py --all` limpio (349 archivos analizados, 0 secretos).
+- **Suite completa (`pytest --cov=app --cov-fail-under=80`):** 475 passed, 2 skipped (`test_gemini_integration.py` sin `GEMINI_INTEGRATION=1`), cobertura total 80.89%.
+- **Análisis estático y contratos:** `ruff check .`, `ruff format --check .`, `mypy .` (313 archivos), `lint-imports` (BR-1, BR-2, BR-4 cumplidos) y `pip-audit --skip-editable` sin hallazgos.
+- **Script de QA local:** `scripts/qa_console_ep11_runner.py` (ejecución completa contra servidor HTTP uvicorn en memoria; 7/7 casos PASS).
+- **Escaneo de secretos:** `scripts/scan_secrets.py --all` limpio (365 archivos analizados, 0 secretos).

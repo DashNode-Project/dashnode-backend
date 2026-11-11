@@ -6,15 +6,13 @@ exercising routing, middleware, database persistence, authentication, CORS, file
 """
 
 import contextlib
-import io
-import json
 import os
 import socket
 import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import TypedDict
 
 # Add repo root to sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -29,7 +27,9 @@ if DB_FILE.exists():
 os.environ["APP_ENV"] = "development"
 os.environ["DATABASE_URL"] = f"sqlite+pysqlite:///{DB_FILE.resolve()}"
 os.environ["SECRET_KEY"] = "qa-secret-key-at-least-32-bytes-long!"
-os.environ["CORS_ORIGINS"] = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080"
+os.environ["CORS_ORIGINS"] = (
+    "http://localhost:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080"
+)
 os.environ["SESSION_COOKIE_SECURE"] = "false"
 
 import requests
@@ -110,7 +110,9 @@ def main() -> int:
         dev_id = create_user(engine, email=dev_email, role="developer")
 
         # Login as manager
-        login_res = session.post(f"{base_url}/api/v1/auth/login", json={"email": mgr_email, "password": DEFAULT_PASSWORD})
+        login_res = session.post(
+            f"{base_url}/api/v1/auth/login", json={"email": mgr_email, "password": DEFAULT_PASSWORD}
+        )
         assert login_res.status_code == 200, f"Login manager fallo: {login_res.text}"
 
         # Create project
@@ -127,41 +129,75 @@ def main() -> int:
         project_id = proj_res.json()["id"]
 
         # Add developer to project members
-        add_mem = session.post(f"{base_url}/api/v1/projects/{project_id}/members", json={"user_id": dev_id})
+        add_mem = session.post(
+            f"{base_url}/api/v1/projects/{project_id}/members", json={"user_id": dev_id}
+        )
         assert add_mem.status_code in (200, 201), f"Add member fallo: {add_mem.text}"
 
         # Switch session to developer (active member)
         session.cookies.clear()
-        session.post(f"{base_url}/api/v1/auth/login", json={"email": dev_email, "password": DEFAULT_PASSWORD})
+        session.post(
+            f"{base_url}/api/v1/auth/login", json={"email": dev_email, "password": DEFAULT_PASSWORD}
+        )
 
         # --- STEP 1: HU_DN_07_97 Validaciones de Creación de Issue ---
-        print_step_header(1, "Validaciones de creación de Issue (Campos obligatorios y límites)", "HU_DN_07_97")
-        r1_no_title = session.post(f"{base_url}/api/v1/projects/{project_id}/issues", json={"title": "", "severity": "Alta", "type": "Bug"})
+        print_step_header(
+            1, "Validaciones de creación de Issue (Campos obligatorios y límites)", "HU_DN_07_97"
+        )
+        r1_no_title = session.post(
+            f"{base_url}/api/v1/projects/{project_id}/issues",
+            json={"title": "", "severity": "Alta", "type": "Bug"},
+        )
         p1_title = r1_no_title.status_code == 400 and messages.TITLE_REQUIRED in r1_no_title.text
 
-        r1_long_title = session.post(f"{base_url}/api/v1/projects/{project_id}/issues", json={"title": "A" * 101, "severity": "Alta", "type": "Bug"})
-        p1_long_title = r1_long_title.status_code == 400 and messages.TITLE_TOO_LONG in r1_long_title.text
+        r1_long_title = session.post(
+            f"{base_url}/api/v1/projects/{project_id}/issues",
+            json={"title": "A" * 101, "severity": "Alta", "type": "Bug"},
+        )
+        p1_long_title = (
+            r1_long_title.status_code == 400 and messages.TITLE_TOO_LONG in r1_long_title.text
+        )
 
-        r1_long_desc = session.post(f"{base_url}/api/v1/projects/{project_id}/issues", json={"title": "Valid Title", "description": "D" * 5001, "severity": "Alta", "type": "Bug"})
-        p1_long_desc = r1_long_desc.status_code == 400 and messages.DESCRIPTION_TOO_LONG in r1_long_desc.text
+        r1_long_desc = session.post(
+            f"{base_url}/api/v1/projects/{project_id}/issues",
+            json={
+                "title": "Valid Title",
+                "description": "D" * 5001,
+                "severity": "Alta",
+                "type": "Bug",
+            },
+        )
+        p1_long_desc = (
+            r1_long_desc.status_code == 400 and messages.DESCRIPTION_TOO_LONG in r1_long_desc.text
+        )
 
-        r1_no_sev = session.post(f"{base_url}/api/v1/projects/{project_id}/issues", json={"title": "Valid Title", "severity": "", "type": "Bug"})
+        r1_no_sev = session.post(
+            f"{base_url}/api/v1/projects/{project_id}/issues",
+            json={"title": "Valid Title", "severity": "", "type": "Bug"},
+        )
         p1_sev = r1_no_sev.status_code == 400 and messages.SEVERITY_REQUIRED in r1_no_sev.text
 
-        r1_no_type = session.post(f"{base_url}/api/v1/projects/{project_id}/issues", json={"title": "Valid Title", "severity": "Media", "type": ""})
+        r1_no_type = session.post(
+            f"{base_url}/api/v1/projects/{project_id}/issues",
+            json={"title": "Valid Title", "severity": "Media", "type": ""},
+        )
         p1_type = r1_no_type.status_code == 400 and messages.TYPE_REQUIRED in r1_no_type.text
 
         p1 = p1_title and p1_long_title and p1_long_desc and p1_sev and p1_type
-        results.append({
-            "step": 1,
-            "name": "Validaciones de campos obligatorios y límites de Issue",
-            "hu": "HU_DN_07_97",
-            "passed": p1,
-            "details": "Título requerido/max100, descripción max5000, severidad requerida, tipo requerido",
-        })
+        results.append(
+            {
+                "step": 1,
+                "name": "Validaciones de campos obligatorios y límites de Issue",
+                "hu": "HU_DN_07_97",
+                "passed": p1,
+                "details": "Título requerido/max100, descripción max5000, severidad requerida, tipo requerido",
+            }
+        )
 
         # --- STEP 2: HU_DN_07_97 Creación Exitosa e Idempotency-Key ---
-        print_step_header(2, "Creación exitosa de Issue e idempotencia (Idempotency-Key)", "HU_DN_07_97")
+        print_step_header(
+            2, "Creación exitosa de Issue e idempotencia (Idempotency-Key)", "HU_DN_07_97"
+        )
         idemp_key = "idemp-qa-ep11-test-key-001"
         r2 = session.post(
             f"{base_url}/api/v1/projects/{project_id}/issues",
@@ -192,19 +228,31 @@ def main() -> int:
             and r2_retry.json()["issue"]["id"] == issue_id
             and r2_retry.json()["issue"]["status"] == "open"
         )
-        results.append({
-            "step": 2,
-            "name": "Creación exitosa con estado OPEN e Idempotency-Key",
-            "hu": "HU_DN_07_97",
-            "passed": p2_idemp,
-            "details": f"Issue creado ID: {issue_id}, idempotencia validada correctamente",
-        })
+        results.append(
+            {
+                "step": 2,
+                "name": "Creación exitosa con estado OPEN e Idempotency-Key",
+                "hu": "HU_DN_07_97",
+                "passed": p2_idemp,
+                "details": f"Issue creado ID: {issue_id}, idempotencia validada correctamente",
+            }
+        )
 
         # --- STEP 3: HU_DN_07_98 Seguridad: Rechazo de Binarios Peligrosos y Límites de Tamaño ---
-        print_step_header(3, "Seguridad de Evidencias: Rechazo de ejecutables, scripts y límites de tamaño", "HU_DN_07_98")
+        print_step_header(
+            3,
+            "Seguridad de Evidencias: Rechazo de ejecutables, scripts y límites de tamaño",
+            "HU_DN_07_98",
+        )
         r3_exe = session.post(
             f"{base_url}/api/v1/projects/{project_id}/issues/{issue_id}/evidences",
-            files={"file": ("malware.exe", b"MZ\x90\x00\x03\x00\x00\x00fake_binary", "application/octet-stream")},
+            files={
+                "file": (
+                    "malware.exe",
+                    b"MZ\x90\x00\x03\x00\x00\x00fake_binary",
+                    "application/octet-stream",
+                )
+            },
         )
         p3_exe = r3_exe.status_code == 400 and messages.UNSUPPORTED_FORMAT in r3_exe.text
 
@@ -218,25 +266,39 @@ def main() -> int:
             f"{base_url}/api/v1/projects/{project_id}/issues/{issue_id}/evidences",
             files={"file": ("heavy.log", b"L" * (1024 * 1024 + 100), "text/plain")},
         )
-        p3_log_limit = r3_large_log.status_code == 400 and messages.FILE_TOO_LARGE in r3_large_log.text
+        p3_log_limit = (
+            r3_large_log.status_code == 400 and messages.FILE_TOO_LARGE in r3_large_log.text
+        )
 
         r3_large_img = session.post(
             f"{base_url}/api/v1/projects/{project_id}/issues/{issue_id}/evidences",
-            files={"file": ("huge.jpg", b"\xff\xd8\xff\xdb" + (b"0" * (5 * 1024 * 1024 + 100)), "image/jpeg")},
+            files={
+                "file": (
+                    "huge.jpg",
+                    b"\xff\xd8\xff\xdb" + (b"0" * (5 * 1024 * 1024 + 100)),
+                    "image/jpeg",
+                )
+            },
         )
-        p3_img_limit = r3_large_img.status_code == 400 and messages.FILE_TOO_LARGE in r3_large_img.text
+        p3_img_limit = (
+            r3_large_img.status_code == 400 and messages.FILE_TOO_LARGE in r3_large_img.text
+        )
 
         p3 = p3_exe and p3_sh and p3_log_limit and p3_img_limit
-        results.append({
-            "step": 3,
-            "name": "Rechazo de formatos peligrosos y límites de tamaño por tipo",
-            "hu": "HU_DN_07_98",
-            "passed": p3,
-            "details": "Bloqueo exitoso de .exe, .sh, logs >1MB e imágenes >5MB",
-        })
+        results.append(
+            {
+                "step": 3,
+                "name": "Rechazo de formatos peligrosos y límites de tamaño por tipo",
+                "hu": "HU_DN_07_98",
+                "passed": p3,
+                "details": "Bloqueo exitoso de .exe, .sh, logs >1MB e imágenes >5MB",
+            }
+        )
 
         # --- STEP 4: HU_DN_07_98 Adjunto Válido y Detección de Duplicados SHA-256 ---
-        print_step_header(4, "Adjunto válido de evidencia y detección de duplicados SHA-256", "HU_DN_07_98")
+        print_step_header(
+            4, "Adjunto válido de evidencia y detección de duplicados SHA-256", "HU_DN_07_98"
+        )
         valid_jpeg_bytes = b"\xff\xd8\xff\xdb\x00\x43\x00\xff\xda\x00\x02\x11\x22\xff\xd9"
         r4_attach = session.post(
             f"{base_url}/api/v1/projects/{project_id}/issues/{issue_id}/evidences",
@@ -255,16 +317,20 @@ def main() -> int:
         p4_dup = r4_dup.status_code == 409 and messages.DUPLICATE_EVIDENCE in r4_dup.text
 
         p4 = r4_attach.status_code == 201 and p4_dup
-        results.append({
-            "step": 4,
-            "name": "Adjunto exitoso y rechazo de duplicados SHA-256 (409)",
-            "hu": "HU_DN_07_98",
-            "passed": p4,
-            "details": f"Evidencia adjuntada ID: {evidence_id}, duplicado rechazado con código 409",
-        })
+        results.append(
+            {
+                "step": 4,
+                "name": "Adjunto exitoso y rechazo de duplicados SHA-256 (409)",
+                "hu": "HU_DN_07_98",
+                "passed": p4,
+                "details": f"Evidencia adjuntada ID: {evidence_id}, duplicado rechazado con código 409",
+            }
+        )
 
         # --- STEP 5: HU_DN_07_99 Listado de Issues y Paginación por Cursor ---
-        print_step_header(5, "Listado de issues de un proyecto y ordenamiento por defecto", "HU_DN_07_99")
+        print_step_header(
+            5, "Listado de issues de un proyecto y ordenamiento por defecto", "HU_DN_07_99"
+        )
         session.post(
             f"{base_url}/api/v1/projects/{project_id}/issues",
             json={"title": "Espaciado incorrecto en navbar", "severity": "Baja", "type": "UX"},
@@ -275,11 +341,15 @@ def main() -> int:
         items = list_body["items"]
         total = list_body["total"]
 
-        p5_order = len(items) >= 2 and items[0]["severity"] == "critical" and items[1]["severity"] == "low"
+        p5_order = (
+            len(items) >= 2 and items[0]["severity"] == "critical" and items[1]["severity"] == "low"
+        )
 
         r5_page1 = session.get(f"{base_url}/api/v1/projects/{project_id}/issues?limit=1")
         next_cursor = r5_page1.json()["next_cursor"]
-        r5_page2 = session.get(f"{base_url}/api/v1/projects/{project_id}/issues?limit=1&cursor={next_cursor}")
+        r5_page2 = session.get(
+            f"{base_url}/api/v1/projects/{project_id}/issues?limit=1&cursor={next_cursor}"
+        )
         p5_paging = (
             r5_page1.status_code == 200
             and len(r5_page1.json()["items"]) == 1
@@ -289,16 +359,22 @@ def main() -> int:
         )
 
         p5 = p5_order and p5_paging
-        results.append({
-            "step": 5,
-            "name": "Listado con orden (open > severidad > fecha) y paginación por cursor",
-            "hu": "HU_DN_07_99",
-            "passed": p5,
-            "details": f"Total issues: {total}, orden verificado (Crítica -> Baja), cursor paginación OK",
-        })
+        results.append(
+            {
+                "step": 5,
+                "name": "Listado con orden (open > severidad > fecha) y paginación por cursor",
+                "hu": "HU_DN_07_99",
+                "passed": p5,
+                "details": f"Total issues: {total}, orden verificado (Crítica -> Baja), cursor paginación OK",
+            }
+        )
 
         # --- STEP 6: HU_DN_07_100 Detalle de Issue y URLs Firmadas HMAC (5 min) ---
-        print_step_header(6, "Detalle de Issue y descarga segura mediante URLs firmadas HMAC-SHA256", "HU_DN_07_100")
+        print_step_header(
+            6,
+            "Detalle de Issue y descarga segura mediante URLs firmadas HMAC-SHA256",
+            "HU_DN_07_100",
+        )
         r6_detail = session.get(f"{base_url}/api/v1/projects/{project_id}/issues/{issue_id}")
         assert r6_detail.status_code == 200, f"Detalle de issue falló: {r6_detail.text}"
         detail_data = r6_detail.json()
@@ -311,40 +387,53 @@ def main() -> int:
 
         tampered_url = download_url.replace("signature=", "signature=tampered_signature_")
         r6_tampered = session.get(f"{base_url}{tampered_url}")
-        p6_tampered_blocked = r6_tampered.status_code == 403 and messages.SIGNATURE_INVALID_OR_EXPIRED in r6_tampered.text
+        p6_tampered_blocked = (
+            r6_tampered.status_code == 403
+            and messages.SIGNATURE_INVALID_OR_EXPIRED in r6_tampered.text
+        )
 
         expired_url = download_url.split("&expires=")[0] + "&expires=1000000000"
         r6_expired = session.get(f"{base_url}{expired_url}")
         p6_expired_blocked = r6_expired.status_code == 403
 
         p6 = p6_valid_dl and p6_tampered_blocked and p6_expired_blocked
-        results.append({
-            "step": 6,
-            "name": "Detalle con evidencias y seguridad de URLs firmadas HMAC (300s)",
-            "hu": "HU_DN_07_100",
-            "passed": p6,
-            "details": "Descarga binaria exitosa; firmas alteradas y expiradas rechazadas con 403 Forbidden",
-        })
+        results.append(
+            {
+                "step": 6,
+                "name": "Detalle con evidencias y seguridad de URLs firmadas HMAC (300s)",
+                "hu": "HU_DN_07_100",
+                "passed": p6,
+                "details": "Descarga binaria exitosa; firmas alteradas y expiradas rechazadas con 403 Forbidden",
+            }
+        )
 
         # --- STEP 7: HU_DN_07_101 Filtrado de Issues por Estado, Severidad y Tipo ---
-        print_step_header(7, "Filtrado en servidor por estado, severidad y tipo (AND lógico)", "HU_DN_07_101")
-        r7_match = session.get(f"{base_url}/api/v1/projects/{project_id}/issues?severity=critical&type=bug")
+        print_step_header(
+            7, "Filtrado en servidor por estado, severidad y tipo (AND lógico)", "HU_DN_07_101"
+        )
+        r7_match = session.get(
+            f"{base_url}/api/v1/projects/{project_id}/issues?severity=critical&type=bug"
+        )
         p7_match = r7_match.status_code == 200 and len(r7_match.json()["items"]) == 1
 
-        r7_no_match = session.get(f"{base_url}/api/v1/projects/{project_id}/issues?severity=critical&type=ux")
+        r7_no_match = session.get(
+            f"{base_url}/api/v1/projects/{project_id}/issues?severity=critical&type=ux"
+        )
         p7_no_match = r7_no_match.status_code == 200 and len(r7_no_match.json()["items"]) == 0
 
         r7_status = session.get(f"{base_url}/api/v1/projects/{project_id}/issues?status=open")
         p7_status = r7_status.status_code == 200 and len(r7_status.json()["items"]) >= 2
 
         p7 = p7_match and p7_no_match and p7_status
-        results.append({
-            "step": 7,
-            "name": "Filtrado multinivel con lógica AND en backend",
-            "hu": "HU_DN_07_101",
-            "passed": p7,
-            "details": "Coincidencia exacta, filtros combinados y retorno vacío validados correctamente",
-        })
+        results.append(
+            {
+                "step": 7,
+                "name": "Filtrado multinivel con lógica AND en backend",
+                "hu": "HU_DN_07_101",
+                "passed": p7,
+                "details": "Coincidencia exacta, filtros combinados y retorno vacío validados correctamente",
+            }
+        )
 
     finally:
         server.should_exit = True

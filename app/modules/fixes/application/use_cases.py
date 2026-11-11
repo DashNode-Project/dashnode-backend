@@ -5,7 +5,6 @@
 """
 
 from app.modules.fixes.application.dtos import (
-    AIAnalysisSummaryDTO,
     CreateIssueCommand,
     EvidenceDTO,
     EvidenceOperationResponse,

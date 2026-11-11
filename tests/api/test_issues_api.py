@@ -5,6 +5,7 @@
 """
 
 import struct
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
@@ -48,10 +49,8 @@ def _setup_project_with_members(client: TestClient, db_engine: Engine) -> tuple[
     return project_id, mgr_id, dev1_id, dev2_id
 
 
-def test_hu_97_create_issue_success_and_validations(
-    client: TestClient, db_engine: Engine
-) -> None:
-    project_id, mgr_id, dev1_id, _ = _setup_project_with_members(client, db_engine)
+def test_hu_97_create_issue_success_and_validations(client: TestClient, db_engine: Engine) -> None:
+    project_id, mgr_id, _dev1_id, _ = _setup_project_with_members(client, db_engine)
     _switch_user(client, "dev1-issues@dashnode.io")
 
     # 1. Validation: Title is required
@@ -119,7 +118,7 @@ def test_hu_97_create_issue_success_and_validations(
     assert messages.TYPE_REQUIRED in res_no_type.text
 
     # 6. Restriction: Non-member cannot create issue
-    outsider_id = create_user(db_engine, email="outsider-issues@dashnode.io", role="developer")
+    create_user(db_engine, email="outsider-issues@dashnode.io", role="developer")
     _switch_user(client, "outsider-issues@dashnode.io")
     res_outsider = client.post(
         f"/api/v1/projects/{project_id}/issues",
@@ -181,10 +180,8 @@ def test_hu_97_create_issue_success_and_validations(
         assert any("Fallo en render de tabla" in n.message for n in notifs)
 
 
-def test_hu_98_attach_evidence_success_and_security(
-    client: TestClient, db_engine: Engine
-) -> None:
-    project_id, _, dev1_id, _ = _setup_project_with_members(client, db_engine)
+def test_hu_98_attach_evidence_success_and_security(client: TestClient, db_engine: Engine) -> None:
+    project_id, _, _dev1_id, _ = _setup_project_with_members(client, db_engine)
     _switch_user(client, "dev1-issues@dashnode.io")
 
     # Create issue
@@ -220,7 +217,9 @@ def test_hu_98_attach_evidence_success_and_security(
     # 3. Reject video exceeding 60s
     timescale = 1000
     duration = 75000  # 75s > 60s
-    mvhd_payload = b"\x00" * 12 + struct.pack(">I", timescale) + struct.pack(">I", duration) + b"\x00" * 40
+    mvhd_payload = (
+        b"\x00" * 12 + struct.pack(">I", timescale) + struct.pack(">I", duration) + b"\x00" * 40
+    )
     mvhd_box = struct.pack(">I", len(mvhd_payload) + 8) + b"mvhd" + mvhd_payload
     moov_box = struct.pack(">I", len(mvhd_box) + 8) + b"moov" + mvhd_box
     ftyp_box = struct.pack(">I", 16) + b"ftypisom\x00\x00\x02\x00"
@@ -270,10 +269,8 @@ def test_hu_98_attach_evidence_success_and_security(
     assert res_log.json()["evidence"]["file_type"] == "log"
 
 
-def test_hu_99_list_issues_sorting_and_pagination(
-    client: TestClient, db_engine: Engine
-) -> None:
-    project_id, _, dev1_id, _ = _setup_project_with_members(client, db_engine)
+def test_hu_99_list_issues_sorting_and_pagination(client: TestClient, db_engine: Engine) -> None:
+    project_id, _, _dev1_id, _ = _setup_project_with_members(client, db_engine)
     _switch_user(client, "dev1-issues@dashnode.io")
 
     # Initially empty
@@ -312,17 +309,17 @@ def test_hu_99_list_issues_sorting_and_pagination(
     assert len(page1_data["items"]) == 2
     assert page1_data["next_cursor"] is not None
 
-    res_page2 = client.get(f"/api/v1/projects/{project_id}/issues?limit=2&cursor={page1_data['next_cursor']}")
+    res_page2 = client.get(
+        f"/api/v1/projects/{project_id}/issues?limit=2&cursor={page1_data['next_cursor']}"
+    )
     assert res_page2.status_code == 200
     page2_data = res_page2.json()
     assert len(page2_data["items"]) == 1
     assert page2_data["items"][0]["title"] == "Issue Low"
 
 
-def test_hu_100_issue_detail_and_signed_url_security(
-    client: TestClient, db_engine: Engine
-) -> None:
-    project_id, _, dev1_id, _ = _setup_project_with_members(client, db_engine)
+def test_hu_100_issue_detail_and_signed_url_security(client: TestClient, db_engine: Engine) -> None:
+    project_id, _, _dev1_id, _ = _setup_project_with_members(client, db_engine)
     _switch_user(client, "dev1-issues@dashnode.io")
 
     # Create issue & attach evidence
@@ -342,7 +339,7 @@ def test_hu_100_issue_detail_and_signed_url_security(
         f"/api/v1/projects/{project_id}/issues/{issue_id}/evidences",
         files={"file": ("shot.jpg", valid_jpeg, "image/jpeg")},
     )
-    evidence_id = res_ev.json()["evidence"]["id"]
+    res_ev.json()["evidence"]["id"]
 
     # 1. Fetch issue detail
     res_detail = client.get(f"/api/v1/projects/{project_id}/issues/{issue_id}")
@@ -380,7 +377,7 @@ def test_hu_100_issue_detail_and_signed_url_security(
 def test_hu_101_filter_issues_by_status_severity_type(
     client: TestClient, db_engine: Engine
 ) -> None:
-    project_id, _, dev1_id, _ = _setup_project_with_members(client, db_engine)
+    project_id, _, _dev1_id, _ = _setup_project_with_members(client, db_engine)
     _switch_user(client, "dev1-issues@dashnode.io")
 
     client.post(

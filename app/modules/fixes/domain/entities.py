@@ -6,7 +6,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from app.modules.fixes.domain.messages import (
     DESCRIPTION_TOO_LONG,
@@ -17,7 +17,7 @@ from app.modules.fixes.domain.messages import (
 )
 
 
-class IssueSeverity(str, Enum):
+class IssueSeverity(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -44,7 +44,7 @@ class IssueSeverity(str, Enum):
         return mapping[normalized]
 
 
-class IssueType(str, Enum):
+class IssueType(StrEnum):
     BUG = "bug"
     REGRESSION = "regression"
     PERFORMANCE = "performance"
@@ -72,7 +72,7 @@ class IssueType(str, Enum):
         return mapping[normalized]
 
 
-class IssueStatus(str, Enum):
+class IssueStatus(StrEnum):
     OPEN = "open"
     IN_PROGRESS = "in-progress"
     RESOLVED = "resolved"
@@ -101,7 +101,7 @@ class IssueStatus(str, Enum):
         return cls.OPEN
 
 
-class EvidenceType(str, Enum):
+class EvidenceType(StrEnum):
     IMAGE = "image"
     VIDEO = "video"
     LOG = "log"
