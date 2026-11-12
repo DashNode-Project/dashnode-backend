@@ -1,0 +1,11 @@
+"""Literal user-facing messages for Kanban board (EP-08)."""
+
+NO_ACTIVE_SPRINT = "No hay ningún sprint activo en este proyecto."
+WIP_LIMIT_UPDATED = "Límite WIP actualizado correctamente."
+WIP_LIMIT_INVALID = "El límite WIP debe ser un número entero positivo o nulo."
+TASK_BLOCK_UPDATED = "Bloqueo de tarea actualizado correctamente."
+TASK_NOT_FOUND = "Tarea no encontrada."
+PROJECT_NOT_FOUND = "Proyecto no encontrado."
+ACCESS_DENIED = "Acceso denegado. Permisos insuficientes."
+KANBAN_LOAD_FAILED = "No fue posible cargar la información. Intente nuevamente."
+KANBAN_OPERATION_FAILED = "No fue posible completar la operación. Intente nuevamente."

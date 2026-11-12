@@ -14,7 +14,8 @@ from app.shared.application.ports import UnitOfWork
 
 engine = create_engine(
     settings.DATABASE_URL,
-    echo=settings.APP_ENV == "development",
+    # Never echo SQL: bound parameters include e-mails, password hashes and token digests.
+    echo=False,
     pool_pre_ping=True,
 )
 

@@ -5,11 +5,13 @@ SQLAlchemy ORM models for Auth module.
 """
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.database import Base
+from app.shared.infrastructure.types import UtcDateTime
 
 
 class UserModel(Base):
@@ -23,5 +25,63 @@ class UserModel(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(50), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    avatar_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    invited_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    invitation_accepted_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    invitation_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="accepted", server_default="accepted"
+    )
+    invitation_expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    invitation_rejected_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    invitation_renewal_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    invitation_code_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    invitation_code_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    profile_details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+
+
+class SessionModel(Base):
+    """Server-side session; stores the SHA-256 digest of the opaque cookie token."""
+
+    __tablename__ = "sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime, index=True, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class PasswordCredentialTokenModel(Base):
+    __tablename__ = "password_credential_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime, index=True, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class LoginAttemptModel(Base):
+    """Login attempt ledger keyed by e-mail (no FK: unknown e-mails are tracked too)."""
+
+    __tablename__ = "login_attempts"
+    __table_args__ = (Index("ix_login_attempts_email_attempted_at", "email", "attempted_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), nullable=False)
+    attempted_at: Mapped[datetime] = mapped_column(UtcDateTime, index=True, nullable=False)

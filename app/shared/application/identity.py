@@ -21,3 +21,10 @@ class CurrentUser(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
+
+
+class CurrentSession(BaseModel):
+    """Authenticated caller together with the validity of the session."""
+
+    user: CurrentUser
+    expires_at: datetime

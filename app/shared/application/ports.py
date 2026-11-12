@@ -21,6 +21,8 @@ class PasswordHasher(Protocol):
 
     def verify(self, password: str, hashed: str) -> bool: ...
 
+    def verify_dummy(self, password: str) -> None: ...
+
 
 class UnitOfWork(ABC):
     @abstractmethod

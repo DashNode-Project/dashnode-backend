@@ -8,7 +8,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .import_linter_cache/
+.hypothesis/
 .coverage
+coverage.xml
 htmlcov/
 
 # Environments and packaging
@@ -19,9 +21,23 @@ venv/
 dist/
 build/
 
-# Local configuration & secrets
+# Local configuration & secrets (only the *.example templates are versioned)
 .env
+.env.*
+!.env.example
 *.local
+*.pem
+*.key
+
+# Uploaded avatars (local storage)
+data/avatars/
+
+# Local databases and dumps
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.gz
 
 # IDE
 .vscode/
