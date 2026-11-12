@@ -36,6 +36,7 @@ from app.modules.projects.domain.ports import (
     ActiveUserLookup,
     ManagerLookup,
     ProjectDeletionCollaborator,
+    ProjectHealthSnapshotProvider,
     ProjectRepository,
 )
 from app.modules.projects.domain.rules import (
@@ -453,8 +454,13 @@ class ListProjectMembersUseCase:
 class GetProjectHealthUseCase:
     """HU_DN_02_31: progress, velocity and open issues for summary tab."""
 
-    def __init__(self, project_repo: ProjectRepository) -> None:
+    def __init__(
+        self,
+        project_repo: ProjectRepository,
+        health: ProjectHealthSnapshotProvider,
+    ) -> None:
         self._repo = project_repo
+        self._health = health
 
     def execute(self, project_id: str, actor: CurrentUser) -> ProjectHealthDTO:
         project = self._repo.get_by_id(project_id)
@@ -464,7 +470,7 @@ class GetProjectHealthUseCase:
         if not can_view_project(actor, project, self._repo):
             raise AccessDeniedError()
 
-        snapshot = self._repo.get_health_snapshot(project_id)
+        snapshot = self._health.get_health_snapshot(project_id)
         indicators = compute_health_indicators(snapshot)
         return ProjectHealthDTO(
             progress_percent=indicators.progress_percent,

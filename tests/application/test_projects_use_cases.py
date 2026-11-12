@@ -81,6 +81,11 @@ class FakeProjectRepository:
     def is_member(self, project_id: str, user_id: str) -> bool:
         return any(m.project_id == project_id and m.user_id == user_id for m in self.members)
 
+    def user_can_access(self, project_id: str, user_id: str, role: str) -> bool:
+        if self.get_by_id(project_id) is None:
+            return False
+        return any(p.id == project_id for p in self.list_visible_for_user(user_id, role=role))
+
     def soft_delete_cascade(self, project_id: str, when: datetime) -> None:
         project = self.projects.get(project_id)
         if project:
@@ -97,8 +102,13 @@ class FakeProjectRepository:
     def clear_assignee_tasks(self, project_id: str, user_id: str, *, when: datetime) -> None:
         return None
 
+
+class FakeHealthSnapshotProvider:
+    def __init__(self, snapshot: ProjectHealthSnapshot | None = None) -> None:
+        self._snapshot = snapshot or ProjectHealthSnapshot(0, 0, 0.0, 0)
+
     def get_health_snapshot(self, project_id: str) -> ProjectHealthSnapshot:
-        return ProjectHealthSnapshot(0, 0, 0.0, 0)
+        return self._snapshot
 
 
 class FakeActiveUserLookup:
@@ -309,7 +319,10 @@ def test_health_indicators_zero_without_data() -> None:
         is_active=True,
         created_at=now,
     )
-    use_case = GetProjectHealthUseCase(project_repo=repo)
+    use_case = GetProjectHealthUseCase(
+        project_repo=repo,
+        health=FakeHealthSnapshotProvider(),
+    )
     health = use_case.execute("proj-1", actor)
     assert health.progress_percent == 0.0
     assert health.velocity == 0.0

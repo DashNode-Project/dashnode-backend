@@ -32,6 +32,7 @@ _STATUS_BY_KIND: dict[ErrorKind, int] = {
     ErrorKind.NOT_FOUND: status.HTTP_404_NOT_FOUND,
     ErrorKind.CONFLICT: status.HTTP_409_CONFLICT,
     ErrorKind.RATE_LIMITED: status.HTTP_429_TOO_MANY_REQUESTS,
+    ErrorKind.UNAVAILABLE: status.HTTP_503_SERVICE_UNAVAILABLE,
 }
 
 # Error codes after which the browser cookie is useless and must be removed.

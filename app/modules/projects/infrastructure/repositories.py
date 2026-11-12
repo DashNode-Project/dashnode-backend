@@ -17,7 +17,6 @@ from app.modules.projects.domain.entities import (
     ProjectRole,
     ProjectStatus,
 )
-from app.modules.projects.domain.health import ProjectHealthSnapshot
 from app.modules.projects.domain.ports import ProjectRepository
 from app.modules.projects.infrastructure.models import (
     AuditLogModel,
@@ -160,6 +159,14 @@ class SqlAlchemyProjectRepository(ProjectRepository):
         )
         return self._session.execute(stmt).scalar_one_or_none() is not None
 
+    def user_can_access(self, project_id: str, user_id: str, role: str) -> bool:
+        project = self._session.get(ProjectModel, project_id)
+        if project is None or project.deleted_at is not None:
+            return False
+        if role == "admin":
+            return True
+        return any(row.id == project_id for row in self.list_visible_for_user(user_id, role=role))
+
     def remove_member(self, project_id: str, user_id: str) -> None:
         self._session.execute(
             delete(ProjectMemberModel).where(
@@ -176,14 +183,6 @@ class SqlAlchemyProjectRepository(ProjectRepository):
                 "AND deleted_at IS NULL AND status != 'completed'"
             ),
             {"now": when, "project_id": project_id, "user_id": user_id},
-        )
-
-    def get_health_snapshot(self, project_id: str) -> ProjectHealthSnapshot:
-        return ProjectHealthSnapshot(
-            completed_story_points=0,
-            total_story_points=0,
-            velocity_points_per_sprint=0.0,
-            open_issues=0,
         )
 
     def soft_delete_cascade(self, project_id: str, when: object) -> None:

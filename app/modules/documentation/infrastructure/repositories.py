@@ -11,6 +11,30 @@ from app.modules.documentation.domain.entities import (
 from app.modules.documentation.domain.ports import DocumentationRepository
 from app.modules.documentation.infrastructure.models import DocumentationEntryModel
 
+_LEGACY_CATEGORY_MAP: dict[str, DocumentationCategory] = {
+    "Arquitectura": DocumentationCategory.TECNICA,
+    "Requisitos": DocumentationCategory.FUNCIONAL,
+    "Planificación": DocumentationCategory.GENERAL,
+    "Planificacion": DocumentationCategory.GENERAL,
+    "Actas": DocumentationCategory.REUNION,
+    "Tecnica": DocumentationCategory.TECNICA,
+    "Reunion": DocumentationCategory.REUNION,
+}
+
+
+def _parse_documentation_category(value: str) -> DocumentationCategory:
+    try:
+        return DocumentationCategory(value)
+    except ValueError:
+        return _LEGACY_CATEGORY_MAP.get(value.strip(), DocumentationCategory.GENERAL)
+
+
+def _parse_approval_status(value: str) -> DocumentationApprovalStatus:
+    try:
+        return DocumentationApprovalStatus(value)
+    except ValueError:
+        return DocumentationApprovalStatus.PENDING
+
 
 class SqlAlchemyDocumentationRepository(DocumentationRepository):
     def __init__(self, session: Session) -> None:
@@ -22,12 +46,12 @@ class SqlAlchemyDocumentationRepository(DocumentationRepository):
             project_id=model.project_id,
             author_id=model.author_id,
             title=model.title,
-            category=DocumentationCategory(model.category),
+            category=_parse_documentation_category(model.category),
             objective=model.objective,
             tags=model.tags,
             content=model.content,
             external_url=model.external_url,
-            approval_status=DocumentationApprovalStatus(model.approval_status),
+            approval_status=_parse_approval_status(model.approval_status),
             is_pinned=model.is_pinned,
             is_visible_to_devs=model.is_visible_to_devs,
             rejection_reason=model.rejection_reason,

@@ -448,3 +448,18 @@ Validación local:
   - `mypy . --strict`: 0 errores en 238 archivos.
   - `lint-imports`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
   - `scan_secrets.py`: 0 secretos detectados.
+
+---
+
+## Épica 10: Asistente de IA por voz (HU_DN_06_90 … HU_DN_06_96)
+
+### Implementación Backend
+- Módulo `app/modules/ai` con `ProcessVoiceUseCase` y `GenerateTextUseCase`.
+- Integración Whisper/Gemini vía `API_TRANSCRIPTION_WHISPER` y `API_GEMINI`.
+- Cuotas en `system_configs` + `ai_daily_usage` (HU_DN_06_95).
+- Contexto RBAC de proyecto en `ai_context.py` (HU_DN_06_96).
+- Rutas `POST /api/v1/ai/voice-process` y `POST /api/v1/ai/text-generate`.
+
+### Pruebas
+- `tests/unit/test_ai_prompt.py`, `tests/unit/test_ai_use_cases.py`, `tests/api/test_ai_api.py`.
+- Humo manual: `scripts/smoke_ep10_text_chat.py`.
