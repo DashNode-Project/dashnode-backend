@@ -119,6 +119,8 @@ def _task_dto(task: StoryTask) -> StoryTaskDTO:
         story_points=task.story_points,
         logged_hours=task.logged_hours,
         label=task.label,
+        status_before_correction=task.status_before_correction,
+        version=task.version,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )

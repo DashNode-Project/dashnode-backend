@@ -113,3 +113,5 @@ class StoryTask:
     is_blocked: bool = False
     blocked_reason: str | None = None
     blocked_by_task_id: str | None = None
+    status_before_correction: str | None = None
+    version: int = 1

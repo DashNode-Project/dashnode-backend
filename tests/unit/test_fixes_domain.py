@@ -15,15 +15,20 @@ from app.modules.fixes.application.file_validation import (
     validate_and_sanitize_evidence_file,
 )
 from app.modules.fixes.domain.entities import (
+    ConflictError,
     EvidenceType,
     Issue,
     IssueSeverity,
     IssueType,
+    resolve_restorable_task_status,
 )
 from app.modules.fixes.domain.messages import (
     DESCRIPTION_TOO_LONG,
     FILE_TOO_LARGE,
+    RESOLUTION_NOTE_REQUIRED,
+    RESOLUTION_NOTE_TOO_LONG,
     SEVERITY_REQUIRED,
+    TASK_TARGET_STATUS_INVALID,
     TITLE_REQUIRED,
     TITLE_TOO_LONG,
     TYPE_REQUIRED,
@@ -222,3 +227,41 @@ def test_signed_url_generator() -> None:
     assert gen.verify("ev1", exp, "tampered_sig") is False
     assert gen.verify("other_ev", exp, sig) is False
     assert gen.verify("ev1", exp + 10, sig) is False
+
+
+def test_resolution_note_validation() -> None:
+    with pytest.raises(ValueError, match=RESOLUTION_NOTE_REQUIRED):
+        Issue.validate_resolution_note(None)
+    with pytest.raises(ValueError, match=RESOLUTION_NOTE_REQUIRED):
+        Issue.validate_resolution_note("")
+    with pytest.raises(ValueError, match=RESOLUTION_NOTE_REQUIRED):
+        Issue.validate_resolution_note("   ")
+    with pytest.raises(ValueError, match=RESOLUTION_NOTE_TOO_LONG):
+        Issue.validate_resolution_note("z" * 2001)
+
+    assert Issue.validate_resolution_note("  Parche aplicado correctamente  ") == (
+        "Parche aplicado correctamente"
+    )
+    assert len(Issue.validate_resolution_note("z" * 2000)) == 2000
+
+
+def test_resolve_restorable_task_status() -> None:
+    for status in ("TODO", "IN_PROGRESS", "CODE_REVIEW", "TESTING", "DONE"):
+        assert resolve_restorable_task_status(status, "TODO") == status
+        assert resolve_restorable_task_status(f" {status.lower()} ", None) == status
+
+    with pytest.raises(ValueError, match=TASK_TARGET_STATUS_INVALID):
+        resolve_restorable_task_status("CORRECTION", "IN_PROGRESS")
+    with pytest.raises(ValueError, match=TASK_TARGET_STATUS_INVALID):
+        resolve_restorable_task_status("BLOCKED", "TODO")
+
+    assert resolve_restorable_task_status(None, "CODE_REVIEW") == "CODE_REVIEW"
+    assert resolve_restorable_task_status(" ", "DONE") == "DONE"
+    assert resolve_restorable_task_status(None, None) == "IN_PROGRESS"
+    assert resolve_restorable_task_status(None, "CORRECTION") == "IN_PROGRESS"
+    assert resolve_restorable_task_status(None, "INVALID") == "IN_PROGRESS"
+
+
+def test_conflict_error_subclass() -> None:
+    err = ConflictError("conflict")
+    assert isinstance(err, Exception)

@@ -12,6 +12,8 @@ from app.modules.auth.infrastructure.models import (  # noqa: F401
     SessionModel,
     UserModel,
 )
+from app.modules.backlog.infrastructure.models import StoryTaskModel  # noqa: F401
+from app.modules.fixes.infrastructure.models import EvidenceModel, FixModel  # noqa: F401
 from app.modules.notifications.infrastructure.models import (  # noqa: F401
     NotificationModel,
 )
@@ -21,6 +23,7 @@ from app.modules.projects.infrastructure.models import (  # noqa: F401
 )
 from app.modules.tasks.infrastructure.models import TaskModel  # noqa: F401
 from app.shared.infrastructure.database import Base
+from app.shared.infrastructure.outbox import OutboxEventModel  # noqa: F401
 
 config = context.config
 

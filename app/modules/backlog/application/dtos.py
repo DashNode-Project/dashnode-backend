@@ -60,6 +60,8 @@ class StoryTaskDTO(BaseModel):
     story_points: int | None = None
     logged_hours: Decimal = Decimal("0")
     label: str = ""
+    status_before_correction: str | None = None
+    version: int = 1
     created_at: datetime
     updated_at: datetime
 

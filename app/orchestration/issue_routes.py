@@ -1,7 +1,7 @@
 """Orchestration router for EP-11 Issues and Evidences.
 
 @sad AD-07, AD-08
-@origin [User Stories HU_DN_07_97 .. HU_DN_07_101]
+@origin [User Stories HU_DN_07_97 .. HU_DN_07_105]
 """
 
 from fastapi import (
@@ -17,122 +17,54 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from app.modules.auth.infrastructure.models import UserModel
 from app.modules.fixes.application.dtos import (
+    AssignIssueCommand,
+    CloseIssueCommand,
     CreateIssueCommand,
     EvidenceOperationResponse,
     IssueDetailDTO,
     IssueListResponse,
     IssueOperationResponse,
+    ReportTaskFixCommand,
+    ResolveIssueCommand,
 )
 from app.modules.fixes.application.use_cases import (
+    AssignIssueUseCase,
     AttachEvidenceUseCase,
+    CloseIssueUseCase,
     CreateIssueUseCase,
     DownloadEvidenceUseCase,
     GetIssueDetailUseCase,
     ListIssuesUseCase,
+    ReportTaskFixUseCase,
+    ResolveIssueUseCase,
 )
+from app.modules.fixes.domain.entities import ConflictError
 from app.modules.fixes.infrastructure.repositories import (
     HmacSignedUrlGenerator,
     LocalEvidenceFileStorage,
     SqlAlchemyEvidenceRepository,
     SqlAlchemyFixRepository,
 )
-from app.modules.notifications.infrastructure.models import NotificationModel
-from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
+from app.orchestration.fixes_adapters import (
+    SqlAlchemyFixTaskCoordinator,
+    SqlAlchemyIssueNotificationSender,
+    SqlAlchemyProjectLookup,
+    SqlAlchemyUserLookup,
+)
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
 from app.shared.domain.errors import AppError, ErrorKind
 from app.shared.infrastructure.clock import SystemClock
 from app.shared.infrastructure.database import SqlAlchemyUnitOfWork, get_db_session
 from app.shared.infrastructure.id_generator import UuidGenerator
+from app.shared.infrastructure.outbox import SqlAlchemyOutboxStore
 
 router = APIRouter(tags=["issues"])
 _clock = SystemClock()
 _id_gen = UuidGenerator()
 _storage = LocalEvidenceFileStorage()
 _signed_url_gen = HmacSignedUrlGenerator()
-
-
-class SqlAlchemyUserLookup:
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def get_user_display(self, user_id: str) -> tuple[str, str | None] | None:
-        user = self._session.get(UserModel, user_id)
-        if user is None:
-            return None
-        return (user.name or "").strip(), user.avatar_key
-
-
-class SqlAlchemyProjectLookup:
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def is_active_member(self, project_id: str, user_id: str) -> bool:
-        project = self._session.get(ProjectModel, project_id)
-        if project is None:
-            return False
-        user = self._session.get(UserModel, user_id)
-        if user is None or not user.is_active:
-            return False
-        # Admin has global project access
-        role_val = user.role.value if hasattr(user.role, "value") else str(user.role)
-        if role_val in ("admin", "administrador"):
-            return True
-        # Manager of the project
-        if project.manager_id == user_id:
-            return True
-        # Member of the project
-        member = self._session.get(ProjectMemberModel, (project_id, user_id))
-        return member is not None
-
-
-class SqlAlchemyIssueNotificationSender:
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def notify_issue_created(
-        self,
-        project_id: str,
-        issue_id: str,
-        title: str,
-        reporter_id: str,
-    ) -> None:
-        project = self._session.get(ProjectModel, project_id)
-        if project is None:
-            return
-
-        recipients: set[str] = set()
-        if project.manager_id and project.manager_id != reporter_id:
-            recipients.add(project.manager_id)
-
-        # Notify project members
-        members = (
-            self._session.query(ProjectMemberModel.user_id)
-            .filter(ProjectMemberModel.project_id == project_id)
-            .all()
-        )
-        for (m_id,) in members:
-            if m_id != reporter_id:
-                recipients.add(m_id)
-
-        now = _clock.now()
-        for r_id in recipients:
-            notif = NotificationModel(
-                id=_id_gen.generate(),
-                recipient_id=r_id,
-                type="issue_created",
-                title="Nuevo Fix creado",
-                message=f"Se ha registrado el issue: {title}",
-                is_read=False,
-                created_at=now,
-            )
-            self._session.add(notif)
-        try:
-            self._session.commit()
-        except Exception:
-            self._session.rollback()
 
 
 def _fix_repo(db: Session = Depends(get_db_session)) -> SqlAlchemyFixRepository:
@@ -153,6 +85,32 @@ def _user_lookup(db: Session = Depends(get_db_session)) -> SqlAlchemyUserLookup:
 
 def _notif_sender(db: Session = Depends(get_db_session)) -> SqlAlchemyIssueNotificationSender:
     return SqlAlchemyIssueNotificationSender(db)
+
+
+def _task_coordinator(db: Session = Depends(get_db_session)) -> SqlAlchemyFixTaskCoordinator:
+    return SqlAlchemyFixTaskCoordinator(db)
+
+
+def _outbox_store(db: Session = Depends(get_db_session)) -> SqlAlchemyOutboxStore:
+    return SqlAlchemyOutboxStore(db)
+
+
+def _translate_issue_error(exc: Exception) -> AppError:
+    if isinstance(exc, PermissionError):
+        return AppError("FORBIDDEN", str(exc), ErrorKind.FORBIDDEN)
+    if isinstance(exc, LookupError):
+        return AppError("NOT_FOUND", str(exc), ErrorKind.NOT_FOUND)
+    if isinstance(exc, ConflictError):
+        return AppError("CONFLICT", str(exc), ErrorKind.CONFLICT)
+    if isinstance(exc, ValueError):
+        if "idéntica" in str(exc):
+            return AppError("DUPLICATE_EVIDENCE", str(exc), ErrorKind.CONFLICT)
+        return AppError("VALIDATION_ERROR", str(exc), ErrorKind.VALIDATION)
+    return AppError(
+        "INTERNAL_ERROR",
+        "No fue posible completar la operación. Intente nuevamente.",
+        ErrorKind.UNAVAILABLE,
+    )
 
 
 @router.post(
@@ -186,10 +144,8 @@ def create_issue(
     )
     try:
         return use_case.execute(project_id=project_id, cmd=cmd, actor=actor)
-    except PermissionError as e:
-        raise AppError("FORBIDDEN", str(e), ErrorKind.FORBIDDEN) from e
-    except ValueError as e:
-        raise AppError("VALIDATION_ERROR", str(e), ErrorKind.VALIDATION) from e
+    except (PermissionError, ValueError) as exc:
+        raise _translate_issue_error(exc) from exc
 
 
 @router.get(
@@ -208,11 +164,13 @@ def list_issues(
     repo: SqlAlchemyFixRepository = Depends(_fix_repo),
     projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
     users: SqlAlchemyUserLookup = Depends(_user_lookup),
+    tasks: SqlAlchemyFixTaskCoordinator = Depends(_task_coordinator),
 ) -> IssueListResponse:
     use_case = ListIssuesUseCase(
         repo=repo,
         projects=projects,
         users=users,
+        tasks=tasks,
     )
     try:
         return use_case.execute(
@@ -224,10 +182,8 @@ def list_issues(
             cursor=cursor,
             limit=limit,
         )
-    except PermissionError as e:
-        raise AppError("FORBIDDEN", str(e), ErrorKind.FORBIDDEN) from e
-    except ValueError as e:
-        raise AppError("VALIDATION_ERROR", str(e), ErrorKind.VALIDATION) from e
+    except (PermissionError, ValueError) as exc:
+        raise _translate_issue_error(exc) from exc
 
 
 @router.get(
@@ -243,6 +199,7 @@ def get_issue_detail(
     evidence_repo: SqlAlchemyEvidenceRepository = Depends(_evidence_repo),
     projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
     users: SqlAlchemyUserLookup = Depends(_user_lookup),
+    tasks: SqlAlchemyFixTaskCoordinator = Depends(_task_coordinator),
 ) -> IssueDetailDTO:
     use_case = GetIssueDetailUseCase(
         issue_repo=repo,
@@ -250,13 +207,160 @@ def get_issue_detail(
         signed_url_gen=_signed_url_gen,
         projects=projects,
         users=users,
+        tasks=tasks,
     )
     try:
         return use_case.execute(project_id=project_id, issue_id=issue_id, actor=actor)
-    except PermissionError as e:
-        raise AppError("FORBIDDEN", str(e), ErrorKind.FORBIDDEN) from e
-    except LookupError as e:
-        raise AppError("NOT_FOUND", str(e), ErrorKind.NOT_FOUND) from e
+    except (PermissionError, LookupError) as exc:
+        raise _translate_issue_error(exc) from exc
+
+
+@router.patch(
+    "/projects/{project_id}/issues/{issue_id}/assignee",
+    response_model=IssueOperationResponse,
+    summary="Asignar issue a desarrollador miembro del proyecto (HU_DN_07_102)",
+)
+def assign_issue(
+    project_id: str,
+    issue_id: str,
+    cmd: AssignIssueCommand,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    repo: SqlAlchemyFixRepository = Depends(_fix_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+    notifications: SqlAlchemyIssueNotificationSender = Depends(_notif_sender),
+    tasks: SqlAlchemyFixTaskCoordinator = Depends(_task_coordinator),
+    outbox: SqlAlchemyOutboxStore = Depends(_outbox_store),
+) -> IssueOperationResponse:
+    use_case = AssignIssueUseCase(
+        repo=repo,
+        uow=SqlAlchemyUnitOfWork(db),
+        id_gen=_id_gen,
+        clock=_clock,
+        projects=projects,
+        users=users,
+        outbox=outbox,
+        notification_sender=notifications,
+        tasks=tasks,
+    )
+    try:
+        return use_case.execute(project_id=project_id, issue_id=issue_id, cmd=cmd, actor=actor)
+    except (PermissionError, LookupError, ConflictError, ValueError) as exc:
+        raise _translate_issue_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/issues/{issue_id}/resolve",
+    response_model=IssueOperationResponse,
+    summary="Resolver issue con nota de resolución y actualizar tarea vinculada",
+)
+def resolve_issue(
+    project_id: str,
+    issue_id: str,
+    cmd: ResolveIssueCommand,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    repo: SqlAlchemyFixRepository = Depends(_fix_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+    notifications: SqlAlchemyIssueNotificationSender = Depends(_notif_sender),
+    tasks: SqlAlchemyFixTaskCoordinator = Depends(_task_coordinator),
+    outbox: SqlAlchemyOutboxStore = Depends(_outbox_store),
+) -> IssueOperationResponse:
+    use_case = ResolveIssueUseCase(
+        repo=repo,
+        uow=SqlAlchemyUnitOfWork(db),
+        id_gen=_id_gen,
+        clock=_clock,
+        projects=projects,
+        users=users,
+        outbox=outbox,
+        tasks=tasks,
+        notification_sender=notifications,
+    )
+    try:
+        return use_case.execute(project_id=project_id, issue_id=issue_id, cmd=cmd, actor=actor)
+    except (PermissionError, LookupError, ConflictError, ValueError) as exc:
+        raise _translate_issue_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/issues/{issue_id}/close",
+    response_model=IssueOperationResponse,
+    summary="Cerrar un issue resuelto (Administrador o Gerente)",
+)
+def close_issue(
+    project_id: str,
+    issue_id: str,
+    cmd: CloseIssueCommand,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    repo: SqlAlchemyFixRepository = Depends(_fix_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+    tasks: SqlAlchemyFixTaskCoordinator = Depends(_task_coordinator),
+    outbox: SqlAlchemyOutboxStore = Depends(_outbox_store),
+) -> IssueOperationResponse:
+    use_case = CloseIssueUseCase(
+        repo=repo,
+        uow=SqlAlchemyUnitOfWork(db),
+        id_gen=_id_gen,
+        clock=_clock,
+        projects=projects,
+        users=users,
+        outbox=outbox,
+        tasks=tasks,
+    )
+    try:
+        return use_case.execute(project_id=project_id, issue_id=issue_id, cmd=cmd, actor=actor)
+    except (PermissionError, LookupError, ConflictError, ValueError) as exc:
+        raise _translate_issue_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/tasks/{task_id}/report-fix",
+    response_model=IssueOperationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Reportar un fix desde una tarea y moverla atómicamente a Corrección",
+)
+def report_task_fix(
+    project_id: str,
+    task_id: str,
+    cmd: ReportTaskFixCommand,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    repo: SqlAlchemyFixRepository = Depends(_fix_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+    notifications: SqlAlchemyIssueNotificationSender = Depends(_notif_sender),
+    tasks: SqlAlchemyFixTaskCoordinator = Depends(_task_coordinator),
+    outbox: SqlAlchemyOutboxStore = Depends(_outbox_store),
+) -> IssueOperationResponse:
+    if idempotency_key:
+        cmd.idempotency_key = idempotency_key
+
+    use_case = ReportTaskFixUseCase(
+        repo=repo,
+        uow=SqlAlchemyUnitOfWork(db),
+        id_gen=_id_gen,
+        clock=_clock,
+        projects=projects,
+        users=users,
+        tasks=tasks,
+        outbox=outbox,
+        notification_sender=notifications,
+    )
+    try:
+        return use_case.execute(
+            project_id=project_id,
+            task_id=task_id,
+            cmd=cmd,
+            actor=actor,
+        )
+    except (PermissionError, LookupError, ValueError) as exc:
+        raise _translate_issue_error(exc) from exc
 
 
 @router.post(
@@ -299,15 +403,8 @@ async def attach_evidence(
             title=title,
             actor=actor,
         )
-    except PermissionError as e:
-        raise AppError("FORBIDDEN", str(e), ErrorKind.FORBIDDEN) from e
-    except LookupError as e:
-        raise AppError("NOT_FOUND", str(e), ErrorKind.NOT_FOUND) from e
-    except ValueError as e:
-        # Check duplicate
-        if "idéntica" in str(e):
-            raise AppError("DUPLICATE_EVIDENCE", str(e), ErrorKind.CONFLICT) from e
-        raise AppError("VALIDATION_ERROR", str(e), ErrorKind.VALIDATION) from e
+    except (PermissionError, LookupError, ValueError) as exc:
+        raise _translate_issue_error(exc) from exc
 
 
 @router.get(
@@ -342,7 +439,5 @@ def download_evidence(
                 "Cache-Control": "private, max-age=300",
             },
         )
-    except PermissionError as e:
-        raise AppError("FORBIDDEN", str(e), ErrorKind.FORBIDDEN) from e
-    except LookupError as e:
-        raise AppError("NOT_FOUND", str(e), ErrorKind.NOT_FOUND) from e
+    except (PermissionError, LookupError) as exc:
+        raise _translate_issue_error(exc) from exc

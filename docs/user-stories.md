@@ -1264,3 +1264,12 @@ Mensajes literales en `app/modules/documentation/domain/messages.py`. Migracione
 | HU_DN_07_99 | Implementado | `GET /api/v1/projects/{projectId}/issues`, ordenamiento por defecto (abiertos primero, severidad, fecha desc), paginación por cursor de 25 elementos, mensaje literal de estado vacío. Tests: `test_hu_99_*`. |
 | HU_DN_07_100 | Implementado | `GET /api/v1/projects/{projectId}/issues/{issueId}` y `.../content`, generación de URLs firmadas HMAC con vencimiento de 5 minutos, renderizado de evidencias y respuestas de IA. Tests: `test_hu_100_*`. |
 | HU_DN_07_101 | Implementado | `GET /api/v1/projects/{projectId}/issues?status=...&severity=...&type=...`, filtrado combinado AND en servidor, sincronización con URL, mensaje literal sin coincidencias. Tests: `test_hu_101_*`. |
+
+## Estado de implementación — EP-11 Ciclo de vida de issues y vínculo con tareas (HU_DN_07_102 … HU_DN_07_105)
+
+| HU | Estado | Evidencia |
+| --- | --- | --- |
+| HU_DN_07_102 | Implementado | `PATCH /api/v1/projects/{project_id}/issues/{issue_id}/assignee`, asignación restringida a Administrador o Gerente hacia desarrollador miembro activo, bloqueo optimista por `version` (HTTP 409), evento en `outbox_events` y notificación transaccional. Tests: `tests/api/test_issues_lifecycle_api.py`. |
+| HU_DN_07_103 | Implementado | `POST /api/v1/projects/{project_id}/issues/{issue_id}/resolve` y `POST /api/v1/projects/{project_id}/issues/{issue_id}/close`, nota de resolución obligatoria (máx. 2000 caracteres), transición de cierre exclusiva de Administrador o Gerente (`resolved` -> `closed`), bloqueo optimista y notificación al creador. Tests: `tests/unit/test_fixes_domain.py`, `tests/api/test_issues_lifecycle_api.py`. |
+| HU_DN_07_104 | Implementado | `POST /api/v1/projects/{project_id}/tasks/{task_id}/report-fix`, creación atómica de issue vinculado a `task_id` y transición de la tarea a `CORRECTION` preservando `status_before_correction` en reportes sucesivos, rollback atómico ante fallos y soporte de `Idempotency-Key`. Tests: `tests/api/test_issues_lifecycle_api.py`. |
+| HU_DN_07_105 | Implementado | Restauración automática/condicional de tareas en `CORRECTION` al resolver o cerrar el último issue abierto vinculado (`other_open_issues_count == 0`), preselección/respaldo de `status_before_correction` o `'IN_PROGRESS'` cuando es nulo, mantenimiento en `CORRECTION` si aún existen otros issues abiertos. Tests: `tests/unit/test_fixes_domain.py`, `tests/api/test_issues_lifecycle_api.py`. |

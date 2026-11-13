@@ -356,3 +356,39 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | Frontend | `src/features/issues/api.test.ts` | Pruebas de cliente API pasando | APROBADO |
 | Frontend | `src/features/issues/ProjectIssuesTab.test.tsx` | Pruebas de integración de componentes pasando | APROBADO |
 | Frontend | Escaneo de secretos | 0 secretos detectados (213 archivos) | APROBADO |
+
+---
+
+## Continuación Épica 11: Ciclo de vida de issues y vínculo con tareas (HU_DN_07_102 … HU_DN_07_105)
+
+### Contrato Compartido de API y Respuestas
+
+| Método | Endpoint | Rol Mínimo | Propósito | Respuesta Esperada |
+|---|---|---|---|---|
+| `PATCH` | `/api/v1/projects/{project_id}/issues/{issue_id}/assignee` | Administrador o Gerente | Asignar responsable (desarrollador miembro activo) | 200 OK: `{"message": "...", "issue": {...}}`; 403 si rol es Desarrollador; 409 Conflict si `version` obsoleta |
+| `POST` | `/api/v1/projects/{project_id}/issues/{issue_id}/resolve` | Miembro activo del proyecto | Resolver issue con nota y actualizar tarea si era el último issue abierto | 200 OK: `{"message": "...", "issue": {...}, "task_status": ...}`; 400/422 si nota vacía o > 2000 chars; 409 Conflict por concurrencia |
+| `POST` | `/api/v1/projects/{project_id}/issues/{issue_id}/close` | Administrador o Gerente | Cerrar un issue en estado `resolved` y restaurar tarea si aplica | 200 OK: `{"message": "...", "issue": {...}, "task_status": ...}`; 403 si Desarrollador; 409 si no está `resolved` o `version` desactualizada |
+| `POST` | `/api/v1/projects/{project_id}/tasks/{task_id}/report-fix` | Administrador, Gerente o asignado | Reportar fix desde Backlog/Kanban y mover tarea atómicamente a `CORRECTION` | 201 Created: `{"message": "...", "issue": {...}, "task_status": "CORRECTION"}`; soporta `Idempotency-Key`; rollback total ante fallo |
+
+### Matriz de Trazabilidad y Verificación E2E
+
+| Historia de Usuario | Frontend | Backend | Reglas y Criterios Verificados |
+|---|---|---|---|
+| **HU_DN_07_102** | Selector `Responsable` en `ProjectIssuesTab` cargado con desarrolladores activos y recarga automática ante HTTP 409. Deshabilitado para desarrolladores. | `AssignIssueUseCase`, `PATCH /projects/{id}/issues/{id}/assignee` | Solo Administrador o Gerente pueden asignar. Destinatario debe ser desarrollador miembro activo. Bloqueo optimista por `version`. Notificación al asignado y registro transaccional en `outbox_events`. |
+| **HU_DN_07_103** | Modal `ResolveIssueModal` (nota obligatoria <=2000 chars), botones `Resolver` y `Cerrar issue` (solo Admin/Gerente). | `ResolveIssueUseCase`, `CloseIssueUseCase` | Nota de resolución obligatoria (1..2000 chars). Cierre (`resolved` -> `closed`) exclusivo de Admin/Gerente. Bloqueo optimista en ambas transiciones y notificación al creador. |
+| **HU_DN_07_104** | Botón `Reportar fix` en Backlog (`TaskWorkModal`) y Kanban (`KanbanCard`/`ProjectKanbanTab`), título `Fix: ${task.name}` e insignia `En corrección`. | `ReportTaskFixUseCase`, `POST /projects/{id}/tasks/{id}/report-fix` | Transacción atómica que crea issue con `task_id` y pasa tarea a `CORRECTION` guardando `status_before_correction` solo en el primer fix activo; rollback completo ante fallos (verificado con inyección de fallo en outbox). |
+| **HU_DN_07_105** | Selector condicional `Estado de la tarea` en `ResolveIssueModal` prellenado con `task_previous_status` o `IN_PROGRESS`; bloqueado si `other_open_issues_count > 0`. | `ResolveIssueUseCase`, `CloseIssueUseCase`, `resolve_restorable_task_status` | La tarea solo sale de `CORRECTION` al resolver/cerrar su último issue abierto vinculado; respaldo con `status_before_correction` o `'IN_PROGRESS'` cuando es nulo. |
+
+### Resumen de Quality Gates y Scripts QA (Continuación EP-11)
+
+| Repositorio | Verificación | Resultado | Estado |
+|---|---|---|---|
+| Backend | `pytest tests/unit/test_fixes_domain.py tests/api/test_issues_api.py tests/api/test_issues_lifecycle_api.py -v` | 22 pruebas unitarias y de API pasando | APROBADO |
+| Backend | `python -m pytest --cov=app --cov-fail-under=80` | 482 passed, 2 skipped, cobertura 81.39% | APROBADO |
+| Backend | `tests/integration/test_postgres_schema_and_registration.py` + `test_postgres_login_sessions.py` | 10 passed, migración `021_ep11_issue_task_outbox` verificada | APROBADO |
+| Backend | `ruff check .`, `ruff format --check .`, `mypy .`, `lint-imports` | 0 errores lint/tipos (317 archivos), 3 contratos cumplidos | APROBADO |
+| Backend | `scripts/qa_console_ep11_part2_runner.py` | Ejecución HTTP en vivo (`HU_DN_07_102`..`105` PASSED, 8 outbox events) | APROBADO |
+| Backend | `python scripts/scan_secrets.py --all` | 0 secretos detectados (365 archivos) | APROBADO |
+| Frontend | `npx vitest run src/features/issues src/features/backlog src/features/kanban` | 8 archivos, 56/56 pruebas pasando | APROBADO |
+| Frontend | `npm run typecheck` y `npm run build` | 0 errores TS, bundle Vite generado (2037 módulos, 1.46s) | APROBADO |
+| Frontend | `node scripts/scan-secrets.mjs` | 0 secretos detectados (226 archivos) | APROBADO |

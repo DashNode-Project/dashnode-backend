@@ -510,3 +510,16 @@ Validación local:
 - **Análisis estático y contratos:** `ruff check .`, `ruff format --check .`, `mypy .` (313 archivos), `lint-imports` (BR-1, BR-2, BR-4 cumplidos) y `pip-audit --skip-editable` sin hallazgos.
 - **Script de QA local:** `scripts/qa_console_ep11_runner.py` (ejecución completa contra servidor HTTP uvicorn en memoria; 7/7 casos PASS).
 - **Escaneo de secretos:** `scripts/scan_secrets.py --all` limpio (365 archivos analizados, 0 secretos).
+
+### Continuación EP-11 — Ciclo de vida de issues, vínculo con tareas y outbox (HU_DN_07_102 … HU_DN_07_105)
+- **Endpoints implementados (`app/orchestration/issue_routes.py`):**
+  - `PATCH /api/v1/projects/{project_id}/issues/{issue_id}/assignee`: asignación a desarrollador miembro activo restringida a Administrador/Gerente, bloqueo optimista por `version` (HTTP 409) y notificación + registro en outbox.
+  - `POST /api/v1/projects/{project_id}/issues/{issue_id}/resolve`: validación de nota de resolución obligatoria (máx. 2000 caracteres), actualización condicional de tarea vinculada si era el último issue abierto (`other_open_issues_count == 0`), notificación al creador y registro en outbox.
+  - `POST /api/v1/projects/{project_id}/issues/{issue_id}/close`: cierre exclusivo por Administrador o Gerente (`resolved` -> `closed`), bloqueo optimista y registro en outbox.
+  - `POST /api/v1/projects/{project_id}/tasks/{task_id}/report-fix`: creación atómica de issue vinculado y transición automática de la tarea a `CORRECTION` preservando `status_before_correction` ante múltiples fixes, con rollback total ante fallos.
+- **Migración e infraestructura transaccional:** `migrations/versions/021_ep11_issue_task_outbox.py` y `app/shared/infrastructure/outbox.py` (`OutboxEventModel`), verificada en PostgreSQL con `upgrade` -> `downgrade` -> `upgrade` y coincidencia ORM en `tests/integration/test_postgres_schema_and_registration.py` (10 passed junto con `test_postgres_login_sessions.py`).
+- **Pruebas EP-11 (unitarias + API):** `tests/unit/test_fixes_domain.py` (13 passed), `tests/api/test_issues_api.py` y `tests/api/test_issues_lifecycle_api.py` (22 passed en ejecución combinada).
+- **Suite completa (`python -m pytest --cov=app --cov-fail-under=80`):** 482 passed, 2 skipped (`test_gemini_integration.py` sin `GEMINI_INTEGRATION=1`), cobertura total **81.39%**.
+- **Análisis estático y contratos:** `ruff check .`, `ruff format --check .` (353 archivos formateados), `mypy .` (0 errores en 317 archivos), `lint-imports` (3 contratos cumplidos: BR-1, BR-2, BR-4).
+- **Script de QA local en vivo:** `scripts/qa_console_ep11_part2_runner.py` (ejecución contra uvicorn local en vivo con código de salida 0; `HU_DN_07_102` a `HU_DN_07_105` en `[PASSED]`, 8 eventos persistidos en `outbox_events`).
+- **Escaneo de secretos:** `python scripts/scan_secrets.py --all` limpio (365 archivos analizados, 0 secretos).

@@ -1,9 +1,10 @@
 """Ports (protocols/interfaces) for EP-11 Issues and Evidences.
 
 @sad AD-09, BR-2
-@origin [User Stories HU_DN_07_97 .. HU_DN_07_101]
+@origin [User Stories HU_DN_07_97 .. HU_DN_07_105]
 """
 
+from datetime import datetime
 from typing import Protocol
 
 from app.modules.fixes.domain.entities import (
@@ -12,15 +13,22 @@ from app.modules.fixes.domain.entities import (
     IssueSeverity,
     IssueStatus,
     IssueType,
+    TaskSnapshot,
 )
 
 
 class IssueRepository(Protocol):
     def save(self, issue: Issue) -> None: ...
 
+    def update_with_optimistic_lock(self, issue: Issue, expected_version: int) -> bool: ...
+
     def get_by_id(self, issue_id: str) -> Issue | None: ...
 
     def get_by_idempotency_key(self, project_id: str, key: str) -> Issue | None: ...
+
+    def count_other_open_issues_for_task(
+        self, task_id: str, exclude_issue_id: str | None = None
+    ) -> int: ...
 
     def list_by_project(
         self,
@@ -75,9 +83,51 @@ class SignedUrlGenerator(Protocol):
 class ProjectLookupPort(Protocol):
     def is_active_member(self, project_id: str, user_id: str) -> bool: ...
 
+    def is_active_developer_member(self, project_id: str, user_id: str) -> bool: ...
+
 
 class UserDisplayLookupPort(Protocol):
     def get_user_display(self, user_id: str) -> tuple[str, str | None] | None: ...
+
+
+class FixTaskCoordinatorPort(Protocol):
+    def get_task_snapshot(self, project_id: str, task_id: str) -> TaskSnapshot | None: ...
+
+    def get_task_snapshots_map(self, task_ids: list[str]) -> dict[str, TaskSnapshot]: ...
+
+    def lock_task_for_update(self, project_id: str, task_id: str) -> TaskSnapshot | None: ...
+
+    def transition_task_to_correction(
+        self,
+        *,
+        task: TaskSnapshot,
+        actor_id: str,
+        history_id: str,
+        when: datetime,
+    ) -> TaskSnapshot: ...
+
+    def restore_task_from_correction(
+        self,
+        *,
+        task: TaskSnapshot,
+        target_status: str,
+        actor_id: str,
+        history_id: str,
+        when: datetime,
+    ) -> TaskSnapshot: ...
+
+
+class OutboxPort(Protocol):
+    def enqueue_event(
+        self,
+        *,
+        event_id: str,
+        aggregate_type: str,
+        aggregate_id: str,
+        event_type: str,
+        payload: dict[str, object],
+        created_at: datetime,
+    ) -> None: ...
 
 
 class IssueNotificationPort(Protocol):
@@ -87,4 +137,39 @@ class IssueNotificationPort(Protocol):
         issue_id: str,
         title: str,
         reporter_id: str,
+    ) -> None: ...
+
+    def notify_issue_assigned_in_tx(
+        self,
+        *,
+        project_id: str,
+        issue_id: str,
+        title: str,
+        assignee_id: str | None,
+        actor_id: str,
+        when: datetime,
+    ) -> None: ...
+
+    def notify_issue_resolved_in_tx(
+        self,
+        *,
+        project_id: str,
+        issue_id: str,
+        title: str,
+        reporter_id: str,
+        assignee_id: str | None,
+        actor_id: str,
+        when: datetime,
+    ) -> None: ...
+
+    def notify_task_fix_reported_in_tx(
+        self,
+        *,
+        project_id: str,
+        issue_id: str,
+        task_id: str,
+        task_name: str,
+        title: str,
+        reporter_id: str,
+        when: datetime,
     ) -> None: ...

@@ -11,7 +11,7 @@ import os
 import time
 from pathlib import Path
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -48,6 +48,9 @@ def _model_to_issue(m: FixModel) -> Issue:
         idempotency_key=m.idempotency_key,
         created_at=m.created_at,
         updated_at=m.updated_at,
+        task_id=m.task_id,
+        resolved_by=m.resolved_by,
+        version=int(m.version) if m.version is not None else 1,
     )
 
 
@@ -86,9 +89,12 @@ class SqlAlchemyFixRepository(IssueRepository):
                 status=issue.status.value,
                 reporter_id=issue.reporter_id,
                 assignee_id=issue.assignee_id,
+                task_id=issue.task_id,
                 resolution_note=issue.resolution_note,
+                resolved_by=issue.resolved_by,
                 resolved_at=issue.resolved_at,
                 idempotency_key=issue.idempotency_key,
+                version=issue.version,
                 created_at=issue.created_at,
                 updated_at=issue.updated_at,
             )
@@ -100,9 +106,53 @@ class SqlAlchemyFixRepository(IssueRepository):
             model.type = issue.type.value
             model.status = issue.status.value
             model.assignee_id = issue.assignee_id
+            model.task_id = issue.task_id
             model.resolution_note = issue.resolution_note
+            model.resolved_by = issue.resolved_by
             model.resolved_at = issue.resolved_at
+            model.version = issue.version
             model.updated_at = issue.updated_at
+        self._session.flush()
+
+    def update_with_optimistic_lock(self, issue: Issue, expected_version: int) -> bool:
+        stmt = (
+            update(FixModel)
+            .where(FixModel.id == issue.id, FixModel.version == expected_version)
+            .values(
+                title=issue.title,
+                description=issue.description,
+                severity=issue.severity.value,
+                type=issue.type.value,
+                status=issue.status.value,
+                assignee_id=issue.assignee_id,
+                task_id=issue.task_id,
+                resolution_note=issue.resolution_note,
+                resolved_by=issue.resolved_by,
+                resolved_at=issue.resolved_at,
+                updated_at=issue.updated_at,
+                version=expected_version + 1,
+            )
+            .execution_options(synchronize_session="fetch")
+        )
+        result = self._session.execute(stmt)
+        self._session.flush()
+        row_count = getattr(result, "rowcount", 0) or 0
+        return int(row_count) == 1
+
+    def count_other_open_issues_for_task(
+        self, task_id: str, exclude_issue_id: str | None = None
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(FixModel)
+            .where(
+                FixModel.task_id == task_id,
+                FixModel.status.in_(["open", "in-progress"]),
+            )
+        )
+        if exclude_issue_id is not None:
+            stmt = stmt.where(FixModel.id != exclude_issue_id)
+        return int(self._session.scalar(stmt) or 0)
 
     def get_by_id(self, issue_id: str) -> Issue | None:
         m = self._session.get(FixModel, issue_id)

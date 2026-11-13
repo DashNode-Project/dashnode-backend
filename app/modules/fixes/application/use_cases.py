@@ -1,10 +1,14 @@
 """Application use cases for EP-11 Issues and Evidences.
 
 @sad AD-09, AD-10
-@origin [User Stories HU_DN_07_97 .. HU_DN_07_101]
+@origin [User Stories HU_DN_07_97 .. HU_DN_07_105]
 """
 
+from datetime import datetime
+
 from app.modules.fixes.application.dtos import (
+    AssignIssueCommand,
+    CloseIssueCommand,
     CreateIssueCommand,
     EvidenceDTO,
     EvidenceOperationResponse,
@@ -12,38 +16,155 @@ from app.modules.fixes.application.dtos import (
     IssueDTO,
     IssueListResponse,
     IssueOperationResponse,
+    ReportTaskFixCommand,
+    ResolveIssueCommand,
 )
 from app.modules.fixes.application.file_validation import (
     validate_and_sanitize_evidence_file,
 )
 from app.modules.fixes.domain.entities import (
+    ConflictError,
     Evidence,
     Issue,
     IssueSeverity,
     IssueStatus,
     IssueType,
+    TaskSnapshot,
+    resolve_restorable_task_status,
 )
 from app.modules.fixes.domain.messages import (
+    ASSIGN_DEVELOPER_ONLY,
+    ASSIGN_FORBIDDEN,
+    CLOSE_FORBIDDEN,
     DUPLICATE_EVIDENCE,
     EVIDENCE_ATTACHED,
     EVIDENCE_NOT_FOUND,
     EVIDENCE_TITLE_TOO_LONG,
+    FIX_REPORT_OWN_TASKS_ONLY,
+    ISSUE_ASSIGNED,
+    ISSUE_CLOSED,
     ISSUE_CREATED,
     ISSUE_NOT_FOUND,
+    ISSUE_NOT_OPEN,
+    ISSUE_NOT_RESOLVED,
+    ISSUE_RESOLVED,
     NOT_MEMBER_ERROR,
+    OPTIMISTIC_LOCK_CONFLICT,
     SIGNATURE_INVALID_OR_EXPIRED,
+    TASK_FIX_REPORTED,
+    TASK_NOT_FOUND,
+    TASK_UNLINKED_AND_UPDATED,
 )
 from app.modules.fixes.domain.ports import (
     EvidenceFileStorage,
     EvidenceRepository,
+    FixTaskCoordinatorPort,
     IssueNotificationPort,
     IssueRepository,
+    OutboxPort,
     ProjectLookupPort,
     SignedUrlGenerator,
     UserDisplayLookupPort,
 )
 from app.shared.application.identity import CurrentUser
 from app.shared.application.ports import Clock, IdGenerator, UnitOfWork
+
+
+def _resolve_user_name(
+    users: UserDisplayLookupPort, user_id: str | None, fallback: str | None = None
+) -> str | None:
+    if not user_id:
+        return None
+    disp = users.get_user_display(user_id)
+    return disp[0] if disp else fallback
+
+
+def _build_issue_dto(
+    issue: Issue,
+    users: UserDisplayLookupPort,
+    *,
+    evidences_count: int = 0,
+    task_snapshot: TaskSnapshot | None = None,
+) -> IssueDTO:
+    reporter_name = _resolve_user_name(users, issue.reporter_id, "Usuario") or "Usuario"
+    assignee_name = _resolve_user_name(users, issue.assignee_id)
+    resolved_by_name = _resolve_user_name(users, issue.resolved_by)
+    return IssueDTO(
+        id=issue.id,
+        project_id=issue.project_id,
+        title=issue.title,
+        description=issue.description,
+        severity=issue.severity.value,
+        type=issue.type.value,
+        status=issue.status.value,
+        reporter_id=issue.reporter_id,
+        reporter_name=reporter_name,
+        assignee_id=issue.assignee_id,
+        assignee_name=assignee_name,
+        task_id=issue.task_id,
+        task_name=task_snapshot.name if task_snapshot else None,
+        task_status=task_snapshot.status if task_snapshot else None,
+        task_previous_status=task_snapshot.status_before_correction if task_snapshot else None,
+        resolution_note=issue.resolution_note,
+        resolved_by=issue.resolved_by,
+        resolved_by_name=resolved_by_name,
+        resolved_at=issue.resolved_at.isoformat() if issue.resolved_at else None,
+        version=issue.version,
+        created_at=issue.created_at.isoformat(),
+        updated_at=issue.updated_at.isoformat(),
+        evidences_count=evidences_count,
+    )
+
+
+def _maybe_restore_linked_task(
+    *,
+    project_id: str,
+    issue: Issue,
+    requested_task_status: str | None,
+    actor_id: str,
+    now: datetime,
+    issue_repo: IssueRepository,
+    task_coordinator: FixTaskCoordinatorPort | None,
+    outbox: OutboxPort | None,
+    id_gen: IdGenerator,
+) -> tuple[TaskSnapshot | None, bool]:
+    if issue.task_id is None or task_coordinator is None:
+        return None, False
+    locked_task = task_coordinator.lock_task_for_update(project_id, issue.task_id)
+    if locked_task is None or locked_task.status != "CORRECTION":
+        return locked_task, False
+    remaining = issue_repo.count_other_open_issues_for_task(
+        issue.task_id, exclude_issue_id=issue.id
+    )
+    if remaining > 0:
+        return locked_task, False
+    target_status = resolve_restorable_task_status(
+        requested_task_status, locked_task.status_before_correction
+    )
+    restored = task_coordinator.restore_task_from_correction(
+        task=locked_task,
+        target_status=target_status,
+        actor_id=actor_id,
+        history_id=id_gen.generate(),
+        when=now,
+    )
+    if outbox is not None:
+        outbox.enqueue_event(
+            event_id=id_gen.generate(),
+            aggregate_type="story_task",
+            aggregate_id=restored.id,
+            event_type="task.status_restored",
+            payload={
+                "project_id": project_id,
+                "task_id": restored.id,
+                "issue_id": issue.id,
+                "previous_status": "CORRECTION",
+                "new_status": restored.status,
+                "actor_id": actor_id,
+            },
+            created_at=now,
+        )
+    return restored, True
 
 
 class CreateIssueUseCase:
@@ -74,37 +195,14 @@ class CreateIssueUseCase:
         if not self._projects.is_active_member(project_id, actor.id):
             raise PermissionError(NOT_MEMBER_ERROR)
 
-        # Idempotency check
         if cmd.idempotency_key:
             existing = self._repo.get_by_idempotency_key(project_id, cmd.idempotency_key)
             if existing is not None:
-                reporter_display = self._users.get_user_display(existing.reporter_id)
-                reporter_name = reporter_display[0] if reporter_display else "Usuario"
-                assignee_name = None
-                if existing.assignee_id:
-                    assignee_display = self._users.get_user_display(existing.assignee_id)
-                    assignee_name = assignee_display[0] if assignee_display else None
-                dto = IssueDTO(
-                    id=existing.id,
-                    project_id=existing.project_id,
-                    title=existing.title,
-                    description=existing.description,
-                    severity=existing.severity.value,
-                    type=existing.type.value,
-                    status=existing.status.value,
-                    reporter_id=existing.reporter_id,
-                    reporter_name=reporter_name,
-                    assignee_id=existing.assignee_id,
-                    assignee_name=assignee_name,
-                    resolution_note=existing.resolution_note,
-                    resolved_at=existing.resolved_at.isoformat() if existing.resolved_at else None,
-                    created_at=existing.created_at.isoformat(),
-                    updated_at=existing.updated_at.isoformat(),
-                    evidences_count=0,
+                return IssueOperationResponse(
+                    message=ISSUE_CREATED,
+                    issue=_build_issue_dto(existing, self._users),
                 )
-                return IssueOperationResponse(message=ISSUE_CREATED, issue=dto)
 
-        # Domain validations
         clean_title = Issue.validate_title(cmd.title)
         clean_desc = Issue.validate_description(cmd.description)
         severity = IssueSeverity.from_string(cmd.severity)
@@ -126,6 +224,9 @@ class CreateIssueUseCase:
             idempotency_key=cmd.idempotency_key,
             created_at=now,
             updated_at=now,
+            task_id=None,
+            resolved_by=None,
+            version=1,
         )
 
         with self._uow:
@@ -140,28 +241,10 @@ class CreateIssueUseCase:
                 reporter_id=actor.id,
             )
 
-        reporter_display = self._users.get_user_display(actor.id)
-        reporter_name = reporter_display[0] if reporter_display else actor.email
-
-        dto = IssueDTO(
-            id=issue.id,
-            project_id=issue.project_id,
-            title=issue.title,
-            description=issue.description,
-            severity=issue.severity.value,
-            type=issue.type.value,
-            status=issue.status.value,
-            reporter_id=issue.reporter_id,
-            reporter_name=reporter_name,
-            assignee_id=None,
-            assignee_name=None,
-            resolution_note=None,
-            resolved_at=None,
-            created_at=issue.created_at.isoformat(),
-            updated_at=issue.updated_at.isoformat(),
-            evidences_count=0,
+        return IssueOperationResponse(
+            message=ISSUE_CREATED,
+            issue=_build_issue_dto(issue, self._users),
         )
-        return IssueOperationResponse(message=ISSUE_CREATED, issue=dto)
 
 
 class ListIssuesUseCase:
@@ -170,10 +253,12 @@ class ListIssuesUseCase:
         repo: IssueRepository,
         projects: ProjectLookupPort,
         users: UserDisplayLookupPort,
+        tasks: FixTaskCoordinatorPort | None = None,
     ) -> None:
         self._repo = repo
         self._projects = projects
         self._users = users
+        self._tasks = tasks
 
     def execute(
         self,
@@ -211,36 +296,22 @@ class ListIssuesUseCase:
 
         issue_ids = [i.id for i in issues]
         ev_counts = self._repo.count_evidences_for_issues(issue_ids) if issue_ids else {}
+        task_ids = [i.task_id for i in issues if i.task_id]
+        task_map = (
+            self._tasks.get_task_snapshots_map(task_ids)
+            if self._tasks is not None and task_ids
+            else {}
+        )
 
-        items: list[IssueDTO] = []
-        for iss in issues:
-            rep_disp = self._users.get_user_display(iss.reporter_id)
-            rep_name = rep_disp[0] if rep_disp else "Usuario"
-            asg_name = None
-            if iss.assignee_id:
-                asg_disp = self._users.get_user_display(iss.assignee_id)
-                asg_name = asg_disp[0] if asg_disp else None
-
-            items.append(
-                IssueDTO(
-                    id=iss.id,
-                    project_id=iss.project_id,
-                    title=iss.title,
-                    description=iss.description,
-                    severity=iss.severity.value,
-                    type=iss.type.value,
-                    status=iss.status.value,
-                    reporter_id=iss.reporter_id,
-                    reporter_name=rep_name,
-                    assignee_id=iss.assignee_id,
-                    assignee_name=asg_name,
-                    resolution_note=iss.resolution_note,
-                    resolved_at=iss.resolved_at.isoformat() if iss.resolved_at else None,
-                    created_at=iss.created_at.isoformat(),
-                    updated_at=iss.updated_at.isoformat(),
-                    evidences_count=ev_counts.get(iss.id, 0),
-                )
+        items = [
+            _build_issue_dto(
+                iss,
+                self._users,
+                evidences_count=ev_counts.get(iss.id, 0),
+                task_snapshot=task_map.get(iss.task_id) if iss.task_id else None,
             )
+            for iss in issues
+        ]
 
         return IssueListResponse(items=items, next_cursor=next_cursor, total=total)
 
@@ -253,12 +324,14 @@ class GetIssueDetailUseCase:
         signed_url_gen: SignedUrlGenerator,
         projects: ProjectLookupPort,
         users: UserDisplayLookupPort,
+        tasks: FixTaskCoordinatorPort | None = None,
     ) -> None:
         self._issue_repo = issue_repo
         self._evidence_repo = evidence_repo
         self._signed_url_gen = signed_url_gen
         self._projects = projects
         self._users = users
+        self._tasks = tasks
 
     def execute(
         self,
@@ -273,12 +346,22 @@ class GetIssueDetailUseCase:
         if issue is None or issue.project_id != project_id:
             raise LookupError(ISSUE_NOT_FOUND)
 
-        rep_disp = self._users.get_user_display(issue.reporter_id)
-        rep_name = rep_disp[0] if rep_disp else "Usuario"
-        asg_name = None
-        if issue.assignee_id:
-            asg_disp = self._users.get_user_display(issue.assignee_id)
-            asg_name = asg_disp[0] if asg_disp else None
+        rep_name = _resolve_user_name(self._users, issue.reporter_id, "Usuario") or "Usuario"
+        asg_name = _resolve_user_name(self._users, issue.assignee_id)
+        res_name = _resolve_user_name(self._users, issue.resolved_by)
+
+        task_snapshot = (
+            self._tasks.get_task_snapshot(project_id, issue.task_id)
+            if issue.task_id and self._tasks is not None
+            else None
+        )
+        other_open = (
+            self._issue_repo.count_other_open_issues_for_task(
+                issue.task_id, exclude_issue_id=issue.id
+            )
+            if issue.task_id
+            else 0
+        )
 
         evidences = self._evidence_repo.list_by_issue(issue.id)
         ev_dtos: list[EvidenceDTO] = []
@@ -289,8 +372,7 @@ class GetIssueDetailUseCase:
                 evidence_id=ev.id,
                 expires_in_seconds=300,
             )
-            up_disp = self._users.get_user_display(ev.uploaded_by)
-            up_name = up_disp[0] if up_disp else "Usuario"
+            up_name = _resolve_user_name(self._users, ev.uploaded_by, "Usuario") or "Usuario"
             ev_dtos.append(
                 EvidenceDTO(
                     id=ev.id,
@@ -321,13 +403,487 @@ class GetIssueDetailUseCase:
             reporter_name=rep_name,
             assignee_id=issue.assignee_id,
             assignee_name=asg_name,
+            task_id=issue.task_id,
+            task_name=task_snapshot.name if task_snapshot else None,
+            task_status=task_snapshot.status if task_snapshot else None,
+            task_previous_status=(
+                task_snapshot.status_before_correction if task_snapshot else None
+            ),
+            other_open_issues_count=other_open,
             resolution_note=issue.resolution_note,
+            resolved_by=issue.resolved_by,
+            resolved_by_name=res_name,
             resolved_at=issue.resolved_at.isoformat() if issue.resolved_at else None,
+            version=issue.version,
             created_at=issue.created_at.isoformat(),
             updated_at=issue.updated_at.isoformat(),
             evidences_count=len(ev_dtos),
             evidences=ev_dtos,
             ai_analyses=[],
+        )
+
+
+class AssignIssueUseCase:
+    """HU_DN_07_102: Assign issue to active developer member with lock & outbox."""
+
+    def __init__(
+        self,
+        repo: IssueRepository,
+        uow: UnitOfWork,
+        id_gen: IdGenerator,
+        clock: Clock,
+        projects: ProjectLookupPort,
+        users: UserDisplayLookupPort,
+        outbox: OutboxPort,
+        notification_sender: IssueNotificationPort | None = None,
+        tasks: FixTaskCoordinatorPort | None = None,
+    ) -> None:
+        self._repo = repo
+        self._uow = uow
+        self._id_gen = id_gen
+        self._clock = clock
+        self._projects = projects
+        self._users = users
+        self._outbox = outbox
+        self._notifications = notification_sender
+        self._tasks = tasks
+
+    def execute(
+        self,
+        project_id: str,
+        issue_id: str,
+        cmd: AssignIssueCommand,
+        actor: CurrentUser,
+    ) -> IssueOperationResponse:
+        if actor.role not in ("admin", "manager"):
+            raise PermissionError(ASSIGN_FORBIDDEN)
+        if not self._projects.is_active_member(project_id, actor.id):
+            raise PermissionError(NOT_MEMBER_ERROR)
+
+        clean_assignee = (cmd.assignee_id or "").strip() or None
+        if clean_assignee is not None and not self._projects.is_active_developer_member(
+            project_id, clean_assignee
+        ):
+            raise ValueError(ASSIGN_DEVELOPER_ONLY)
+
+        issue = self._repo.get_by_id(issue_id)
+        if issue is None or issue.project_id != project_id:
+            raise LookupError(ISSUE_NOT_FOUND)
+
+        if cmd.version is not None and cmd.version != issue.version:
+            raise ConflictError(OPTIMISTIC_LOCK_CONFLICT)
+
+        expected_version = cmd.version if cmd.version is not None else issue.version
+        now = self._clock.now()
+        issue.assignee_id = clean_assignee
+        issue.updated_at = now
+        issue.version = expected_version + 1
+
+        with self._uow:
+            updated = self._repo.update_with_optimistic_lock(issue, expected_version)
+            if not updated:
+                raise ConflictError(OPTIMISTIC_LOCK_CONFLICT)
+            self._outbox.enqueue_event(
+                event_id=self._id_gen.generate(),
+                aggregate_type="fix",
+                aggregate_id=issue.id,
+                event_type="issue.assigned",
+                payload={
+                    "project_id": project_id,
+                    "issue_id": issue.id,
+                    "title": issue.title,
+                    "assignee_id": clean_assignee,
+                    "actor_id": actor.id,
+                    "version": issue.version,
+                },
+                created_at=now,
+            )
+            if self._notifications is not None:
+                self._notifications.notify_issue_assigned_in_tx(
+                    project_id=project_id,
+                    issue_id=issue.id,
+                    title=issue.title,
+                    assignee_id=clean_assignee,
+                    actor_id=actor.id,
+                    when=now,
+                )
+            self._uow.commit()
+
+        task_snapshot = (
+            self._tasks.get_task_snapshot(project_id, issue.task_id)
+            if issue.task_id and self._tasks is not None
+            else None
+        )
+        ev_count = self._repo.count_evidences_for_issues([issue.id]).get(issue.id, 0)
+        return IssueOperationResponse(
+            message=ISSUE_ASSIGNED,
+            issue=_build_issue_dto(
+                issue,
+                self._users,
+                evidences_count=ev_count,
+                task_snapshot=task_snapshot,
+            ),
+        )
+
+
+class ResolveIssueUseCase:
+    """HU_DN_07_103 & HU_DN_07_105: Resolve open issue and restore linked task if unblocked."""
+
+    def __init__(
+        self,
+        repo: IssueRepository,
+        uow: UnitOfWork,
+        id_gen: IdGenerator,
+        clock: Clock,
+        projects: ProjectLookupPort,
+        users: UserDisplayLookupPort,
+        outbox: OutboxPort,
+        tasks: FixTaskCoordinatorPort | None = None,
+        notification_sender: IssueNotificationPort | None = None,
+    ) -> None:
+        self._repo = repo
+        self._uow = uow
+        self._id_gen = id_gen
+        self._clock = clock
+        self._projects = projects
+        self._users = users
+        self._outbox = outbox
+        self._tasks = tasks
+        self._notifications = notification_sender
+
+    def execute(
+        self,
+        project_id: str,
+        issue_id: str,
+        cmd: ResolveIssueCommand,
+        actor: CurrentUser,
+    ) -> IssueOperationResponse:
+        if not self._projects.is_active_member(project_id, actor.id):
+            raise PermissionError(NOT_MEMBER_ERROR)
+
+        clean_note = Issue.validate_resolution_note(cmd.resolution_note)
+        if cmd.task_status is not None and cmd.task_status.strip():
+            resolve_restorable_task_status(cmd.task_status, None)
+
+        issue = self._repo.get_by_id(issue_id)
+        if issue is None or issue.project_id != project_id:
+            raise LookupError(ISSUE_NOT_FOUND)
+
+        if cmd.version is not None and cmd.version != issue.version:
+            raise ConflictError(OPTIMISTIC_LOCK_CONFLICT)
+        if issue.status != IssueStatus.OPEN:
+            raise ValueError(ISSUE_NOT_OPEN)
+
+        expected_version = cmd.version if cmd.version is not None else issue.version
+        now = self._clock.now()
+        issue.status = IssueStatus.RESOLVED
+        issue.resolution_note = clean_note
+        issue.resolved_by = actor.id
+        issue.resolved_at = now
+        issue.updated_at = now
+        issue.version = expected_version + 1
+
+        task_unlinked = False
+        task_snapshot: TaskSnapshot | None = None
+
+        with self._uow:
+            updated = self._repo.update_with_optimistic_lock(issue, expected_version)
+            if not updated:
+                raise ConflictError(OPTIMISTIC_LOCK_CONFLICT)
+
+            task_snapshot, task_unlinked = _maybe_restore_linked_task(
+                project_id=project_id,
+                issue=issue,
+                requested_task_status=cmd.task_status,
+                actor_id=actor.id,
+                now=now,
+                issue_repo=self._repo,
+                task_coordinator=self._tasks,
+                outbox=self._outbox,
+                id_gen=self._id_gen,
+            )
+
+            self._outbox.enqueue_event(
+                event_id=self._id_gen.generate(),
+                aggregate_type="fix",
+                aggregate_id=issue.id,
+                event_type="issue.resolved",
+                payload={
+                    "project_id": project_id,
+                    "issue_id": issue.id,
+                    "title": issue.title,
+                    "resolved_by": actor.id,
+                    "task_id": issue.task_id,
+                    "task_unlinked": task_unlinked,
+                    "version": issue.version,
+                },
+                created_at=now,
+            )
+            if self._notifications is not None:
+                self._notifications.notify_issue_resolved_in_tx(
+                    project_id=project_id,
+                    issue_id=issue.id,
+                    title=issue.title,
+                    reporter_id=issue.reporter_id,
+                    assignee_id=issue.assignee_id,
+                    actor_id=actor.id,
+                    when=now,
+                )
+            self._uow.commit()
+
+        ev_count = self._repo.count_evidences_for_issues([issue.id]).get(issue.id, 0)
+        message = (
+            f"{ISSUE_RESOLVED} {TASK_UNLINKED_AND_UPDATED}" if task_unlinked else ISSUE_RESOLVED
+        )
+        return IssueOperationResponse(
+            message=message,
+            issue=_build_issue_dto(
+                issue,
+                self._users,
+                evidences_count=ev_count,
+                task_snapshot=task_snapshot,
+            ),
+            task_unlinked=task_unlinked,
+            task_id=task_snapshot.id if task_snapshot else issue.task_id,
+            task_status=task_snapshot.status if task_snapshot else None,
+            task_message=TASK_UNLINKED_AND_UPDATED if task_unlinked else None,
+        )
+
+
+class CloseIssueUseCase:
+    """HU_DN_07_103 & HU_DN_07_105: Admin/Manager closes issue and restores linked task."""
+
+    def __init__(
+        self,
+        repo: IssueRepository,
+        uow: UnitOfWork,
+        id_gen: IdGenerator,
+        clock: Clock,
+        projects: ProjectLookupPort,
+        users: UserDisplayLookupPort,
+        outbox: OutboxPort,
+        tasks: FixTaskCoordinatorPort | None = None,
+    ) -> None:
+        self._repo = repo
+        self._uow = uow
+        self._id_gen = id_gen
+        self._clock = clock
+        self._projects = projects
+        self._users = users
+        self._outbox = outbox
+        self._tasks = tasks
+
+    def execute(
+        self,
+        project_id: str,
+        issue_id: str,
+        cmd: CloseIssueCommand,
+        actor: CurrentUser,
+    ) -> IssueOperationResponse:
+        if actor.role not in ("admin", "manager"):
+            raise PermissionError(CLOSE_FORBIDDEN)
+        if not self._projects.is_active_member(project_id, actor.id):
+            raise PermissionError(NOT_MEMBER_ERROR)
+
+        if cmd.task_status is not None and cmd.task_status.strip():
+            resolve_restorable_task_status(cmd.task_status, None)
+
+        issue = self._repo.get_by_id(issue_id)
+        if issue is None or issue.project_id != project_id:
+            raise LookupError(ISSUE_NOT_FOUND)
+
+        if cmd.version is not None and cmd.version != issue.version:
+            raise ConflictError(OPTIMISTIC_LOCK_CONFLICT)
+        if issue.status != IssueStatus.RESOLVED:
+            raise ValueError(ISSUE_NOT_RESOLVED)
+
+        expected_version = cmd.version if cmd.version is not None else issue.version
+        now = self._clock.now()
+        issue.status = IssueStatus.CLOSED
+        issue.updated_at = now
+        issue.version = expected_version + 1
+
+        task_unlinked = False
+        task_snapshot: TaskSnapshot | None = None
+
+        with self._uow:
+            updated = self._repo.update_with_optimistic_lock(issue, expected_version)
+            if not updated:
+                raise ConflictError(OPTIMISTIC_LOCK_CONFLICT)
+
+            task_snapshot, task_unlinked = _maybe_restore_linked_task(
+                project_id=project_id,
+                issue=issue,
+                requested_task_status=cmd.task_status,
+                actor_id=actor.id,
+                now=now,
+                issue_repo=self._repo,
+                task_coordinator=self._tasks,
+                outbox=self._outbox,
+                id_gen=self._id_gen,
+            )
+
+            self._outbox.enqueue_event(
+                event_id=self._id_gen.generate(),
+                aggregate_type="fix",
+                aggregate_id=issue.id,
+                event_type="issue.closed",
+                payload={
+                    "project_id": project_id,
+                    "issue_id": issue.id,
+                    "title": issue.title,
+                    "closed_by": actor.id,
+                    "task_id": issue.task_id,
+                    "task_unlinked": task_unlinked,
+                    "version": issue.version,
+                },
+                created_at=now,
+            )
+            self._uow.commit()
+
+        ev_count = self._repo.count_evidences_for_issues([issue.id]).get(issue.id, 0)
+        message = f"{ISSUE_CLOSED} {TASK_UNLINKED_AND_UPDATED}" if task_unlinked else ISSUE_CLOSED
+        return IssueOperationResponse(
+            message=message,
+            issue=_build_issue_dto(
+                issue,
+                self._users,
+                evidences_count=ev_count,
+                task_snapshot=task_snapshot,
+            ),
+            task_unlinked=task_unlinked,
+            task_id=task_snapshot.id if task_snapshot else issue.task_id,
+            task_status=task_snapshot.status if task_snapshot else None,
+            task_message=TASK_UNLINKED_AND_UPDATED if task_unlinked else None,
+        )
+
+
+class ReportTaskFixUseCase:
+    """HU_DN_07_104: Atomically lock task, move to CORRECTION, create linked fix and outbox."""
+
+    def __init__(
+        self,
+        repo: IssueRepository,
+        uow: UnitOfWork,
+        id_gen: IdGenerator,
+        clock: Clock,
+        projects: ProjectLookupPort,
+        users: UserDisplayLookupPort,
+        tasks: FixTaskCoordinatorPort,
+        outbox: OutboxPort,
+        notification_sender: IssueNotificationPort | None = None,
+    ) -> None:
+        self._repo = repo
+        self._uow = uow
+        self._id_gen = id_gen
+        self._clock = clock
+        self._projects = projects
+        self._users = users
+        self._tasks = tasks
+        self._outbox = outbox
+        self._notifications = notification_sender
+
+    def execute(
+        self,
+        project_id: str,
+        task_id: str,
+        cmd: ReportTaskFixCommand,
+        actor: CurrentUser,
+    ) -> IssueOperationResponse:
+        if not self._projects.is_active_member(project_id, actor.id):
+            raise PermissionError(NOT_MEMBER_ERROR)
+
+        clean_title = Issue.validate_title(cmd.title)
+        clean_desc = Issue.validate_description(cmd.description)
+        severity = IssueSeverity.from_string(cmd.severity)
+        issue_type = IssueType.from_string(cmd.type)
+
+        with self._uow:
+            if cmd.idempotency_key:
+                existing = self._repo.get_by_idempotency_key(project_id, cmd.idempotency_key)
+                if existing is not None:
+                    snap = (
+                        self._tasks.get_task_snapshot(project_id, existing.task_id)
+                        if existing.task_id
+                        else None
+                    )
+                    return IssueOperationResponse(
+                        message=TASK_FIX_REPORTED,
+                        issue=_build_issue_dto(existing, self._users, task_snapshot=snap),
+                        task_id=snap.id if snap else existing.task_id,
+                        task_status=snap.status if snap else None,
+                    )
+
+            locked_task = self._tasks.lock_task_for_update(project_id, task_id)
+            if locked_task is None:
+                raise LookupError(TASK_NOT_FOUND)
+
+            if actor.role == "developer" and locked_task.assignee_id != actor.id:
+                raise PermissionError(FIX_REPORT_OWN_TASKS_ONLY)
+
+            now = self._clock.now()
+            updated_task = self._tasks.transition_task_to_correction(
+                task=locked_task,
+                actor_id=actor.id,
+                history_id=self._id_gen.generate(),
+                when=now,
+            )
+
+            issue = Issue(
+                id=self._id_gen.generate(),
+                project_id=project_id,
+                title=clean_title,
+                description=clean_desc,
+                severity=severity,
+                type=issue_type,
+                status=IssueStatus.OPEN,
+                reporter_id=actor.id,
+                assignee_id=None,
+                resolution_note=None,
+                resolved_at=None,
+                idempotency_key=cmd.idempotency_key,
+                created_at=now,
+                updated_at=now,
+                task_id=updated_task.id,
+                resolved_by=None,
+                version=1,
+            )
+            self._repo.save(issue)
+
+            self._outbox.enqueue_event(
+                event_id=self._id_gen.generate(),
+                aggregate_type="fix",
+                aggregate_id=issue.id,
+                event_type="task.fix_reported",
+                payload={
+                    "project_id": project_id,
+                    "task_id": updated_task.id,
+                    "issue_id": issue.id,
+                    "title": issue.title,
+                    "previous_task_status": updated_task.status_before_correction,
+                    "reporter_id": actor.id,
+                },
+                created_at=now,
+            )
+
+            if self._notifications is not None:
+                self._notifications.notify_task_fix_reported_in_tx(
+                    project_id=project_id,
+                    issue_id=issue.id,
+                    task_id=updated_task.id,
+                    task_name=updated_task.name,
+                    title=issue.title,
+                    reporter_id=actor.id,
+                    when=now,
+                )
+
+            self._uow.commit()
+
+        return IssueOperationResponse(
+            message=TASK_FIX_REPORTED,
+            issue=_build_issue_dto(issue, self._users, task_snapshot=updated_task),
+            task_id=updated_task.id,
+            task_status=updated_task.status,
         )
 
 
@@ -376,10 +932,8 @@ class AttachEvidenceUseCase:
                 raise ValueError(EVIDENCE_TITLE_TOO_LONG)
             clean_title = title.strip()
 
-        # Strict validation & EXIF stripping
         validated = validate_and_sanitize_evidence_file(file_name, raw_data)
 
-        # Check duplicate hash
         existing_duplicate = self._evidence_repo.find_by_fix_and_hash(
             fix_id=issue_id,
             sha256_hash=validated.sha256_hash,
@@ -390,7 +944,6 @@ class AttachEvidenceUseCase:
         evidence_id = self._id_gen.generate()
         now = self._clock.now()
 
-        # Save to private storage with UUID filename
         storage_path = self._storage.save_file(
             file_id=evidence_id,
             data=validated.sanitized_bytes,
@@ -418,7 +971,6 @@ class AttachEvidenceUseCase:
                 self._evidence_repo.save(evidence)
                 self._uow.commit()
         except Exception:
-            # Ensure no partial/orphaned files remain on disk if persistence fails
             self._storage.delete_file(storage_path)
             raise
 
@@ -428,8 +980,7 @@ class AttachEvidenceUseCase:
             evidence_id=evidence.id,
             expires_in_seconds=300,
         )
-        up_disp = self._users.get_user_display(actor.id)
-        up_name = up_disp[0] if up_disp else actor.email
+        up_name = _resolve_user_name(self._users, actor.id, actor.email) or actor.email
 
         dto = EvidenceDTO(
             id=evidence.id,

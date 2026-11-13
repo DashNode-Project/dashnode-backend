@@ -10,11 +10,51 @@ from enum import StrEnum
 
 from app.modules.fixes.domain.messages import (
     DESCRIPTION_TOO_LONG,
+    RESOLUTION_NOTE_REQUIRED,
+    RESOLUTION_NOTE_TOO_LONG,
     SEVERITY_REQUIRED,
+    TASK_TARGET_STATUS_INVALID,
     TITLE_REQUIRED,
     TITLE_TOO_LONG,
     TYPE_REQUIRED,
 )
+
+VALID_RESTORABLE_TASK_STATUSES = frozenset(
+    {"TODO", "IN_PROGRESS", "CODE_REVIEW", "TESTING", "DONE"}
+)
+
+
+class ConflictError(Exception):
+    """Raised when an optimistic concurrency lock check fails."""
+
+
+def resolve_restorable_task_status(
+    requested_status: str | None,
+    previous_status: str | None,
+) -> str:
+    """Resolve valid post-correction task status or default to IN_PROGRESS."""
+    if requested_status is not None and requested_status.strip():
+        candidate = requested_status.strip().upper()
+        if candidate not in VALID_RESTORABLE_TASK_STATUSES:
+            raise ValueError(TASK_TARGET_STATUS_INVALID)
+        return candidate
+
+    if previous_status is not None and previous_status.strip():
+        prev_candidate = previous_status.strip().upper()
+        if prev_candidate in VALID_RESTORABLE_TASK_STATUSES:
+            return prev_candidate
+    return "IN_PROGRESS"
+
+
+@dataclass
+class TaskSnapshot:
+    id: str
+    project_id: str
+    name: str
+    status: str
+    assignee_id: str | None
+    status_before_correction: str | None
+    version: int = 1
 
 
 class IssueSeverity(StrEnum):
@@ -123,6 +163,9 @@ class Issue:
     idempotency_key: str | None
     created_at: datetime
     updated_at: datetime
+    task_id: str | None = None
+    resolved_by: str | None = None
+    version: int = 1
 
     @classmethod
     def validate_title(cls, title: str | None) -> str:
@@ -141,6 +184,15 @@ class Issue:
         if len(cleaned) > 5000:
             raise ValueError(DESCRIPTION_TOO_LONG)
         return cleaned if cleaned else None
+
+    @classmethod
+    def validate_resolution_note(cls, resolution_note: str | None) -> str:
+        if not resolution_note or not resolution_note.strip():
+            raise ValueError(RESOLUTION_NOTE_REQUIRED)
+        cleaned = resolution_note.strip()
+        if len(cleaned) > 2000:
+            raise ValueError(RESOLUTION_NOTE_TOO_LONG)
+        return cleaned
 
 
 @dataclass
