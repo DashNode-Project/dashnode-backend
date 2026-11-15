@@ -189,7 +189,7 @@ def test_guardrails_redact_sensitive_text_thoroughly() -> None:
         "Clave de acceso: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-ID "
         "password=SecretPass123! token=ghp_1234567890abcdef1234567890abcdef "
         "api_key=AIzaSyA_abcdef1234567890_abcdef123456 "
-        "mi email es dev@dashnode.io y conexion https://user:pass@db.dashnode.io:5432"
+        "mi email es dev@dashnode.io y tarjeta 4111 2222 3333 4444"
     )
     redacted, stats = redact_sensitive_text(raw_input)
     assert sum(stats.values()) >= 4
