@@ -6,6 +6,7 @@
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -17,7 +18,19 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
+from app.modules.fixes.application.ai_use_cases import (
+    DailyLimitReachedError,
+    DeleteAiAnalysisUseCase,
+    GetAiAnalysisStatusUseCase,
+    InvalidValidationStateError,
+    ListAiAnalysesUseCase,
+    RejectAiAnalysisUseCase,
+    RequestAiAnalysisUseCase,
+    ValidateAiAnalysisUseCase,
+)
 from app.modules.fixes.application.dtos import (
+    AiAnalysisListResponse,
+    AiAnalysisStatusResponse,
     AssignIssueCommand,
     CloseIssueCommand,
     CreateIssueCommand,
@@ -25,8 +38,13 @@ from app.modules.fixes.application.dtos import (
     IssueDetailDTO,
     IssueListResponse,
     IssueOperationResponse,
+    RejectAiAnalysisRequest,
+    RejectAiAnalysisResponse,
     ReportTaskFixCommand,
+    RequestAiAnalysisCommand,
+    RequestAiAnalysisResponse,
     ResolveIssueCommand,
+    ValidateAiAnalysisResponse,
 )
 from app.modules.fixes.application.use_cases import (
     AssignIssueUseCase,
@@ -39,14 +57,21 @@ from app.modules.fixes.application.use_cases import (
     ReportTaskFixUseCase,
     ResolveIssueUseCase,
 )
+from app.modules.fixes.application.vision_pipeline import (
+    DefaultVisionAnalysisProvider,
+    VisionPipelineError,
+)
 from app.modules.fixes.domain.entities import ConflictError
 from app.modules.fixes.infrastructure.repositories import (
     HmacSignedUrlGenerator,
     LocalEvidenceFileStorage,
+    SqlAlchemyAiAnalysisRepository,
     SqlAlchemyEvidenceRepository,
     SqlAlchemyFixRepository,
 )
 from app.orchestration.fixes_adapters import (
+    SqlAlchemyAiQuotaLookup,
+    SqlAlchemyAuditLogRecorder,
     SqlAlchemyFixTaskCoordinator,
     SqlAlchemyIssueNotificationSender,
     SqlAlchemyProjectLookup,
@@ -95,6 +120,21 @@ def _outbox_store(db: Session = Depends(get_db_session)) -> SqlAlchemyOutboxStor
     return SqlAlchemyOutboxStore(db)
 
 
+def _ai_analysis_repo(db: Session = Depends(get_db_session)) -> SqlAlchemyAiAnalysisRepository:
+    return SqlAlchemyAiAnalysisRepository(db)
+
+
+def _ai_quota_lookup(db: Session = Depends(get_db_session)) -> SqlAlchemyAiQuotaLookup:
+    return SqlAlchemyAiQuotaLookup(db)
+
+
+def _audit_recorder(db: Session = Depends(get_db_session)) -> SqlAlchemyAuditLogRecorder:
+    return SqlAlchemyAuditLogRecorder(db)
+
+
+_vision_provider = DefaultVisionAnalysisProvider()
+
+
 def _translate_issue_error(exc: Exception) -> AppError:
     if isinstance(exc, PermissionError):
         return AppError("FORBIDDEN", str(exc), ErrorKind.FORBIDDEN)
@@ -102,9 +142,25 @@ def _translate_issue_error(exc: Exception) -> AppError:
         return AppError("NOT_FOUND", str(exc), ErrorKind.NOT_FOUND)
     if isinstance(exc, ConflictError):
         return AppError("CONFLICT", str(exc), ErrorKind.CONFLICT)
+    if isinstance(exc, InvalidValidationStateError):
+        return AppError("INVALID_VALIDATION_STATE", str(exc), ErrorKind.CONFLICT)
+    if isinstance(exc, DailyLimitReachedError):
+        return AppError("DAILY_LIMIT_REACHED", str(exc), ErrorKind.RATE_LIMITED)
+    if isinstance(exc, VisionPipelineError):
+        if exc.error_code in ("AI_QUOTA_EXHAUSTED", "DAILY_LIMIT_REACHED"):
+            return AppError(exc.error_code, exc.message, ErrorKind.RATE_LIMITED)
+        if exc.error_code in ("UNSUPPORTED_FORMAT", "NO_EVIDENCE"):
+            return AppError(exc.error_code, exc.message, ErrorKind.VALIDATION)
+        return AppError(exc.error_code, exc.message, ErrorKind.UNAVAILABLE)
     if isinstance(exc, ValueError):
         if "idéntica" in str(exc):
             return AppError("DUPLICATE_EVIDENCE", str(exc), ErrorKind.CONFLICT)
+        if "admitido para el análisis" in str(exc):
+            return AppError("UNSUPPORTED_FORMAT", str(exc), ErrorKind.VALIDATION)
+        if "no tiene evidencia para analizar" in str(exc):
+            return AppError("NO_EVIDENCE", str(exc), ErrorKind.VALIDATION)
+        if "datos personales" in str(exc) or "confirme" in str(exc).lower():
+            return AppError("AI_CONFIRMATION_REQUIRED", str(exc), ErrorKind.VALIDATION)
         return AppError("VALIDATION_ERROR", str(exc), ErrorKind.VALIDATION)
     return AppError(
         "INTERNAL_ERROR",
@@ -440,4 +496,225 @@ def download_evidence(
             },
         )
     except (PermissionError, LookupError) as exc:
+        raise _translate_issue_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/issues/{issue_id}/ai-analyses",
+    response_model=RequestAiAnalysisResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Solicitar análisis de IA sobre evidencia de issue (HU_DN_07_106)",
+)
+def request_ai_analysis(
+    project_id: str,
+    issue_id: str,
+    cmd: RequestAiAnalysisCommand,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    issue_repo: SqlAlchemyFixRepository = Depends(_fix_repo),
+    evidence_repo: SqlAlchemyEvidenceRepository = Depends(_evidence_repo),
+    ai_repo: SqlAlchemyAiAnalysisRepository = Depends(_ai_analysis_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    quota: SqlAlchemyAiQuotaLookup = Depends(_ai_quota_lookup),
+) -> RequestAiAnalysisResponse:
+    use_case = RequestAiAnalysisUseCase(
+        ai_repo=ai_repo,
+        issue_repo=issue_repo,
+        evidence_repo=evidence_repo,
+        storage=_storage,
+        projects=projects,
+        quota=quota,
+        vision_provider=_vision_provider,
+        id_gen=_id_gen,
+        clock=_clock,
+        uow=SqlAlchemyUnitOfWork(db),
+        background_executor=background_tasks.add_task,
+    )
+    try:
+        res = use_case.execute(project_id=project_id, issue_id=issue_id, cmd=cmd, actor=actor)
+        if res.reused:
+            response.status_code = status.HTTP_200_OK
+        return res
+    except (
+        PermissionError,
+        LookupError,
+        ValueError,
+        DailyLimitReachedError,
+        VisionPipelineError,
+    ) as exc:
+        raise _translate_issue_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}",
+    response_model=AiAnalysisStatusResponse,
+    summary="Consultar estado y resultado del análisis de IA (HU_DN_07_106, 107, 110, 113)",
+)
+def get_ai_analysis_status(
+    project_id: str,
+    issue_id: str,
+    analysis_id: str,
+    actor: CurrentUser = Depends(get_current_user),
+    issue_repo: SqlAlchemyFixRepository = Depends(_fix_repo),
+    ai_repo: SqlAlchemyAiAnalysisRepository = Depends(_ai_analysis_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+) -> AiAnalysisStatusResponse:
+    use_case = GetAiAnalysisStatusUseCase(
+        ai_repo=ai_repo,
+        issue_repo=issue_repo,
+        projects=projects,
+        users=users,
+    )
+    try:
+        return use_case.execute(
+            project_id=project_id,
+            issue_id=issue_id,
+            analysis_id=analysis_id,
+            actor=actor,
+        )
+    except (PermissionError, LookupError) as exc:
+        raise _translate_issue_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/issues/{issue_id}/ai-analyses",
+    response_model=AiAnalysisListResponse,
+    summary="Listar respuestas de IA almacenadas para un issue (HU_DN_07_108)",
+)
+def list_ai_analyses(
+    project_id: str,
+    issue_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = Query(default=None),
+    actor: CurrentUser = Depends(get_current_user),
+    issue_repo: SqlAlchemyFixRepository = Depends(_fix_repo),
+    ai_repo: SqlAlchemyAiAnalysisRepository = Depends(_ai_analysis_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    users: SqlAlchemyUserLookup = Depends(_user_lookup),
+) -> AiAnalysisListResponse:
+    use_case = ListAiAnalysesUseCase(
+        ai_repo=ai_repo,
+        issue_repo=issue_repo,
+        projects=projects,
+        users=users,
+    )
+    try:
+        return use_case.execute(
+            project_id=project_id,
+            issue_id=issue_id,
+            actor=actor,
+            limit=limit,
+            cursor=cursor,
+        )
+    except (PermissionError, LookupError) as exc:
+        raise _translate_issue_error(exc) from exc
+
+
+@router.delete(
+    "/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}",
+    summary="Eliminar lógicamente una respuesta de IA almacenada (HU_DN_07_109)",
+)
+def delete_ai_analysis(
+    project_id: str,
+    issue_id: str,
+    analysis_id: str,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    issue_repo: SqlAlchemyFixRepository = Depends(_fix_repo),
+    ai_repo: SqlAlchemyAiAnalysisRepository = Depends(_ai_analysis_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    audit: SqlAlchemyAuditLogRecorder = Depends(_audit_recorder),
+) -> dict[str, str]:
+    use_case = DeleteAiAnalysisUseCase(
+        ai_repo=ai_repo,
+        issue_repo=issue_repo,
+        projects=projects,
+        audit_recorder=audit,
+        clock=_clock,
+        uow=SqlAlchemyUnitOfWork(db),
+    )
+    try:
+        return use_case.execute(
+            project_id=project_id,
+            issue_id=issue_id,
+            analysis_id=analysis_id,
+            actor=actor,
+        )
+    except (PermissionError, LookupError, ValueError) as exc:
+        raise _translate_issue_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}/validate",
+    response_model=ValidateAiAnalysisResponse,
+    summary="Validar una respuesta de IA antes de actuar sobre ella (HU_DN_07_111)",
+)
+def validate_ai_analysis(
+    project_id: str,
+    issue_id: str,
+    analysis_id: str,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    issue_repo: SqlAlchemyFixRepository = Depends(_fix_repo),
+    ai_repo: SqlAlchemyAiAnalysisRepository = Depends(_ai_analysis_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    audit: SqlAlchemyAuditLogRecorder = Depends(_audit_recorder),
+) -> ValidateAiAnalysisResponse:
+    use_case = ValidateAiAnalysisUseCase(
+        ai_repo=ai_repo,
+        issue_repo=issue_repo,
+        projects=projects,
+        clock=_clock,
+        uow=SqlAlchemyUnitOfWork(db),
+        audit_recorder=audit,
+    )
+    try:
+        return use_case.execute(
+            project_id=project_id,
+            issue_id=issue_id,
+            analysis_id=analysis_id,
+            actor=actor,
+        )
+    except (PermissionError, LookupError, InvalidValidationStateError) as exc:
+        raise _translate_issue_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}/reject",
+    response_model=RejectAiAnalysisResponse,
+    summary="Rechazar una respuesta de IA (HU_DN_07_112)",
+)
+def reject_ai_analysis(
+    project_id: str,
+    issue_id: str,
+    analysis_id: str,
+    cmd: RejectAiAnalysisRequest | None = None,
+    actor: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    issue_repo: SqlAlchemyFixRepository = Depends(_fix_repo),
+    ai_repo: SqlAlchemyAiAnalysisRepository = Depends(_ai_analysis_repo),
+    projects: SqlAlchemyProjectLookup = Depends(_project_lookup),
+    audit: SqlAlchemyAuditLogRecorder = Depends(_audit_recorder),
+) -> RejectAiAnalysisResponse:
+    use_case = RejectAiAnalysisUseCase(
+        ai_repo=ai_repo,
+        issue_repo=issue_repo,
+        projects=projects,
+        clock=_clock,
+        uow=SqlAlchemyUnitOfWork(db),
+        audit_recorder=audit,
+    )
+    try:
+        reason = cmd.reason if cmd else None
+        return use_case.execute(
+            project_id=project_id,
+            issue_id=issue_id,
+            analysis_id=analysis_id,
+            actor=actor,
+            reason=reason,
+        )
+    except (PermissionError, LookupError, InvalidValidationStateError) as exc:
         raise _translate_issue_error(exc) from exc

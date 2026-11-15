@@ -80,10 +80,13 @@ class Settings(BaseSettings):
     API_GEMINI: SecretStr | None = None
     API_GEMINI_MODEL: str = "gemini-3.1-flash-lite"
     AI_GEMINI_FALLBACK_MODELS: str = "gemini-3.5-flash-lite,gemini-3.8-flash,gemma-4-31b-it"
+    AI_GEMINI_TRANSCRIBE_MODEL: str = "gemini-3.5-transcribe"
+    AI_GEMINI_TRANSCRIBE_FALLBACK_MODELS: str = "gemini-3.5-flash-lite,gemini-3.6-flash"
     AI_GEMINI_MODEL_COOLDOWN_SECONDS: float = Field(default=300.0, ge=0.0, le=3600.0)
     AI_GEMINI_SDK_RETRY_ATTEMPTS: int = Field(default=1, ge=1, le=3)
     AI_WHISPER_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)
     AI_GEMINI_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)
+    AI_GEMINI_TRANSCRIBE_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)
     AI_VOICE_MAX_SECONDS: int = Field(default=60, ge=1, le=120)
     AI_VOICE_MAX_BYTES: int = Field(default=5_242_880, ge=1024, le=20_971_520)
     AI_VOICE_MIN_BYTES: int = Field(default=64, ge=1, le=4096)

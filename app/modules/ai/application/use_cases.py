@@ -151,7 +151,8 @@ class ProcessVoiceUseCase:
             max_seconds=self._max_seconds,
         )
         try:
-            self._quotas.check_and_consume("WHISPER")
+            if not getattr(self._transcription, "is_hybrid", False):
+                self._quotas.check_and_consume("WHISPER")
             recognized = self._transcription.transcribe(cmd.audio_bytes, cmd.content_type)
         except QuotaExhaustedError as exc:
             raise AppError(
@@ -218,7 +219,8 @@ class TranscribeVoiceUseCase:
             max_seconds=self._max_seconds,
         )
         try:
-            self._quotas.check_and_consume("WHISPER")
+            if not getattr(self._transcription, "is_hybrid", False):
+                self._quotas.check_and_consume("WHISPER")
             recognized = self._transcription.transcribe(cmd.audio_bytes, cmd.content_type)
         except QuotaExhaustedError as exc:
             raise AppError(

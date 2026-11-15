@@ -13,6 +13,8 @@ _HALLUCINATION_PATTERNS = (
     re.compile(r"paz.*justicia|justicia.*paz", re.IGNORECASE),
     re.compile(r"gracias,?\s*para\s*ti", re.IGNORECASE),
     re.compile(r"^s[ií]\.?\s*gracias", re.IGNORECASE),
+    re.compile(r"\[SILENCIO\]", re.IGNORECASE),
+    re.compile(r"^\s*silencio\s*$", re.IGNORECASE),
 )
 
 _REPEATED_PHRASE = re.compile(r"(.+?)(?:\s+\1){2,}", re.IGNORECASE)

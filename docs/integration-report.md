@@ -392,3 +392,47 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | Frontend | `npx vitest run src/features/issues src/features/backlog src/features/kanban` | 8 archivos, 56/56 pruebas pasando | APROBADO |
 | Frontend | `npm run typecheck` y `npm run build` | 0 errores TS, bundle Vite generado (2037 módulos, 1.46s) | APROBADO |
 | Frontend | `node scripts/scan-secrets.mjs` | 0 secretos detectados (226 archivos) | APROBADO |
+
+---
+
+## Épica 12: Análisis de IA por imagen y video (HU_DN_07_106 … HU_DN_07_110)
+
+### Contrato Compartido de API y Respuestas
+
+| Método | Endpoint | Rol Mínimo | Propósito | Respuesta Esperada |
+|---|---|---|---|---|
+| `POST` | `/api/v1/projects/{projectId}/issues/{issueId}/ai-analyses` | Miembro activo del proyecto | Solicitar análisis visual de IA sobre imagen/video con checkbox de privacidad | 202 Accepted (`{"analysis_id": "...", "status": "PENDING"}`); 200 OK con `reused: True` si ya existe análisis previo idéntico; 400 si checkbox es falso; 429 si cuota agotada |
+| `GET` | `/api/v1/projects/{projectId}/issues/{issueId}/ai-analyses/{analysisId}` | Miembro activo del proyecto | Consultar estado y resultado del análisis | 200 OK con 3 bloques estructurados (`problem_description`, `probable_cause`, `suggested_solution` <= 150 palabras), distintivo rojo de advertencia y fallback de contexto insuficiente |
+| `GET` | `/api/v1/projects/{projectId}/issues/{issueId}/ai-analyses` | Miembro activo del proyecto | Historial de respuestas de IA almacenadas para el issue | 200 OK: `{"items": [{"id": "...", "requested_by": {...}, "created_at": "...", "validation_status": "...", "summary": "..."}]}`; excluye eliminados lógicos |
+| `DELETE` | `/api/v1/projects/{projectId}/issues/{issueId}/ai-analyses/{analysisId}` | Administrador, Gerente o Creador | Eliminación lógica de una respuesta de IA | 200 OK: `{"message": "Respuesta de IA eliminada correctamente."}`; 403 si otro usuario; 400 si `status == 'PROCESSING'`; registra en `audit_logs` |
+| `POST` | `/api/v1/ai/voice-transcribe` | Usuario autenticado | Transcripción de voz híbrida y resiliente (Whisper/Gemini REST) | 200 OK: `{"recognized_text": "..."}`; fallback automático sin error al usuario; cuotas separadas de chat y cooldown |
+
+### Matriz de Trazabilidad y Verificación E2E
+
+| Historia de Usuario | Frontend | Backend | Reglas y Criterios Verificados |
+|---|---|---|---|
+| **HU_DN_07_106** | `AiAnalysisSection`: Casilla obligatoria *"Confirmo que la evidencia no contiene contraseñas, tokens ni datos personales."*, botón *Analizar con IA* reactivo, sondeo de estado cada 2s hasta 30s. | `RequestAiAnalysisUseCase`: Encolado asíncrono no bloqueante, cálculo de `reuse_key = SHA-256(evidence.sha256 \|\| prompt_version)`, cuotas diarias independientes (`ai_user_daily_limit`, `ai_vision_daily_limit`). | El análisis no se inicia sin confirmación explícita. Respuestas previas con idéntico hash son reutilizadas instantáneamente sin llamadas a APIs de pago externas. |
+| **HU_DN_07_107** | Renderizado de tarjeta con 3 bloques destacados, distintivo rojo en cabecera *"Sugerencia generada por IA no verificada"*, fallback *"No hay contexto suficiente para proponer una solución."*, texto plano sin ejecución de scripts. | `GetAiAnalysisStatusUseCase` y `DefaultVisionAnalysisProvider`: Extracción estructurada y validación de longitud <= 150 palabras totales, escape estricto de HTML y marcado. | Cumplimiento del límite de 150 palabras y advertencia visual permanente requerida por el estándar de seguridad y privacidad. |
+| **HU_DN_07_108** | Sección *"Historial de análisis de IA"* con nombre del solicitante, fecha formateada, etiqueta de estado de validación humana (`Pendiente de validación`, `Validada`, `Rechazada`) y resumen expandible. | `ListAiAnalysesUseCase`: Filtrado con `deleted_at IS NULL`, orden cronológico descendente, control de membresía activa de proyecto. | Visualización ordenada del historial; estado vacío literal *"Este issue no tiene respuestas de IA."*. Acceso restringido a miembros. |
+| **HU_DN_07_109** | Botón de eliminar con diálogo modal de confirmación `ProjectModal` (*"¿Está seguro de que desea eliminar esta respuesta de IA?"*), control de roles para ocultar botón si no corresponde. | `DeleteAiAnalysisUseCase`: Restricción a Admin, Gerente o Creador, bloqueo si `status == 'PROCESSING'`, soft delete (`deleted_at`, `deleted_by`) y auditoría en `audit_logs` (`ai_analysis.deleted`). | Eliminación lógica sin mutación colateral de estado del issue ni de la tarea asociada. |
+| **HU_DN_07_110** | Manejo de códigos de error (`NO_EVIDENCE`, `UNSUPPORTED_FORMAT`, `AI_QUOTA_EXHAUSTED`, etc.) con mensajes amigables y botón *"Reintentar"* que preserva la evidencia y checkbox. | Mapeo tipado en `_translate_issue_error` y códigos de error normalizados en `app/orchestration/error_handling.py`. | Permite reintentar de inmediato sin tener que volver a cargar la evidencia en el formulario. |
+| **HU_DN_07_111** | Botón *"Validar"* visible solo para Admin y Gerente cuando la propuesta está en estado `PENDING_VALIDATION`, toast `'Respuesta de IA validada correctamente.'` y cambio de insignia a `Validada`. | `ValidateAiAnalysisUseCase`: Restricción RBAC (Admin/Manager), validación de estado previo `PENDING_VALIDATION` (409 ante otro estado), transición a `VALIDATED`, registro de `validated_by` y `validated_at`. | Validación humana formal registrada con usuario y timestamp. Bloqueo 409 si ya está validada. |
+| **HU_DN_07_112** | Botón *"Rechazar"* visible para Admin y Gerente en estados pendientes y validadas, toast `'Respuesta de IA rechazada.'` y cambio de insignia a `Rechazada`. | `RejectAiAnalysisUseCase`: Restricción RBAC (Admin/Manager), bloqueo de re-rechazo (409 si ya está `REJECTED`), transición a `REJECTED`, registro de `rejected_by` y `rejected_at`. | Permite rechazar propuestas incorrectas e invalidar propuestas previamente validadas. |
+| **HU_DN_07_113** | Banner visible `'Esta propuesta de IA no ha sido validada. Requiere validación de un Administrador o Gerente antes de actuar.'` con icono `AlertTriangle` mientras no esté validada; nota informativa `'Validada por {name} el {date}.'` con `CheckCircle`. | `GetAiAnalysisStatusUseCase`: Cálculo server-side de `requires_human_validation = (validation_status != VALIDATED)` y resolución de nombres de auditoría. Contrato DA-08 Mutación Cero garantizado (sin cambios en `fixes` ni `story_tasks`). | Advertencia constante y garantía arquitectural de que la IA nunca muta datos de incidencias ni tareas. |
+| **Resilient Voice** | `useVoiceCapture`: Captura de audio en navegador WebM/Opus enviada en memoria a `POST /ai/voice-transcribe`. | `HybridTranscriptionService`: Whisper con fallback silencioso a cadena Gemini REST (`gemini-3.5-transcribe` o multimodales), cooldown de fallos y filtro de silencio (`[SILENCIO]`). | Transcripción de voz tolerante a fallos de cuota, red o proveedor sin interrumpir al usuario. |
+
+### Resumen de Quality Gates y Scripts QA (Épica 12)
+
+| Repositorio | Verificación | Resultado | Estado |
+|---|---|---|---|
+| Backend | `pytest tests/unit/test_hybrid_transcription.py tests/unit/test_ai_analysis_domain.py tests/unit/test_ai_analysis_stress_audit.py tests/api/test_ai_analysis_api.py` | 42 pruebas unitarias, de API y estrés pasando | APROBADO |
+| Backend | `pytest tests/` | 524 passed, 2 skipped (100% pasando) | APROBADO |
+| Backend | Migraciones PostgreSQL | Migraciones `022_ep12_ai_analyses` y `023_ep12_ai_usage_len` aplicadas e índices verificados | APROBADO |
+| Backend | `ruff check .`, `ruff format --check .`, `mypy app`, `lint-imports` | 0 errores (231 archivos app, 3 contratos cumplidos) | APROBADO |
+| Backend | `scripts/qa_console_ep12_runner.py` | QA interactivo en vivo contra Uvicorn con suite de estrés (100% OK, 0 errores) | APROBADO |
+| Backend | `python scripts/scan_secrets.py` | 0 secretos detectados | APROBADO |
+| Frontend | `npx vitest run src/features/issues` | 5 suites, 37 pruebas pasando | APROBADO |
+| Frontend | `npm run test` (suite completa) | 52 archivos, 393 pruebas pasando | APROBADO |
+| Frontend | `npm run typecheck` y `npm run build` | 0 errores TypeScript, build Vite de producción exitoso en < 1s | APROBADO |
+| Frontend | `npm run lint` y `npm run format:check` | 0 errores/warnings ESLint, Prettier verificado | APROBADO |
+| Frontend | `node scripts/scan-secrets.mjs` | 0 secretos detectados (228 archivos) | APROBADO |

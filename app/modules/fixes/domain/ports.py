@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import Protocol
 
 from app.modules.fixes.domain.entities import (
+    AiAnalysis,
+    AiAnalysisResult,
     Evidence,
     Issue,
     IssueSeverity,
@@ -172,4 +174,45 @@ class IssueNotificationPort(Protocol):
         title: str,
         reporter_id: str,
         when: datetime,
+    ) -> None: ...
+
+
+class AiAnalysisRepository(Protocol):
+    def save(self, analysis: AiAnalysis) -> None: ...
+
+    def get_by_id(self, analysis_id: str) -> AiAnalysis | None: ...
+
+    def find_active_by_reuse_key(self, reuse_key: str) -> AiAnalysis | None: ...
+
+    def list_by_issue(
+        self, issue_id: str, limit: int = 20, cursor: str | None = None
+    ) -> tuple[list[AiAnalysis], str | None]: ...
+
+    def soft_delete(self, analysis_id: str, actor_id: str, deleted_at: datetime) -> bool: ...
+
+
+class VisionAnalysisProvider(Protocol):
+    def analyze(
+        self,
+        evidence_data: bytes,
+        evidence_type: str,
+        evidence_title: str | None,
+        issue_context: dict[str, str],
+    ) -> tuple[AiAnalysisResult, int, int, int, str]: ...
+
+
+class AiQuotaLookup(Protocol):
+    def check_user_limit(self, user_id: str) -> bool: ...
+
+    def consume_quota(self, user_id: str) -> None: ...
+
+
+class AuditLogRecorder(Protocol):
+    def record(
+        self,
+        user_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        created_at: datetime,
     ) -> None: ...

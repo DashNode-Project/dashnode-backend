@@ -220,3 +220,30 @@ tests/api/test_issues_lifecycle_api.py                             (4 tests inte
 scripts/qa_console_ep11_runner.py                                  (Script de QA automatizado para validaciones locales exhaustivas HU_DN_07_97 a HU_DN_07_101)
 scripts/qa_console_ep11_part2_runner.py                            (Script de QA HTTP en vivo contra uvicorn para HU_DN_07_102 a HU_DN_07_105)
 ```
+
+## EP-12 — Análisis de IA por imagen y video (HU_DN_07_106 … HU_DN_07_113)
+
+```
+app/modules/fixes/
+  domain/          entities (AiAnalysis, AiAnalysisStatus, AiValidationStatus), messages (AI_CONFIRMATION_REQUIRED, AI_ANALYSIS_DELETED, AI_UNVERIFIED_LABEL, AI_VALIDATE_SUCCESS, AI_REJECT_SUCCESS, AI_HUMAN_VALIDATION_NOTICE, etc.), ports (AiAnalysisRepository, AiQuotaLookup, VisionAnalysisProvider, AuditLogRecorder)
+  application/     ai_use_cases (RequestAiAnalysisUseCase, GetAiAnalysisStatusUseCase, ListAiAnalysesUseCase, DeleteAiAnalysisUseCase, ValidateAiAnalysisUseCase, RejectAiAnalysisUseCase), vision_pipeline (DefaultVisionAnalysisProvider, DefaultPromptRenderer, GeminiVisionClient, estructuración 3 bloques <= 150 palabras, redacción de datos sensibles)
+  infrastructure/  models (AiAnalysisModel con índices compuestos y claves foráneas), repositories (SqlAlchemyAiAnalysisRepository con exclusión de eliminados lógicos)
+app/modules/ai/
+  infrastructure/  gemini_transcribe_client (GeminiTranscriptionClient con smart mode, custom_vocabulary), hybrid_transcription_service (HybridTranscriptionService con Whisper, Gemini REST fallback y cooldown)
+app/orchestration/issue_routes.py
+  POST   /projects/{project_id}/issues/{issue_id}/ai-analyses                 (HU_DN_07_106: Solicitar análisis visual, checkbox de privacidad, hash reuse)
+  GET    /projects/{project_id}/issues/{issue_id}/ai-analyses/{id}            (HU_DN_07_107, HU_DN_07_110, HU_DN_07_113: Detalle estructurado 3 bloques, distintivo rojo y errores)
+  GET    /projects/{project_id}/issues/{issue_id}/ai-analyses                 (HU_DN_07_108: Historial de análisis guardados, autor, fecha y resumen)
+  DELETE /projects/{project_id}/issues/{issue_id}/ai-analyses/{id}            (HU_DN_07_109: Eliminación lógica, RBAC y auditoría en audit_logs)
+  POST   /projects/{project_id}/issues/{issue_id}/ai-analyses/{id}/validate   (HU_DN_07_111: Validar propuesta de IA por Admin/Gerente)
+  POST   /projects/{project_id}/issues/{issue_id}/ai-analyses/{id}/reject     (HU_DN_07_112: Rechazar propuesta de IA por Admin/Gerente)
+app/orchestration/ai_routes.py
+  POST   /ai/voice-transcribe                                                 (Transcripción híbrida resiliente Whisper/Gemini con filtro de silencio)
+migrations/versions/
+  022_ep12_ai_analyses.py                                                     (Tabla ai_analyses con índices ix_ai_analyses_issue_created, ix_ai_analyses_evidence, ix_ai_analyses_reuse_key)
+  023_ep12_ai_usage_len.py                                                    (Ampliación de longitud de columna service en ai_daily_usage)
+tests/unit/test_ai_analysis_domain.py                                         (14 tests: dominio, entidades, conteo <= 150 palabras, sanitización, transiciones de validación/rechazo y contrato DA-08)
+tests/unit/test_hybrid_transcription.py                                      (8 tests: fallback whisper->gemini, smart mode, cooldown, silencio)
+tests/api/test_ai_analysis_api.py                                             (8 tests integrales de API: checkbox, encolado, reuso, listado, eliminación, validación y rechazo)
+scripts/qa_console_ep12_runner.py                                             (QA interactivo live HTTP verificando los 8 HUs de EP-12, contrato DA-08 y la transcripción resiliente)
+```
