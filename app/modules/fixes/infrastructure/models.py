@@ -6,7 +6,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.infrastructure.database import Base
@@ -49,6 +49,12 @@ class FixModel(Base):
         cascade="all, delete-orphan",
         order_by="EvidenceModel.created_at",
     )
+    ai_analyses = relationship(
+        "AiAnalysisModel",
+        back_populates="fix",
+        cascade="all, delete-orphan",
+        order_by="AiAnalysisModel.created_at.desc()",
+    )
 
 
 class EvidenceModel(Base):
@@ -75,3 +81,61 @@ class EvidenceModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     fix = relationship("FixModel", back_populates="evidences")
+    ai_analyses = relationship(
+        "AiAnalysisModel",
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+    )
+
+
+class AiAnalysisModel(Base):
+    __tablename__ = "ai_analyses"
+    __table_args__ = (
+        Index("ix_ai_analyses_issue_created", "issue_id", "created_at"),
+        Index("ix_ai_analyses_evidence", "evidence_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    issue_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("fixes.id", ondelete="CASCADE"), nullable=False
+    )
+    evidence_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("evidences.id", ondelete="CASCADE"), nullable=False
+    )
+    requested_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="PENDING", server_default="PENDING", nullable=False
+    )
+    progress_stage: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    reuse_key: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    model_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validation_status: Mapped[str] = mapped_column(
+        String(20),
+        default="PENDING_VALIDATION",
+        server_default="PENDING_VALIDATION",
+        nullable=False,
+    )
+    validated_by: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_by: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    fix = relationship("FixModel", back_populates="ai_analyses")
+    evidence = relationship("EvidenceModel", back_populates="ai_analyses")

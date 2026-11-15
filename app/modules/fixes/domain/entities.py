@@ -4,6 +4,7 @@
 @origin [User Stories HU_DN_07_97 .. HU_DN_07_101]
 """
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -210,3 +211,123 @@ class Evidence:
     duration_seconds: float | None
     uploaded_by: str
     created_at: datetime
+
+
+class AiAnalysisStatus(StrEnum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    DONE = "DONE"
+    FAILED = "FAILED"
+
+
+class AiProgressStage(StrEnum):
+    PREPROCESSING = "PREPROCESSING"
+    UPLOADING = "UPLOADING"
+    ANALYZING = "ANALYZING"
+
+
+class AiValidationStatus(StrEnum):
+    PENDING_VALIDATION = "PENDING_VALIDATION"
+    VALIDATED = "VALIDATED"
+    REJECTED = "REJECTED"
+
+
+@dataclass
+class AiAnalysisResult:
+    problem_description: str
+    probable_cause: str
+    suggested_solution: str | None
+    context_sufficient: bool = True
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "problem_description": self.problem_description,
+            "probable_cause": self.probable_cause,
+            "suggested_solution": self.suggested_solution if self.context_sufficient else None,
+            "context_sufficient": self.context_sufficient,
+        }
+
+
+@dataclass
+class AiAnalysis:
+    id: str
+    issue_id: str
+    evidence_id: str
+    requested_by: str
+    status: AiAnalysisStatus
+    progress_stage: AiProgressStage | None
+    reuse_key: str
+    prompt_version: str
+    model_id: str | None
+    response: AiAnalysisResult | None
+    validation_status: AiValidationStatus
+    created_at: datetime
+    validated_by: str | None = None
+    validated_at: datetime | None = None
+    rejected_by: str | None = None
+    rejected_at: datetime | None = None
+    error_code: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    latency_ms: int | None = None
+    deleted_at: datetime | None = None
+    deleted_by: str | None = None
+
+
+# Guardrails & sanitization helpers for EP-12
+
+FORBIDDEN_FIX_PATTERNS = re.compile(
+    r"\b(se aplic[oó]|se corrigi[oó]|fue desplegad[oa]|he aplicado|hemos aplicado|"
+    r"hemos desplegado|se solucion[oó]|queda resuelto|ha sido corregid[oa]|el fix fue aplicado|"
+    r"cambio desplegado|c[oó]digo corregido y aplicado)\b",
+    re.IGNORECASE,
+)
+
+SENSITIVE_PATTERNS = [
+    ("token", re.compile(r"Bearer\s+[A-Za-z0-9_\-\.]+", re.IGNORECASE)),
+    ("apikey", re.compile(r"\b(AIza[0-9A-Za-z-_]{25,45}|sk-[a-zA-Z0-9]{20,})\b")),
+    ("api_key_field", re.compile(r"(?i)\b(api_key|apikey)\s*[:=]\s*(\S+)")),
+    ("github_token", re.compile(r"\b(ghp_[0-9A-Za-z]{30,}|github_pat_[0-9A-Za-z_]{40,})\b")),
+    ("generic_token", re.compile(r"(?i)\b(token|auth_token)\s*[:=]\s*(\S+)")),
+    ("password", re.compile(r"(?i)(password|passwd|pwd|secret)\s*[:=]\s*(\S+)")),
+    ("email", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")),
+    ("card", re.compile(r"\b(?:\d[ -]*?){13,19}\b")),
+]
+
+
+def count_words(text: str | None) -> int:
+    if not text:
+        return 0
+    return len(text.strip().split())
+
+
+def total_result_words(result: AiAnalysisResult) -> int:
+    total = count_words(result.problem_description) + count_words(result.probable_cause)
+    if result.context_sufficient and result.suggested_solution:
+        total += count_words(result.suggested_solution)
+    return total
+
+
+def has_forbidden_fix_claims(text: str | None) -> bool:
+    if not text:
+        return False
+    return bool(FORBIDDEN_FIX_PATTERNS.search(text))
+
+
+def result_has_forbidden_fix_claims(result: AiAnalysisResult) -> bool:
+    return (
+        has_forbidden_fix_claims(result.problem_description)
+        or has_forbidden_fix_claims(result.probable_cause)
+        or has_forbidden_fix_claims(result.suggested_solution)
+    )
+
+
+def redact_sensitive_text(text: str) -> tuple[str, dict[str, int]]:
+    redaction_counts: dict[str, int] = {}
+    sanitized = text
+    for name, pattern in SENSITIVE_PATTERNS:
+        matches = len(pattern.findall(sanitized))
+        if matches > 0:
+            redaction_counts[name] = matches
+            sanitized = pattern.sub(f"[REDACTED:{name.upper()}]", sanitized)
+    return sanitized, redaction_counts

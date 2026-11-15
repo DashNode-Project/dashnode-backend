@@ -7,8 +7,11 @@
 import base64
 import hashlib
 import hmac
+import json
+import logging
 import os
 import time
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import case, func, select, update
@@ -16,6 +19,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.modules.fixes.domain.entities import (
+    AiAnalysis,
+    AiAnalysisResult,
+    AiAnalysisStatus,
+    AiProgressStage,
+    AiValidationStatus,
     Evidence,
     EvidenceType,
     Issue,
@@ -24,12 +32,15 @@ from app.modules.fixes.domain.entities import (
     IssueType,
 )
 from app.modules.fixes.domain.ports import (
+    AiAnalysisRepository,
     EvidenceFileStorage,
     EvidenceRepository,
     IssueRepository,
     SignedUrlGenerator,
 )
-from app.modules.fixes.infrastructure.models import EvidenceModel, FixModel
+from app.modules.fixes.infrastructure.models import AiAnalysisModel, EvidenceModel, FixModel
+
+logger = logging.getLogger(__name__)
 
 
 def _model_to_issue(m: FixModel) -> Issue:
@@ -375,3 +386,142 @@ class HmacSignedUrlGenerator(SignedUrlGenerator):
         msg = f"{evidence_id}:{expires_timestamp}".encode()
         expected = hmac.new(self._secret, msg, hashlib.sha256).hexdigest()
         return hmac.compare_digest(signature, expected)
+
+
+def _model_to_ai_analysis(m: AiAnalysisModel) -> AiAnalysis:
+    res: AiAnalysisResult | None = None
+    if m.response:
+        try:
+            data = json.loads(m.response)
+            res = AiAnalysisResult(
+                problem_description=data.get("problem_description", ""),
+                probable_cause=data.get("probable_cause", ""),
+                suggested_solution=data.get("suggested_solution"),
+                context_sufficient=bool(data.get("context_sufficient", True)),
+            )
+        except Exception:
+            res = None
+
+    return AiAnalysis(
+        id=m.id,
+        issue_id=m.issue_id,
+        evidence_id=m.evidence_id,
+        requested_by=m.requested_by,
+        status=AiAnalysisStatus(m.status),
+        progress_stage=AiProgressStage(m.progress_stage) if m.progress_stage else None,
+        reuse_key=m.reuse_key,
+        prompt_version=m.prompt_version,
+        model_id=m.model_id,
+        response=res,
+        validation_status=AiValidationStatus(m.validation_status),
+        validated_by=m.validated_by,
+        validated_at=m.validated_at,
+        rejected_by=m.rejected_by,
+        rejected_at=m.rejected_at,
+        error_code=m.error_code,
+        input_tokens=m.input_tokens,
+        output_tokens=m.output_tokens,
+        latency_ms=m.latency_ms,
+        created_at=m.created_at,
+        deleted_at=m.deleted_at,
+        deleted_by=m.deleted_by,
+    )
+
+
+class SqlAlchemyAiAnalysisRepository(AiAnalysisRepository):
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def save(self, analysis: AiAnalysis) -> None:
+        m = self._session.get(AiAnalysisModel, analysis.id)
+        raw_response = json.dumps(analysis.response.to_dict()) if analysis.response else None
+        if m is None:
+            m = AiAnalysisModel(
+                id=analysis.id,
+                issue_id=analysis.issue_id,
+                evidence_id=analysis.evidence_id,
+                requested_by=analysis.requested_by,
+                status=analysis.status.value,
+                progress_stage=analysis.progress_stage.value if analysis.progress_stage else None,
+                reuse_key=analysis.reuse_key,
+                prompt_version=analysis.prompt_version,
+                model_id=analysis.model_id,
+                response=raw_response,
+                validation_status=analysis.validation_status.value,
+                validated_by=analysis.validated_by,
+                validated_at=analysis.validated_at,
+                rejected_by=analysis.rejected_by,
+                rejected_at=analysis.rejected_at,
+                error_code=analysis.error_code,
+                input_tokens=analysis.input_tokens,
+                output_tokens=analysis.output_tokens,
+                latency_ms=analysis.latency_ms,
+                created_at=analysis.created_at,
+                deleted_at=analysis.deleted_at,
+                deleted_by=analysis.deleted_by,
+            )
+            self._session.add(m)
+        else:
+            m.status = analysis.status.value
+            m.progress_stage = analysis.progress_stage.value if analysis.progress_stage else None
+            m.response = raw_response
+            m.model_id = analysis.model_id
+            m.error_code = analysis.error_code
+            m.input_tokens = analysis.input_tokens
+            m.output_tokens = analysis.output_tokens
+            m.latency_ms = analysis.latency_ms
+            m.validation_status = analysis.validation_status.value
+            m.validated_by = analysis.validated_by
+            m.validated_at = analysis.validated_at
+            m.rejected_by = analysis.rejected_by
+            m.rejected_at = analysis.rejected_at
+            m.deleted_at = analysis.deleted_at
+            m.deleted_by = analysis.deleted_by
+
+    def get_by_id(self, analysis_id: str) -> AiAnalysis | None:
+        m = self._session.get(AiAnalysisModel, analysis_id)
+        if m is None or m.deleted_at is not None:
+            return None
+        return _model_to_ai_analysis(m)
+
+    def find_active_by_reuse_key(self, reuse_key: str) -> AiAnalysis | None:
+        stmt = (
+            select(AiAnalysisModel)
+            .where(
+                AiAnalysisModel.reuse_key == reuse_key,
+                AiAnalysisModel.status == AiAnalysisStatus.DONE.value,
+                AiAnalysisModel.deleted_at.is_(None),
+            )
+            .order_by(AiAnalysisModel.created_at.desc())
+            .limit(1)
+        )
+        m = self._session.execute(stmt).scalar_one_or_none()
+        return _model_to_ai_analysis(m) if m else None
+
+    def list_by_issue(
+        self, issue_id: str, limit: int = 20, cursor: str | None = None
+    ) -> tuple[list[AiAnalysis], str | None]:
+        stmt = select(AiAnalysisModel).where(
+            AiAnalysisModel.issue_id == issue_id,
+            AiAnalysisModel.deleted_at.is_(None),
+        )
+        if cursor:
+            try:
+                dt_cursor = datetime.fromisoformat(cursor)
+                stmt = stmt.where(AiAnalysisModel.created_at < dt_cursor)
+            except (ValueError, TypeError):
+                logger.warning("Invalid cursor format for ai analysis list: %s", cursor)
+        stmt = stmt.order_by(AiAnalysisModel.created_at.desc()).limit(limit + 1)
+        rows = list(self._session.execute(stmt).scalars().all())
+        has_next = len(rows) > limit
+        items = rows[:limit]
+        next_cursor = items[-1].created_at.isoformat() if has_next and items else None
+        return [_model_to_ai_analysis(r) for r in items], next_cursor
+
+    def soft_delete(self, analysis_id: str, actor_id: str, deleted_at: datetime) -> bool:
+        m = self._session.get(AiAnalysisModel, analysis_id)
+        if m is None or m.deleted_at is not None:
+            return False
+        m.deleted_at = deleted_at
+        m.deleted_by = actor_id
+        return True

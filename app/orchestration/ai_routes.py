@@ -25,8 +25,8 @@ from app.modules.ai.application.use_cases import (
 from app.modules.ai.domain import messages as ai_msg
 from app.modules.ai.infrastructure.chat_history_repository import SqlAlchemyChatHistoryRepository
 from app.modules.ai.infrastructure.gemini_client import GenAiGeminiClient
+from app.modules.ai.infrastructure.hybrid_transcription_service import HybridTranscriptionService
 from app.modules.ai.infrastructure.quota_repository import SqlAlchemyQuotaRepository
-from app.modules.ai.infrastructure.whisper_client import HttpWhisperClient
 from app.orchestration.assistant_data_queries import AssistantDataService
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
@@ -46,11 +46,12 @@ def _chat_history(db: Session) -> SqlAlchemyChatHistoryRepository:
 
 
 def _voice_use_case(db: Session = Depends(get_db_session)) -> ProcessVoiceUseCase:
+    quotas = SqlAlchemyQuotaRepository(db)
     return ProcessVoiceUseCase(
         session=db,
-        transcription=HttpWhisperClient(),
+        transcription=HybridTranscriptionService(quotas=quotas),
         generation=GenAiGeminiClient(),
-        quotas=SqlAlchemyQuotaRepository(db),
+        quotas=quotas,
         data=AssistantDataService(db),
         min_bytes=settings.AI_VOICE_MIN_BYTES,
         max_bytes=settings.AI_VOICE_MAX_BYTES,
@@ -59,9 +60,10 @@ def _voice_use_case(db: Session = Depends(get_db_session)) -> ProcessVoiceUseCas
 
 
 def _transcribe_use_case(db: Session = Depends(get_db_session)) -> TranscribeVoiceUseCase:
+    quotas = SqlAlchemyQuotaRepository(db)
     return TranscribeVoiceUseCase(
-        transcription=HttpWhisperClient(),
-        quotas=SqlAlchemyQuotaRepository(db),
+        transcription=HybridTranscriptionService(quotas=quotas),
+        quotas=quotas,
         min_bytes=settings.AI_VOICE_MIN_BYTES,
         max_bytes=settings.AI_VOICE_MAX_BYTES,
         max_seconds=float(settings.AI_VOICE_MAX_SECONDS),

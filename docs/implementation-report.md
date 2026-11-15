@@ -523,3 +523,37 @@ Validación local:
 - **Análisis estático y contratos:** `ruff check .`, `ruff format --check .` (353 archivos formateados), `mypy .` (0 errores en 317 archivos), `lint-imports` (3 contratos cumplidos: BR-1, BR-2, BR-4).
 - **Script de QA local en vivo:** `scripts/qa_console_ep11_part2_runner.py` (ejecución contra uvicorn local en vivo con código de salida 0; `HU_DN_07_102` a `HU_DN_07_105` en `[PASSED]`, 8 eventos persistidos en `outbox_events`).
 - **Escaneo de secretos:** `python scripts/scan_secrets.py --all` limpio (365 archivos analizados, 0 secretos).
+
+### Implementación EP-12 — Análisis de IA por imagen y video (HU_DN_07_106 … HU_DN_07_113)
+- **Migración de base de datos:** `migrations/versions/022_ep12_ai_analyses.py` y `023_ep12_ai_usage_len.py`
+  - Tabla `ai_analyses`: `id` (VARCHAR 36), `issue_id` (FK fixes CASCADE), `evidence_id` (FK evidences CASCADE), `requested_by` (FK users RESTRICT), `status` (VARCHAR 20, default PENDING), `progress_stage` (VARCHAR 20), `reuse_key` (VARCHAR 64), `prompt_version` (VARCHAR 20), `model_id` (VARCHAR 80), `response` (TEXT), `validation_status` (VARCHAR 20, default PENDING_VALIDATION), `validated_by` (FK users), `validated_at` (TIMESTAMP), `rejected_by` (FK users), `rejected_at` (TIMESTAMP), `error_code` (VARCHAR 40), `input_tokens` (INTEGER), `output_tokens` (INTEGER), `latency_ms` (INTEGER), `created_at` (TIMESTAMP), `deleted_at` (TIMESTAMP), `deleted_by` (FK users).
+  - Índices compuestos y optimizados: `ix_ai_analyses_issue_created` (`issue_id`, `created_at`), `ix_ai_analyses_evidence` (`evidence_id`), `ix_ai_analyses_reuse_key` (`reuse_key`).
+- **Lógica de Dominio y Casos de Uso (`app/modules/fixes/application/`):**
+  - `ai_use_cases.py`:
+    - `RequestAiAnalysisUseCase`: Verificación estricta de checkbox de privacidad (`user_confirmed_no_sensitive_data=True`), reutilización sin costo con `reuse_key = SHA-256(evidence.sha256 || prompt_version)` (status 200, `reused: True`), encolamiento no bloqueante con timeout de 30s (`HTTP 202 Accepted`), control de cuotas diarias independientes por usuario y visión (`ai_user_daily_limit`, `ai_vision_daily_limit`).
+    - `GetAiAnalysisStatusUseCase`: Retorno estructurado de 3 bloques con validación de límite de palabras (máx. 150), fallback de contexto insuficiente (`No hay contexto suficiente para proponer una solución.`), distintivo obligatorio de advertencia (`requires_human_validation: True`), resolución de nombres de usuario validador y rechazador, escape estricto de texto plano contra Prompt Injection e inyección de tags.
+    - `ListAiAnalysesUseCase`: Historial ordenado por fecha de creación desc, exclusión de eliminados lógicos (`deleted_at IS NULL`), control de acceso para miembros activos del proyecto.
+    - `DeleteAiAnalysisUseCase`: Confirmación previa, control RBAC (Admin, Manager o creador), bloqueo en estado de procesamiento (`status == 'PROCESSING'`), borrado suave (`deleted_at`, `deleted_by`) y registro en `audit_logs` (`action = 'ai_analysis.deleted'`) sin modificar el estado del issue ni de tareas.
+    - `ValidateAiAnalysisUseCase` (HU_DN_07_111): Restricción estricta de RBAC (solo Administrador o Gerente), validación de estado previo (`PENDING_VALIDATION` -> HTTP 409 `INVALID_VALIDATION_STATE` en caso contrario), actualización de `validation_status = VALIDATED`, registro de `validated_by` y `validated_at`. Mensaje literal: `'Respuesta de IA validada correctamente.'`.
+    - `RejectAiAnalysisUseCase` (HU_DN_07_112): Restricción estricta de RBAC (solo Administrador o Gerente), bloqueo de re-rechazo (HTTP 409 `INVALID_VALIDATION_STATE` si ya está en `REJECTED`), actualización de `validation_status = REJECTED`, registro de `rejected_by` y `rejected_at`. Mensaje literal: `'Respuesta de IA rechazada.'`.
+    - Contrato de Arquitectura DA-08 Mutación Cero (HU_DN_07_113): Ni la sugerencia de IA ni su validación o rechazo tocan jamás `fixes` ni `story_tasks`.
+  - `vision_pipeline.py`: Pipeline de visión con sanitización y redacción previa de datos sensibles en descripciones (tokens, passwords, api keys), renderizado de prompt inmutable, llamado asíncrono y parsing seguro JSON con 3 bloques y conteo de palabras <= 150.
+- **Transcripción de Voz Resiliente Híbrida (`app/modules/ai/`):**
+  - `app/modules/ai/infrastructure/gemini_transcribe_client.py`: Integración con SDK oficial `google-genai` usando `client.interactions.create`, modo `smart` con `custom_vocabulary=["DashNode", "Sprint", "Backlog", "Kanban", "HU"]` para `gemini-3.5-transcribe` y prompts estrictos de transcripción literal para modelos multimodales de respaldo.
+  - `app/modules/ai/infrastructure/hybrid_transcription_service.py`: Enrutador híbrido resiliente (Prioridad 1 Whisper opcional -> fallback automático sin error de cara al usuario a la cadena REST Gemini), control de enfriamiento (`AI_GEMINI_MODEL_COOLDOWN_SECONDS`), cuotas diarias independientes (`whisper` vs `gemini_transcribe` vs `text-generate`), audio estrictamente en memoria (nunca en disco) y filtro de silencio/alucinaciones (`[SILENCIO]`).
+- **Rutas de Orquestación:**
+  - `POST   /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses` (HU_DN_07_106)
+  - `GET    /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}` (HU_DN_07_107, HU_DN_07_110, HU_DN_07_113)
+  - `GET    /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses` (HU_DN_07_108)
+  - `DELETE /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}` (HU_DN_07_109)
+  - `POST   /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}/validate` (HU_DN_07_111)
+  - `POST   /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}/reject` (HU_DN_07_112)
+  - `POST   /api/v1/ai/voice-transcribe` (Transcripción híbrida resiliente)
+- **Quality Gates Backend:**
+  - `pytest`: **524 tests pasados** (incluyendo suite de estrés y auditoría `test_ai_analysis_stress_audit.py` con 12 pruebas de bordes y permutaciones), 0 fallos, 2 skipped.
+  - `ruff check .`: 0 errores.
+  - `ruff format --check .`: 364 archivos formateados.
+  - `mypy app`: 0 errores en 231 archivos fuente.
+  - `lint-imports`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
+  - `python scripts/scan_secrets.py`: 0 secretos.
+  - `scripts/qa_console_ep12_runner.py`: QA interactivo live HTTP contra Uvicorn pasando al 100% (código de salida 0) con suite de estrés en vivo.

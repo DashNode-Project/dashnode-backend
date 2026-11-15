@@ -9,11 +9,16 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.ai.infrastructure.models import AiDailyUsageModel, SystemConfigModel
 from app.modules.auth.infrastructure.models import UserModel
 from app.modules.backlog.infrastructure.models import StoryTaskModel, TaskStatusHistoryModel
 from app.modules.fixes.domain.entities import TaskSnapshot
 from app.modules.notifications.infrastructure.models import NotificationModel
-from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
+from app.modules.projects.infrastructure.models import (
+    AuditLogModel,
+    ProjectMemberModel,
+    ProjectModel,
+)
 from app.shared.infrastructure.clock import SystemClock
 from app.shared.infrastructure.id_generator import UuidGenerator
 
@@ -318,3 +323,90 @@ class SqlAlchemyIssueNotificationSender:
                     created_at=when,
                 )
             )
+
+
+class SqlAlchemyAiQuotaLookup:
+    """Manages per-user and global daily vision AI limits (Anexo F)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def check_user_limit(self, user_id: str) -> bool:
+        today = _clock.now().date()
+        user_limit = self._get_config_int("ai_user_daily_limit", default=20)
+        global_limit = self._get_config_int("ai_vision_daily_limit", default=200)
+
+        # Check user count
+        user_row = self._session.get(
+            AiDailyUsageModel, {"service": f"vision_user_{user_id}", "usage_date": today}
+        )
+        user_count = user_row.count if user_row else 0
+        if user_count >= user_limit:
+            return False
+
+        # Check global vision count
+        global_row = self._session.get(
+            AiDailyUsageModel, {"service": "vision_global", "usage_date": today}
+        )
+        global_count = global_row.count if global_row else 0
+        return global_count < global_limit
+
+    def consume_quota(self, user_id: str) -> None:
+        today = _clock.now().date()
+
+        # Increment user count
+        user_service = f"vision_user_{user_id}"
+        user_row = self._session.get(
+            AiDailyUsageModel, {"service": user_service, "usage_date": today}
+        )
+        if user_row is None:
+            self._session.add(AiDailyUsageModel(service=user_service, usage_date=today, count=1))
+        else:
+            user_row.count += 1
+
+        # Increment global vision count
+        global_row = self._session.get(
+            AiDailyUsageModel, {"service": "vision_global", "usage_date": today}
+        )
+        if global_row is None:
+            self._session.add(AiDailyUsageModel(service="vision_global", usage_date=today, count=1))
+        else:
+            global_row.count += 1
+
+        self._session.flush()
+
+    def _get_config_int(self, key: str, default: int) -> int:
+        row = self._session.get(SystemConfigModel, key)
+        if row is None:
+            return default
+        try:
+            return int(row.value)
+        except ValueError:
+            return default
+
+
+class SqlAlchemyAuditLogRecorder:
+    """Records audit trail events for AI response deletions (RNF-SEG-07)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def record(
+        self,
+        user_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        created_at: datetime,
+    ) -> None:
+        self._session.add(
+            AuditLogModel(
+                id=_id_gen.generate(),
+                user_id=user_id,
+                action=action,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                created_at=created_at,
+            )
+        )
+        self._session.flush()
