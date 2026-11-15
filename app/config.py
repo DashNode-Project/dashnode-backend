@@ -97,6 +97,12 @@ class Settings(BaseSettings):
         description="Wall-clock limit for POST /ai/text-generate (includes orchestrator + Gemini).",
     )
 
+    # --- EP-11 Issues and Evidences (HU_DN_07_100 signed URLs HMAC) -------------
+    SECRET_KEY: SecretStr = Field(
+        default=SecretStr("insecure-dev-secret-key-change-in-production-ep11!"),
+        description="Key used for HMAC signing of evidence download URLs",
+    )
+
     @model_validator(mode="after")
     def _validate_security_profile(self) -> Self:
         if "*" in self.cors_origins_list:

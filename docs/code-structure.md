@@ -195,3 +195,28 @@ tests/unit/test_ai_use_cases.py
 tests/api/test_ai_api.py
 ```
 
+
+
+## EP-11 — Issues y evidencias (HU_DN_07_97 … HU_DN_07_101)
+
+```
+app/modules/fixes/
+  domain/          entities (Issue, Evidence, IssueSeverity, IssueType, IssueStatus, EvidenceType), messages (literales), ports (IssueRepository, EvidenceRepository, EvidenceFileStorage, SignedUrlGenerator, ProjectLookupPort, UserDisplayLookupPort, IssueNotificationPort)
+  application/     dtos (CreateIssueCommand, IssueDTO, IssueDetailDTO, EvidenceDTO, AIAnalysisSummaryDTO, IssueListResponse, IssueOperationResponse, EvidenceOperationResponse), file_validation (inspección binaria, stripping EXIF, polyglots, duración video), use_cases (CreateIssueUseCase, ListIssuesUseCase, GetIssueDetailUseCase, AttachEvidenceUseCase, DownloadEvidenceUseCase)
+  infrastructure/  models (FixModel, EvidenceModel), repositories (SqlAlchemyFixRepository, SqlAlchemyEvidenceRepository, LocalEvidenceFileStorage, HmacSignedUrlGenerator)
+app/orchestration/issue_routes.py
+  POST /projects/{project_id}/issues                               (HU_DN_07_97: Creación con Idempotency-Key y notificación)
+  GET  /projects/{project_id}/issues                               (HU_DN_07_99, HU_DN_07_101: Listado, orden por defecto, paginación cursor y filtros)
+  GET  /projects/{project_id}/issues/{issue_id}                    (HU_DN_07_100: Detalle de issue, resumen IA y evidencias firmadas)
+  POST /projects/{project_id}/issues/{issue_id}/evidences          (HU_DN_07_98: Subida de archivo, validaciones de peso/formato y hash SHA-256)
+  GET  /projects/{project_id}/issues/{issue_id}/evidences/{id}/content (HU_DN_07_100: Descarga con firma HMAC SHA-256 y vencimiento de 5 min)
+migrations/versions/
+  020_ep11_issues_and_evidences.py
+  021_ep11_issue_task_outbox.py                                    (Columnas task_id, resolved_by, version en fixes; status_before_correction, version en story_tasks; tabla outbox_events)
+app/shared/infrastructure/outbox.py                                (OutboxEventModel y SqlAlchemyOutboxStore para eventos transaccionales de issues y tareas)
+tests/unit/test_fixes_domain.py                                    (13 pruebas unitarias: validaciones de dominio, stripping EXIF, polyglots, video duration, HMAC, nota de resolución y restauración)
+tests/api/test_issues_api.py                                       (5 tests integrales para HU_DN_07_97 a HU_DN_07_101)
+tests/api/test_issues_lifecycle_api.py                             (4 tests integrales para HU_DN_07_102 a HU_DN_07_105: roles, 409, rollback atómico y vínculo con tareas)
+scripts/qa_console_ep11_runner.py                                  (Script de QA automatizado para validaciones locales exhaustivas HU_DN_07_97 a HU_DN_07_101)
+scripts/qa_console_ep11_part2_runner.py                            (Script de QA HTTP en vivo contra uvicorn para HU_DN_07_102 a HU_DN_07_105)
+```

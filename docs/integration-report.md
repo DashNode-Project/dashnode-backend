@@ -317,3 +317,78 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | Frontend | `npm run test:coverage` | 333 pruebas pasadas en 42 suites (statements 81.3%, lines 84.25%) | APROBADO |
 | Frontend | `scan-secrets.mjs` | 0 secretos detectados | APROBADO |
 
+
+
+---
+
+## Épica 11: Issues y evidencias (HU_DN_07_97 … HU_DN_07_101)
+
+### Contrato Compartido de API y Respuestas
+
+| Método | Endpoint | Rol Mínimo | Propósito | Respuesta Esperada |
+|---|---|---|---|---|
+| `POST` | `/api/v1/projects/{project_id}/issues` | Miembro activo (Admin, Gerente, Dev) | Crear un nuevo issue (Fix) | 201 Created: `{"message": "Issue creado correctamente.", "issue": {...}}`; 400 Validation Error; Idempotency-Key soportada |
+| `GET` | `/api/v1/projects/{project_id}/issues` | Miembro activo | Listar issues con orden por defecto, filtros y cursor | 200 OK: `{"items": [...], "next_cursor": "...", "total": N}`; si vacío: `'El proyecto no tiene issues.'` o `'No se encontraron issues con los filtros aplicados.'` |
+| `GET` | `/api/v1/projects/{project_id}/issues/{issue_id}` | Miembro activo | Consultar detalle de un issue | 200 OK: `IssueDetail` con evidencias firmadas (expiran en 5 min) y resumen consultivo de IA; 404 si no existe |
+| `POST` | `/api/v1/projects/{project_id}/issues/{issue_id}/evidences` | Miembro activo | Adjuntar evidencia (multipart/form-data) | 201 Created: `{"message": "Evidencia adjuntada correctamente.", "evidence": {...}}`; 400 si formato no admitido o límite excedido; 409 si duplicado SHA-256 |
+| `GET` | `/api/v1/projects/{project_id}/issues/{issue_id}/evidences/{id}/content` | Público con URL firmada | Descarga/visualización de contenido | 200 OK con binary content y mime-type; 403 si firma HMAC alterada o timestamp expirado (> 5 min) |
+
+### Matriz de Trazabilidad y Verificación E2E
+
+| Historia de Usuario | Frontend | Backend | Reglas y Criterios Verificados |
+|---|---|---|---|
+| **HU_DN_07_97** | Botón "Nuevo fix" en pestaña "Issues", modal `CreateIssueModal`, validaciones locales de título (1-100), descripción (<=5000), severidad y tipo. Toast de éxito. | `CreateIssueUseCase`, `POST /projects/{id}/issues` | Título obligatorio, longitud máx 100 caracteres; descripción opcional máx 5000 caracteres; severidad obligatoria (Baja, Media, Alta, Crítica); tipo obligatorio (Bug, Regresión, Rendimiento, Seguridad, UX). Idempotency-Key devuelve el issue sin duplicar. Notificación encolada. Estado inicial `open`. |
+| **HU_DN_07_98** | Botón "Adjuntar evidencia", modal `AddEvidenceModal`, barra de progreso, validación de tipo y peso. Toast de éxito. | `AttachEvidenceUseCase`, `POST /projects/{id}/issues/{id}/evidences` | Formatos admitidos: Imagen (<= 5MB, JPG/PNG/WEBP), Video (<= 25MB y 60s, MP4/WEBM), Registro (<= 1MB, LOG/TXT). Rechazo de polyglots. Stripping de EXIF en imágenes. Detección de duplicados por hash SHA-256 (`'Ya existe una evidencia idéntica asociada a este issue.'`). Almacenamiento privado seguro con UUID. |
+| **HU_DN_07_99** | Pestaña `ProjectIssuesTab`, listado en columna izquierda con badges de severidad, estado, tipo, fecha, responsable y conteo de evidencias. Paginación con cursor. | `ListIssuesUseCase`, `GET /projects/{id}/issues` | Orden por defecto: abiertos primero (`open`, `in-progress`), severidad (`critical` > `high` > `medium` > `low`), fecha desc. Paginación por cursor de 25 elementos. Restricción para miembros activos. Estado vacío: `'El proyecto no tiene issues.'`. |
+| **HU_DN_07_100** | Vista de detalle de issue en columna derecha con campos generales, nota de resolución, responsable, previsualización de evidencias y sección consultiva de IA (DA-08). | `GetIssueDetailUseCase` y `DownloadEvidenceUseCase` | URLs de evidencia firmadas con HMAC SHA-256 y vencimiento estricto de 5 minutos (300 s). Rechazo con 403 Forbidden ante firmas inválidas o expiradas. Descarga y vista previa de evidencias funcional. |
+| **HU_DN_07_101** | Barra de filtros combinables (Estado, Severidad, Tipo) sincronizada en URL con `useSearchParams` y reseteo de cursor. | `ListIssuesUseCase` con filtros en queries | Filtrado combinado en servidor con AND lógico. Mensaje literal sin coincidencias: `'No se encontraron issues con los filtros aplicados.'`. |
+
+### Resumen de Quality Gates y Scripts QA
+
+| Repositorio | Verificación | Resultado | Estado |
+|---|---|---|---|
+| Backend | `tests/unit/test_fixes_domain.py` | 9 pruebas unitarias pasando | APROBADO |
+| Backend | `tests/api/test_issues_api.py` | 5 pruebas integrales de API pasando | APROBADO |
+| Backend | `scripts/qa_console_ep11_runner.py` | 7 pasos de QA automatizados (100% OK) | APROBADO |
+| Backend | `scripts/scan_secrets.py --all` | 0 secretos detectados (349 archivos) | APROBADO |
+| Backend | `BR-4 Module Isolation` | `app.modules.fixes` aislado e independiente | APROBADO |
+| Frontend | `src/features/issues/validation.test.ts` | Pruebas de validación unitarias pasando | APROBADO |
+| Frontend | `src/features/issues/api.test.ts` | Pruebas de cliente API pasando | APROBADO |
+| Frontend | `src/features/issues/ProjectIssuesTab.test.tsx` | Pruebas de integración de componentes pasando | APROBADO |
+| Frontend | Escaneo de secretos | 0 secretos detectados (213 archivos) | APROBADO |
+
+---
+
+## Continuación Épica 11: Ciclo de vida de issues y vínculo con tareas (HU_DN_07_102 … HU_DN_07_105)
+
+### Contrato Compartido de API y Respuestas
+
+| Método | Endpoint | Rol Mínimo | Propósito | Respuesta Esperada |
+|---|---|---|---|---|
+| `PATCH` | `/api/v1/projects/{project_id}/issues/{issue_id}/assignee` | Administrador o Gerente | Asignar responsable (desarrollador miembro activo) | 200 OK: `{"message": "...", "issue": {...}}`; 403 si rol es Desarrollador; 409 Conflict si `version` obsoleta |
+| `POST` | `/api/v1/projects/{project_id}/issues/{issue_id}/resolve` | Miembro activo del proyecto | Resolver issue con nota y actualizar tarea si era el último issue abierto | 200 OK: `{"message": "...", "issue": {...}, "task_status": ...}`; 400/422 si nota vacía o > 2000 chars; 409 Conflict por concurrencia |
+| `POST` | `/api/v1/projects/{project_id}/issues/{issue_id}/close` | Administrador o Gerente | Cerrar un issue en estado `resolved` y restaurar tarea si aplica | 200 OK: `{"message": "...", "issue": {...}, "task_status": ...}`; 403 si Desarrollador; 409 si no está `resolved` o `version` desactualizada |
+| `POST` | `/api/v1/projects/{project_id}/tasks/{task_id}/report-fix` | Administrador, Gerente o asignado | Reportar fix desde Backlog/Kanban y mover tarea atómicamente a `CORRECTION` | 201 Created: `{"message": "...", "issue": {...}, "task_status": "CORRECTION"}`; soporta `Idempotency-Key`; rollback total ante fallo |
+
+### Matriz de Trazabilidad y Verificación E2E
+
+| Historia de Usuario | Frontend | Backend | Reglas y Criterios Verificados |
+|---|---|---|---|
+| **HU_DN_07_102** | Selector `Responsable` en `ProjectIssuesTab` cargado con desarrolladores activos y recarga automática ante HTTP 409. Deshabilitado para desarrolladores. | `AssignIssueUseCase`, `PATCH /projects/{id}/issues/{id}/assignee` | Solo Administrador o Gerente pueden asignar. Destinatario debe ser desarrollador miembro activo. Bloqueo optimista por `version`. Notificación al asignado y registro transaccional en `outbox_events`. |
+| **HU_DN_07_103** | Modal `ResolveIssueModal` (nota obligatoria <=2000 chars), botones `Resolver` y `Cerrar issue` (solo Admin/Gerente). | `ResolveIssueUseCase`, `CloseIssueUseCase` | Nota de resolución obligatoria (1..2000 chars). Cierre (`resolved` -> `closed`) exclusivo de Admin/Gerente. Bloqueo optimista en ambas transiciones y notificación al creador. |
+| **HU_DN_07_104** | Botón `Reportar fix` en Backlog (`TaskWorkModal`) y Kanban (`KanbanCard`/`ProjectKanbanTab`), título `Fix: ${task.name}` e insignia `En corrección`. | `ReportTaskFixUseCase`, `POST /projects/{id}/tasks/{id}/report-fix` | Transacción atómica que crea issue con `task_id` y pasa tarea a `CORRECTION` guardando `status_before_correction` solo en el primer fix activo; rollback completo ante fallos (verificado con inyección de fallo en outbox). |
+| **HU_DN_07_105** | Selector condicional `Estado de la tarea` en `ResolveIssueModal` prellenado con `task_previous_status` o `IN_PROGRESS`; bloqueado si `other_open_issues_count > 0`. | `ResolveIssueUseCase`, `CloseIssueUseCase`, `resolve_restorable_task_status` | La tarea solo sale de `CORRECTION` al resolver/cerrar su último issue abierto vinculado; respaldo con `status_before_correction` o `'IN_PROGRESS'` cuando es nulo. |
+
+### Resumen de Quality Gates y Scripts QA (Continuación EP-11)
+
+| Repositorio | Verificación | Resultado | Estado |
+|---|---|---|---|
+| Backend | `pytest tests/unit/test_fixes_domain.py tests/api/test_issues_api.py tests/api/test_issues_lifecycle_api.py -v` | 22 pruebas unitarias y de API pasando | APROBADO |
+| Backend | `python -m pytest --cov=app --cov-fail-under=80` | 482 passed, 2 skipped, cobertura 81.39% | APROBADO |
+| Backend | `tests/integration/test_postgres_schema_and_registration.py` + `test_postgres_login_sessions.py` | 10 passed, migración `021_ep11_issue_task_outbox` verificada | APROBADO |
+| Backend | `ruff check .`, `ruff format --check .`, `mypy .`, `lint-imports` | 0 errores lint/tipos (317 archivos), 3 contratos cumplidos | APROBADO |
+| Backend | `scripts/qa_console_ep11_part2_runner.py` | Ejecución HTTP en vivo (`HU_DN_07_102`..`105` PASSED, 8 outbox events) | APROBADO |
+| Backend | `python scripts/scan_secrets.py --all` | 0 secretos detectados (365 archivos) | APROBADO |
+| Frontend | `npx vitest run src/features/issues src/features/backlog src/features/kanban` | 8 archivos, 56/56 pruebas pasando | APROBADO |
+| Frontend | `npm run typecheck` y `npm run build` | 0 errores TS, bundle Vite generado (2037 módulos, 1.46s) | APROBADO |
+| Frontend | `node scripts/scan-secrets.mjs` | 0 secretos detectados (226 archivos) | APROBADO |

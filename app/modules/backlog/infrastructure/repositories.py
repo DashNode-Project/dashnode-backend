@@ -97,6 +97,8 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
             is_blocked=bool(model.is_blocked),
             blocked_reason=model.blocked_reason,
             blocked_by_task_id=model.blocked_by_task_id,
+            status_before_correction=model.status_before_correction,
+            version=int(model.version) if model.version is not None else 1,
         )
 
     def save_epic(self, epic: Epic) -> None:
@@ -227,6 +229,8 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
                 is_blocked=task.is_blocked,
                 blocked_reason=task.blocked_reason,
                 blocked_by_task_id=task.blocked_by_task_id,
+                status_before_correction=task.status_before_correction,
+                version=task.version,
             )
         )
 
@@ -247,6 +251,8 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
         model.is_blocked = task.is_blocked
         model.blocked_reason = task.blocked_reason
         model.blocked_by_task_id = task.blocked_by_task_id
+        model.status_before_correction = task.status_before_correction
+        model.version = task.version
 
     def delete_story_task(self, task_id: str) -> None:
         self._session.execute(delete(StoryTaskModel).where(StoryTaskModel.id == task_id))

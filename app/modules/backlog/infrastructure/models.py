@@ -73,6 +73,8 @@ class StoryTaskModel(Base):
     blocked_by_task_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("story_tasks.id", ondelete="SET NULL"), nullable=True
     )
+    status_before_correction: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
 
 class TaskTimeLogModel(Base):
