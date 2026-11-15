@@ -14,6 +14,21 @@ class ProjectRole(StrEnum):
     MEMBER = "member"
 
 
+class ProjectPriority(StrEnum):
+    BAJA = "baja"
+    MEDIA = "media"
+    ALTA = "alta"
+    CRITICA = "critica"
+
+
+class ProjectStatus(StrEnum):
+    PLANIFICACION = "planificacion"
+    ACTIVO = "activo"
+    EN_PAUSA = "en_pausa"
+    COMPLETADO = "completado"
+    CANCELADO = "cancelado"
+
+
 @dataclass
 class ProjectMember:
     project_id: str
@@ -28,13 +43,14 @@ class Project:
     name: str
     description: str
     owner_id: str
+    manager_id: str
+    priority: ProjectPriority
+    tech_stack: list[str]
+    meeting_link: str | None
+    status: ProjectStatus
     created_at: datetime
     updated_at: datetime
+    deleted_at: datetime | None = None
 
-    def validate_name(self) -> None:
-        """Validates that project name meets system length constraints."""
-        clean = self.name.strip()
-        if len(clean) < 3:
-            raise ValueError("El nombre del proyecto debe tener al menos 3 caracteres.")
-        if len(clean) > 100:
-            raise ValueError("El nombre del proyecto no puede exceder 100 caracteres.")
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None

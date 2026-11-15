@@ -1,74 +1,82 @@
 """
-Security and authentication orchestration.
-Extracts caller identity for cross-module dependency injection.
-Decoupled from specific modules to ensure BR-4 independence.
+Security orchestration: resolves the caller identity from the session cookie.
+
+Feature modules must not import each other (BR-4, checked transitively), so this file
+knows nothing about the auth module: the concrete authenticator is injected at
+start-up by `app.main` through `register_session_authenticator`.
 @sad AD-09, 4.1.1
-@origin [SAD-Propuesto]
+@origin [HU-Spec]
 """
 
-from collections.abc import Generator
-from datetime import UTC, datetime
+from collections.abc import Callable
 
-import jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.shared.application.identity import CurrentUser
-from app.shared.infrastructure.database import SessionLocal
+from app.shared.application.identity import CurrentSession, CurrentUser
+from app.shared.infrastructure.database import get_db_session
 
-security = HTTPBearer(auto_error=False)
+SessionAuthenticator = Callable[[str | None], CurrentSession]
+SessionAuthenticatorFactory = Callable[[Session], SessionAuthenticator]
 
-
-def get_db() -> Generator[Session, None, None]:
-    """Provides a scoped database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+_factory: SessionAuthenticatorFactory | None = None
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-) -> CurrentUser:
-    """FastAPI dependency to authenticate the caller using the signed JWT."""
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Falta la cabecera de autorización Bearer.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+def register_session_authenticator(factory: SessionAuthenticatorFactory) -> None:
+    """Wire the concrete session validation (called once by the composition root)."""
+    global _factory
+    _factory = factory
 
-    try:
-        payload: dict[str, object] = jwt.decode(
-            credentials.credentials,
-            settings.JWT_SECRET,
-            algorithms=[settings.JWT_ALGORITHM],
-            audience=settings.JWT_AUDIENCE,
-            issuer=settings.JWT_ISSUER,
-        )
-    except jwt.PyJWTError as err:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token inválido o expirado.",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from err
 
-    user_id = str(payload.get("sub", ""))
-    email = str(payload.get("email", ""))
-    role = str(payload.get("role", "developer"))
-    name = str(payload.get("name", ""))
-    iat_val = payload.get("iat", 0)
-    iat_ts = int(iat_val) if isinstance(iat_val, int | float) else 0
-    created_at = datetime.fromtimestamp(iat_ts, tz=UTC)
+def get_session_token(request: Request) -> str | None:
+    """Opaque session token from the HttpOnly cookie (never from headers or the body)."""
+    return request.cookies.get(settings.SESSION_COOKIE_NAME)
 
-    return CurrentUser(
-        id=user_id,
-        email=email,
-        name=name,
-        role=role,
-        is_active=True,
-        created_at=created_at,
-    )
+
+def get_current_session(
+    token: str | None = Depends(get_session_token),
+    db: Session = Depends(get_db_session),
+) -> CurrentSession:
+    """Validate the session on the server; raises the story's literal errors."""
+    if _factory is None:
+        raise RuntimeError("Session authenticator has not been registered.")
+    return _factory(db)(token)
+
+
+def get_current_user(session: CurrentSession = Depends(get_current_session)) -> CurrentUser:
+    """FastAPI dependency used by every protected endpoint."""
+    return session.user
+
+
+def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    from app.shared.domain.authorization import AccessDeniedError
+
+    if user.role != "admin":
+        raise AccessDeniedError()
+    return user
+
+
+def require_manager(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    from app.shared.domain.authorization import AccessDeniedError
+
+    if user.role != "manager":
+        raise AccessDeniedError()
+    return user
+
+
+def require_admin_or_manager(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    from app.shared.domain.authorization import AccessDeniedError
+
+    if user.role not in ("admin", "manager"):
+        raise AccessDeniedError()
+    return user
+
+
+def require_non_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Managers and developers only; administrators manage users (EP-01)."""
+    from app.shared.domain.authorization import AccessDeniedError
+
+    if user.role == "admin":
+        raise AccessDeniedError()
+    return user

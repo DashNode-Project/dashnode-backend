@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
-# Git pre-commit hook enforcing Trunk Quality Gates
+# Git pre-commit hook enforcing the DashNode quality gates.
 set -e
 
-echo "🔍 [Trunk-Gate] Validating commit against DashNode Quality Gates..."
+echo "[gate] 0/6 Secret scan (staged files)..."
+python scripts/scan_secrets.py
 
-echo "1/5 Checking linting (Ruff)..."
+echo "[gate] 1/6 Ruff lint..."
 ruff check .
 
-echo "2/5 Checking code formatting (Ruff format)..."
+echo "[gate] 2/6 Ruff format..."
 ruff format --check .
 
-echo "3/5 Checking strict static types (Mypy)..."
+echo "[gate] 3/6 Mypy strict..."
 mypy .
 
-echo "4/5 Checking architectural contracts (Import Linter)..."
+echo "[gate] 4/6 Import Linter contracts..."
 lint-imports
 
-echo "5/5 Running test suite & coverage (Pytest)..."
-pytest tests/unit tests/application tests/api --cov=app --cov-fail-under=80
+echo "[gate] 5/6 Tests and coverage..."
+pytest tests/unit tests/application tests/api --cov=app --cov-fail-under=80 -q
 
-echo "✅ [Trunk-Gate] All quality gates passed! Proceeding with commit."
+echo "[gate] All quality gates passed."
