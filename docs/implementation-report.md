@@ -557,3 +557,11 @@ Validación local:
   - `lint-imports`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
   - `python scripts/scan_secrets.py`: 0 secretos.
   - `scripts/qa_console_ep12_runner.py`: QA interactivo live HTTP contra Uvicorn pasando al 100% (código de salida 0) con suite de estrés en vivo.
+
+### Implementación EP-13 — Métricas de IA e interacciones (IAM v1, HU_DN_08_118+)
+- **Migración:** `024_ep13_ai_interactions.py` — tablas `ai_interactions`, `ai_interaction_steps`, `ai_ratings`, `ai_registry_access_log`; columna opcional `ai_analyses.interaction_id`.
+- **Módulo `app/modules/ai_metrics/`:** registro fail-closed (`InteractionRegistry`), agregaciones (`AiMetricsService`), RBAC Admin/Gerente global o proyectos gestionados; desarrollador HTTP 403 con texto IAM.
+- **Rutas:** `app/orchestration/ai_metrics_routes.py` — resumen, por usuario, listado, detalle, valoración PUT (1–5).
+- **Cableado:** asistente texto/voz (`use_cases.py`), análisis visual (`ai_use_cases.py`), consultas determinísticas METRICS_* en `orchestrator.py` sin Gemini para cifras; `METRICS_QUERY` con `counts_as_usage=false`.
+- **Pruebas:** `tests/unit/test_ai_metrics_service.py`, `tests/unit/test_assistant_metrics_intent_parser.py`, `tests/api/test_ai_metrics_api.py`.
+- **Diferido v1:** rollups `ai_metrics_daily`, cron de purga (solo `expires_at`), exportación, trigger PG de inmutabilidad en ratings.
