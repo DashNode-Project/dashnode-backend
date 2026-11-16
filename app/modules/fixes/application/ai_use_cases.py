@@ -9,7 +9,13 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Callable
+from typing import cast
 
+from app.modules.ai_metrics.application.interaction_registry import (
+    SOURCE_ISSUE_ANALYSIS,
+    InteractionRegistry,
+    StepRecord,
+)
 from app.modules.fixes.application.dtos import (
     AiAnalysisListItemDTO,
     AiAnalysisListResponse,
@@ -70,6 +76,7 @@ from app.modules.fixes.domain.ports import (
 )
 from app.shared.application.identity import CurrentUser
 from app.shared.application.ports import Clock, IdGenerator, UnitOfWork
+from app.shared.infrastructure.database import SqlAlchemyUnitOfWork
 
 logger = logging.getLogger(__name__)
 
@@ -225,12 +232,22 @@ class RequestAiAnalysisUseCase:
 
         evidence = self._evidence_repo.get_by_id(analysis.evidence_id)
         issue = self._issue_repo.get_by_id(analysis.issue_id)
+        registry = InteractionRegistry(cast(SqlAlchemyUnitOfWork, self._uow).session)
+        interaction_id: str | None = None
         if evidence is None or issue is None:
             analysis.status = AiAnalysisStatus.FAILED
             analysis.error_code = "EVIDENCE_LOAD_ERROR"
             self._ai_repo.save(analysis)
             self._uow.commit()
             return
+
+        interaction_id = registry.start_pending(
+            user_id=actor_id,
+            project_id=issue.project_id,
+            source=SOURCE_ISSUE_ANALYSIS,
+            request_text=f"issue:{analysis.issue_id}",
+        )
+        self._uow.commit()
 
         try:
             # Stage: PROCESSING / PREPROCESSING
@@ -247,6 +264,9 @@ class RequestAiAnalysisUseCase:
                 analysis.status = AiAnalysisStatus.FAILED
                 analysis.error_code = "EVIDENCE_LOAD_ERROR"
                 self._ai_repo.save(analysis)
+                if interaction_id:
+                    registry.complete_error(interaction_id, error_code="EVIDENCE_LOAD_ERROR")
+                    registry.link_analysis(analysis_id, interaction_id)
                 self._uow.commit()
                 return
 
@@ -282,6 +302,28 @@ class RequestAiAnalysisUseCase:
             analysis.model_id = model_id
             analysis.error_code = None
             self._ai_repo.save(analysis)
+            if interaction_id:
+                registry.record_step(
+                    interaction_id,
+                    1,
+                    StepRecord(
+                        step_type="VISION_ANALYSIS",
+                        status="SUCCESS",
+                        model_id=model_id,
+                        input_tokens=in_tokens or 0,
+                        output_tokens=out_tokens or 0,
+                        latency_ms=latency or 0,
+                    ),
+                )
+                registry.complete_success(
+                    interaction_id,
+                    response_text=result.problem_description[:2000] if result else None,
+                    model_id=model_id,
+                    input_tokens=in_tokens or 0,
+                    output_tokens=out_tokens or 0,
+                    total_latency_ms=latency or 0,
+                )
+                registry.link_analysis(analysis_id, interaction_id)
             self._uow.commit()
 
         except VisionPipelineError as err:
@@ -290,6 +332,9 @@ class RequestAiAnalysisUseCase:
             analysis.progress_stage = None
             analysis.error_code = err.error_code
             self._ai_repo.save(analysis)
+            if interaction_id:
+                registry.complete_error(interaction_id, error_code=err.error_code)
+                registry.link_analysis(analysis_id, interaction_id)
             self._uow.commit()
         except Exception as exc:
             logger.exception("Unexpected error in vision worker: %s", exc)
@@ -297,6 +342,9 @@ class RequestAiAnalysisUseCase:
             analysis.progress_stage = None
             analysis.error_code = "AI_PROVIDER_ERROR"
             self._ai_repo.save(analysis)
+            if interaction_id:
+                registry.complete_error(interaction_id, error_code="AI_PROVIDER_ERROR")
+                registry.link_analysis(analysis_id, interaction_id)
             self._uow.commit()
 
 

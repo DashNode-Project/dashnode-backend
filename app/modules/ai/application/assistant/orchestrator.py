@@ -42,7 +42,17 @@ from app.modules.ai.application.prompt_builder import (
 )
 from app.modules.ai.domain.errors import GeminiProcessingError, QuotaExhaustedError
 from app.modules.ai.domain.ports import AssistantDataPort, GenerationPort, QuotaPort
+from app.modules.ai_metrics.application.ai_metrics_service import (
+    AiMetricsService,
+    format_metrics_chat_answer,
+)
+from app.modules.ai_metrics.application.interaction_registry import (
+    SOURCE_METRICS_QUERY,
+)
+from app.shared.application.identity import CurrentUser
+from app.shared.domain.errors import AppError
 from app.shared.infrastructure.ai_request_trace import log_ai_stage
+from app.shared.infrastructure.clock import SystemClock
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +112,12 @@ class AssistantOrchestrator:
         self._quotas = quotas
         self._data = data
         self._state = ConversationStateStore(session)
+        self._answer_meta: dict[str, object] | None = None
+
+    def consume_answer_meta(self) -> dict[str, object] | None:
+        meta = self._answer_meta
+        self._answer_meta = None
+        return meta
 
     def answer(
         self,
@@ -194,6 +210,19 @@ class AssistantOrchestrator:
             return (
                 "Hola. Soy el asistente de DashNode. Puedo consultar sus proyectos, miembros, "
                 "sprints, historias de usuario, tareas, reuniones y documentación autorizados."
+            )
+
+        if intent.intent in {
+            IntentType.METRICS_SUMMARY,
+            IntentType.METRICS_BY_USER,
+            IntentType.METRICS_LIST,
+        }:
+            return self._metrics_intent_answer(
+                intent,
+                user_id,
+                role,
+                optional_project_id,
+                metrics,
             )
 
         if intent.intent == IntentType.EXPLAIN_USER_STORY_WRITING:
@@ -738,6 +767,76 @@ class AssistantOrchestrator:
                 "No pude generar ejemplos con IA ahora. "
                 "Marque cualquier ejemplo como propuesta educativa, no como HU real."
             )
+
+    def _metrics_intent_answer(
+        self,
+        intent: ParsedIntent,
+        user_id: str,
+        role: str,
+        optional_project_id: str | None,
+        metrics: AssistantRequestMetrics,
+    ) -> str:
+        metrics.path = "metrics_deterministic"
+        now = SystemClock().now()
+        actor = CurrentUser(
+            id=user_id,
+            email="assistant@local",
+            name="Asistente",
+            role=role,
+            is_active=True,
+            created_at=now,
+        )
+        service = AiMetricsService(self._session)
+        period_key = intent.metrics_period.value
+        try:
+            if intent.intent == IntentType.METRICS_SUMMARY:
+                payload = service.get_summary(
+                    actor,
+                    period=period_key,
+                    from_iso=None,
+                    to_iso=None,
+                    project_id=optional_project_id,
+                )
+            elif intent.intent == IntentType.METRICS_BY_USER:
+                payload = service.get_by_user(
+                    actor,
+                    period=period_key,
+                    from_iso=None,
+                    to_iso=None,
+                    project_id=optional_project_id,
+                )
+            else:
+                payload = service.list_interactions(
+                    actor,
+                    period=period_key,
+                    from_iso=None,
+                    to_iso=None,
+                    project_id=optional_project_id,
+                    source=None,
+                    limit=20,
+                    offset=0,
+                )
+        except AppError as exc:
+            if exc.code == "AI_METRICS_FORBIDDEN":
+                self._answer_meta = {
+                    "intent": intent.intent.value,
+                    "period": period_key,
+                    "clarification": exc.message,
+                    "registry_source": SOURCE_METRICS_QUERY,
+                }
+                return exc.message
+            raise
+
+        answer = format_metrics_chat_answer(payload)
+        self._answer_meta = {
+            "intent": intent.intent.value,
+            "period": period_key,
+            "scope": payload.get("scope"),
+            "data": payload,
+            "panel_link": "/inicio/administrador/metricas-ia",
+            "registry_source": SOURCE_METRICS_QUERY,
+        }
+        return answer
 
     def _fallback_llm(
         self,

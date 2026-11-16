@@ -46,3 +46,10 @@ class TextGenerateResponse(BaseModel):
     assistant_response: str | None = None
     status: AssistantResponseStatus
     error: str | None = None
+    intent: str | None = None
+    period: str | None = None
+    scope: str | None = None
+    data: dict[str, object] | None = None
+    panel_link: str | None = None
+    clarification: str | None = None
+    interaction_id: str | None = None

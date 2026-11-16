@@ -14,6 +14,7 @@ from app.config import settings
 from app.modules.auth.api.routes import router as auth_router
 from app.modules.notifications.api.routes import router as notifications_router
 from app.modules.tasks.api.routes import router as tasks_router
+from app.orchestration.ai_metrics_routes import router as ai_metrics_router
 from app.orchestration.ai_routes import router as ai_router
 from app.orchestration.auth_container import build_session_authenticator
 from app.orchestration.availability_routes import router as availability_router
@@ -65,6 +66,7 @@ app.include_router(sprint_router, prefix="/api/v1")
 app.include_router(kanban_router, prefix="/api/v1")
 app.include_router(documentation_router, prefix="/api/v1")
 app.include_router(ai_router, prefix="/api/v1")
+app.include_router(ai_metrics_router, prefix="/api/v1")
 app.include_router(issue_router, prefix="/api/v1")
 
 
