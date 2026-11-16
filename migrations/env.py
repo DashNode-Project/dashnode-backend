@@ -4,6 +4,13 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.config import settings
+from app.modules.ai.infrastructure.models import AiChatMessageModel  # noqa: F401
+from app.modules.ai_metrics.infrastructure.models import (  # noqa: F401
+    AiInteractionModel,
+    AiInteractionStepModel,
+    AiRatingModel,
+    AiRegistryAccessLogModel,
+)
 
 # Import all models to register on Base.metadata
 from app.modules.auth.infrastructure.models import (  # noqa: F401
@@ -13,7 +20,7 @@ from app.modules.auth.infrastructure.models import (  # noqa: F401
     UserModel,
 )
 from app.modules.backlog.infrastructure.models import StoryTaskModel  # noqa: F401
-from app.modules.fixes.infrastructure.models import EvidenceModel, FixModel  # noqa: F401
+from app.modules.fixes.infrastructure.models import AiAnalysisModel, EvidenceModel, FixModel  # noqa: F401
 from app.modules.notifications.infrastructure.models import (  # noqa: F401
     NotificationModel,
 )
