@@ -54,6 +54,10 @@ class ProjectHealthDTO(BaseModel):
     progress_percent: float
     velocity: float
     open_issues: int
+    user_stories_count: int = 0
+    tasks_count: int = 0
+    completed_story_points: int = 0
+    total_story_points: int = 0
 
 
 class ProjectDTO(BaseModel):

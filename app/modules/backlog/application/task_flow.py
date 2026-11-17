@@ -150,9 +150,16 @@ class ChangeStoryTaskStatusUseCase:
 
 
 class ListMyTasksUseCase:
-    def __init__(self, backlog: BacklogRepository, projects: ProjectLookupPort) -> None:
+    def __init__(
+        self,
+        backlog: BacklogRepository,
+        projects: ProjectLookupPort,
+        *,
+        sprint_lookup: object | None = None,
+    ) -> None:
         self._backlog = backlog
         self._projects = projects
+        self._sprints = sprint_lookup
 
     def execute(
         self, actor: CurrentUser, *, project_id: str | None, status: str | None
@@ -171,6 +178,15 @@ class ListMyTasksUseCase:
             story = self._backlog.get_user_story(task.user_story_id)
             if project is None or story is None:
                 continue
+            epic_payload = None
+            epic = self._backlog.get_epic(story.epic_id)
+            if epic is not None:
+                epic_payload = {"id": epic.id, "name": epic.name}
+            sprint_payload = None
+            if story.sprint_id and self._sprints is not None:
+                sprint = self._sprints.get_by_id(story.sprint_id)  # type: ignore[union-attr]
+                if sprint is not None:
+                    sprint_payload = {"id": sprint.id, "name": sprint.name}
             items.append(
                 MyTaskItemDTO(
                     id=task.id,
@@ -180,6 +196,8 @@ class ListMyTasksUseCase:
                     status=task.status.value,
                     estimated_hours=task.estimated_hours,
                     logged_hours=task.logged_hours,
+                    epic=epic_payload,
+                    sprint=sprint_payload,
                 )
             )
         if not items:

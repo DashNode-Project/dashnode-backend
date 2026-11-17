@@ -421,8 +421,11 @@ def list_my_tasks(
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> MyTasksResponse:
+    from app.modules.sprints.infrastructure.repositories import SqlAlchemySprintRepository
+
     use_case = ListMyTasksUseCase(
         backlog=SqlAlchemyBacklogRepository(db),
         projects=SqlAlchemyProjectLookup(db),
+        sprint_lookup=SqlAlchemySprintRepository(db),
     )
     return use_case.execute(current_user, project_id=project_id, status=status_filter)

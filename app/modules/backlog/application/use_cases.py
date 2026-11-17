@@ -94,6 +94,8 @@ def _story_dto(story: UserStory) -> UserStoryDTO:
         user_role=story.user_role,
         reason=story.reason,
         acceptance_criteria=story.acceptance_criteria,
+        definition_of_ready=story.definition_of_ready,
+        definition_of_done=story.definition_of_done,
         moscow_priority=story.moscow_priority,
         story_points=story.story_points,
         estimation_mode=story.estimation_mode,
@@ -373,6 +375,8 @@ class CreateUserStoryUseCase:
             user_role=cmd.user_role.strip(),
             reason=cmd.reason.strip(),
             acceptance_criteria=(cmd.acceptance_criteria or "").strip(),
+            definition_of_ready=(cmd.definition_of_ready or "").strip(),
+            definition_of_done=(cmd.definition_of_done or "").strip(),
             moscow_priority=cmd.moscow_priority,
             story_points=None,
             estimation_mode=cmd.estimation_mode,
@@ -427,6 +431,8 @@ class UpdateUserStoryUseCase:
         story.user_role = cmd.user_role.strip()
         story.reason = cmd.reason.strip()
         story.acceptance_criteria = (cmd.acceptance_criteria or "").strip()
+        story.definition_of_ready = (cmd.definition_of_ready or "").strip()
+        story.definition_of_done = (cmd.definition_of_done or "").strip()
         story.moscow_priority = cmd.moscow_priority
         story.epic_id = cmd.epic_id
         story.updated_at = now
