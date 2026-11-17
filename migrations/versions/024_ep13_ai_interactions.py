@@ -52,9 +52,7 @@ def upgrade() -> None:
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index(
-        "ix_ai_interactions_user_created", "ai_interactions", ["user_id", "created_at"]
-    )
+    op.create_index("ix_ai_interactions_user_created", "ai_interactions", ["user_id", "created_at"])
     op.create_index(
         "ix_ai_interactions_project_created", "ai_interactions", ["project_id", "created_at"]
     )

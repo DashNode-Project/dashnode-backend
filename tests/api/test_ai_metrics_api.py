@@ -18,9 +18,7 @@ def test_metrics_summary_forbidden_for_developer(client: TestClient, db_engine: 
     assert "Administrador y Gerente" in response.json()["error"]["message"]
 
 
-def test_metrics_summary_admin(
-    client: TestClient, db_engine: Engine, db_session: Session
-) -> None:
+def test_metrics_summary_admin(client: TestClient, db_engine: Engine, db_session: Session) -> None:
     admin_id = login_as(client, db_engine, email="admin-metrics@dashnode.local", role="admin")
     registry = InteractionRegistry(db_session)
     iid = registry.start_pending(
@@ -38,9 +36,7 @@ def test_metrics_summary_admin(
     assert body["summary"]["total_interactions"] >= 1
 
 
-def test_rating_own_interaction(
-    client: TestClient, db_engine: Engine, db_session: Session
-) -> None:
+def test_rating_own_interaction(client: TestClient, db_engine: Engine, db_session: Session) -> None:
     dev_id = login_as(client, db_engine, email="dev-rate@dashnode.local", role="developer")
     registry = InteractionRegistry(db_session)
     iid = registry.start_pending(

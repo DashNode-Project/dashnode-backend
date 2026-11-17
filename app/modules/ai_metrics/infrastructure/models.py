@@ -45,9 +45,7 @@ class AiInteractionModel(Base):
     output_tokens: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
     total_latency_ms: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
     audio_duration_ms: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
-    counts_as_usage: Mapped[bool] = mapped_column(
-        Boolean(), nullable=False, server_default="1"
-    )
+    counts_as_usage: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="1")
     error_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
