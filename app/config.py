@@ -22,6 +22,13 @@ class Settings(BaseSettings):
 
     # --- Persistence (required, no default: credentials never live in code) ---
     DATABASE_URL: str = Field(min_length=1)
+    # Optional local or alternate URL when DATABASE_URL (e.g. Supabase) is unreachable.
+    DATABASE_FALLBACK_URL: str | None = None
+    DATABASE_CONNECT_TIMEOUT_SECONDS: int = Field(default=10, ge=1, le=120)
+    DATABASE_POOL_SIZE: int = Field(default=5, ge=1, le=50)
+    DATABASE_POOL_MAX_OVERFLOW: int = Field(default=10, ge=0, le=50)
+    DATABASE_POOL_TIMEOUT_SECONDS: int = Field(default=30, ge=5, le=300)
+    DATABASE_POOL_RECYCLE_SECONDS: int = Field(default=1800, ge=60, le=86_400)
 
     # Server where the integration tests may create/drop temporary databases.
     TEST_POSTGRES_URL: str | None = None

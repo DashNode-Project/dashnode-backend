@@ -6,31 +6,61 @@ SQLAlchemy database setup and UnitOfWork implementation.
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from app.config import settings
 from app.shared.application.ports import UnitOfWork
-
-engine = create_engine(
-    settings.DATABASE_URL,
-    # Never echo SQL: bound parameters include e-mails, password hashes and token digests.
-    echo=False,
-    pool_pre_ping=True,
+from app.shared.infrastructure.database_provider import (
+    DatabaseProviderStatus,
+    build_engine,
+    select_database_url,
 )
 
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine,
-    expire_on_commit=False,
-)
+_engine: Engine | None = None
+SessionLocal: sessionmaker[Session] | None = None
+_provider_status: DatabaseProviderStatus | None = None
 
 
 class Base(DeclarativeBase):
     """Base declarative class for all SQLAlchemy ORM models."""
 
     pass
+
+
+def initialize_database() -> DatabaseProviderStatus:
+    """Resolve primary vs fallback once and bind the process-wide engine."""
+    global _engine, SessionLocal, _provider_status
+    if _engine is not None and _provider_status is not None:
+        return _provider_status
+
+    url, status = select_database_url()
+    _engine = build_engine(url)
+    SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=_engine,
+        expire_on_commit=False,
+    )
+    _provider_status = status
+    return status
+
+
+def get_engine() -> Engine:
+    if _engine is None:
+        initialize_database()
+    assert _engine is not None
+    return _engine
+
+
+def get_database_provider_status() -> DatabaseProviderStatus | None:
+    return _provider_status
+
+
+def _require_session_factory() -> sessionmaker[Session]:
+    if SessionLocal is None:
+        initialize_database()
+    assert SessionLocal is not None
+    return SessionLocal
 
 
 class SqlAlchemyUnitOfWork(UnitOfWork):
@@ -60,8 +90,15 @@ class SqlAlchemyUnitOfWork(UnitOfWork):
 
 def get_db_session() -> Generator[Session, None, None]:
     """Provides a transactional database session for dependencies."""
-    db = SessionLocal()
+    factory = _require_session_factory()
+    db = factory()
     try:
         yield db
     finally:
         db.close()
+
+
+def __getattr__(name: str) -> Engine:
+    if name == "engine":
+        return get_engine()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
