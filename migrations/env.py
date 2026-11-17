@@ -41,8 +41,8 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    """Explicit override (tests, tooling) wins; otherwise the configured DATABASE_URL."""
-    return config.get_main_option("sqlalchemy.url") or settings.DATABASE_URL
+    """Explicit override (tests, tooling) wins; otherwise the active primary URL."""
+    return config.get_main_option("sqlalchemy.url") or settings.database_primary_url
 
 
 def run_migrations_offline() -> None:

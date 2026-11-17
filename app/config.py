@@ -9,6 +9,7 @@ rejected at start-up. No secret has a default value in code.
 """
 
 from typing import Literal, Self
+from urllib.parse import quote_plus
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,6 +25,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = Field(min_length=1)
     # Optional local or alternate URL when DATABASE_URL (e.g. Supabase) is unreachable.
     DATABASE_FALLBACK_URL: str | None = None
+    # Supabase: set ref + password (Dashboard → Database) or a full SUPABASE_DATABASE_URL.
+    SUPABASE_PROJECT_REF: str | None = None
+    SUPABASE_DB_PASSWORD: SecretStr | None = None
+    SUPABASE_DATABASE_URL: str | None = None
     DATABASE_CONNECT_TIMEOUT_SECONDS: int = Field(default=10, ge=1, le=120)
     DATABASE_POOL_SIZE: int = Field(default=5, ge=1, le=50)
     DATABASE_POOL_MAX_OVERFLOW: int = Field(default=10, ge=0, le=50)
@@ -137,6 +142,44 @@ class Settings(BaseSettings):
     @property
     def session_cookie_max_age_seconds(self) -> int:
         return (self.SESSION_TTL_HOURS + self.SESSION_COOKIE_RETENTION_HOURS) * 3600
+
+    def supabase_database_url(self) -> str | None:
+        """Built or explicit Supabase SQLAlchemy URL; None if not configured."""
+        explicit = (self.SUPABASE_DATABASE_URL or "").strip()
+        if explicit:
+            return explicit
+        ref = (self.SUPABASE_PROJECT_REF or "").strip()
+        secret = self.SUPABASE_DB_PASSWORD
+        if not ref or secret is None:
+            return None
+        password = secret.get_secret_value().strip()
+        if not password:
+            return None
+        host = f"db.{ref}.supabase.co"
+        safe_pwd = quote_plus(password)
+        return (
+            f"postgresql+psycopg://postgres:{safe_pwd}@{host}:5432/postgres?sslmode=require"
+        )
+
+    @property
+    def database_primary_url(self) -> str:
+        """Primary persistence target (Supabase when configured, else DATABASE_URL)."""
+        cloud = self.supabase_database_url()
+        if cloud is not None:
+            return cloud
+        return self.DATABASE_URL.strip()
+
+    @property
+    def database_fallback_url(self) -> str | None:
+        """Contingency URL when primary is unreachable."""
+        explicit = (self.DATABASE_FALLBACK_URL or "").strip() or None
+        if explicit:
+            return explicit
+        primary = self.database_primary_url
+        local = self.DATABASE_URL.strip()
+        if "supabase" in primary.lower() and "supabase" not in local.lower():
+            return local
+        return None
 
 
 settings = Settings()

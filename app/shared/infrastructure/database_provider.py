@@ -71,8 +71,8 @@ def _probe(engine: Engine) -> bool:
 
 def select_database_url() -> tuple[str, DatabaseProviderStatus]:
     """Pick the active URL and describe the provider (no side effects on existing engines)."""
-    primary = settings.DATABASE_URL.strip()
-    fallback = (settings.DATABASE_FALLBACK_URL or "").strip() or None
+    primary = settings.database_primary_url
+    fallback = settings.database_fallback_url
 
     if settings.APP_ENV == "testing" or primary.startswith("sqlite"):
         status = DatabaseProviderStatus(
@@ -99,6 +99,11 @@ def select_database_url() -> tuple[str, DatabaseProviderStatus]:
         primary_engine.dispose()
 
     if not fallback:
+        if settings.supabase_database_url() is None and "127.0.0.1" in primary:
+            raise SQLAlchemyError(
+                "Primary database unreachable. Start local Postgres (docker compose) or set "
+                "SUPABASE_DB_PASSWORD (and SUPABASE_PROJECT_REF) in .env for cloud primary."
+            )
         raise SQLAlchemyError(
             "Primary database unreachable and DATABASE_FALLBACK_URL is not configured."
         )

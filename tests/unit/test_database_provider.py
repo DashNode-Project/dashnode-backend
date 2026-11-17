@@ -14,8 +14,8 @@ from app.shared.infrastructure.database_provider import (
 def test_sqlite_testing_skips_fallback_probe():
     with patch("app.shared.infrastructure.database_provider.settings") as mock_settings:
         mock_settings.APP_ENV = "testing"
-        mock_settings.DATABASE_URL = "sqlite+pysqlite:///:memory:"
-        mock_settings.DATABASE_FALLBACK_URL = "postgresql+psycopg://local/db"
+        mock_settings.database_primary_url = "sqlite+pysqlite:///:memory:"
+        mock_settings.database_fallback_url = "postgresql+psycopg://local/db"
         url, status = select_database_url()
     assert url == "sqlite+pysqlite:///:memory:"
     assert status.role == DatabaseProviderRole.TESTING
@@ -34,8 +34,9 @@ def test_primary_used_when_probe_succeeds():
         patch("app.shared.infrastructure.database_provider._probe", return_value=True),
     ):
         mock_settings.APP_ENV = "development"
-        mock_settings.DATABASE_URL = "postgresql+psycopg://primary/db"
-        mock_settings.DATABASE_FALLBACK_URL = "postgresql+psycopg://fallback/db"
+        mock_settings.database_primary_url = "postgresql+psycopg://primary/db"
+        mock_settings.database_fallback_url = "postgresql+psycopg://fallback/db"
+        mock_settings.supabase_database_url.return_value = "postgresql+psycopg://primary/db"
         url, status = select_database_url()
 
     assert url == "postgresql+psycopg://primary/db"
@@ -58,8 +59,9 @@ def test_fallback_when_primary_fails():
         ),
     ):
         mock_settings.APP_ENV = "development"
-        mock_settings.DATABASE_URL = "postgresql+psycopg://primary/db"
-        mock_settings.DATABASE_FALLBACK_URL = "postgresql+psycopg://fallback/db"
+        mock_settings.database_primary_url = "postgresql+psycopg://primary/db"
+        mock_settings.database_fallback_url = "postgresql+psycopg://fallback/db"
+        mock_settings.supabase_database_url.return_value = None
         url, status = select_database_url()
 
     assert url == "postgresql+psycopg://fallback/db"
@@ -77,7 +79,8 @@ def test_raises_when_both_unreachable():
         patch("app.shared.infrastructure.database_provider._probe", return_value=False),
     ):
         mock_settings.APP_ENV = "development"
-        mock_settings.DATABASE_URL = "postgresql+psycopg://primary/db"
-        mock_settings.DATABASE_FALLBACK_URL = "postgresql+psycopg://fallback/db"
+        mock_settings.database_primary_url = "postgresql+psycopg://primary/db"
+        mock_settings.database_fallback_url = "postgresql+psycopg://fallback/db"
+        mock_settings.supabase_database_url.return_value = None
         with pytest.raises(SQLAlchemyError):
             select_database_url()
