@@ -212,6 +212,22 @@ class AssistantOrchestrator:
                 "sprints, historias de usuario, tareas, reuniones y documentación autorizados."
             )
 
+        manual_hint = normalize_text(text)
+        if any(
+            token in manual_hint
+            for token in ("manual", "faq", "base de conocimiento", "como funciona dashnode")
+        ):
+            search_fn = getattr(self._data, "search_system_knowledge", None)
+            if callable(search_fn):
+                hits = self._db_call(metrics, search_fn, text)
+                if hits:
+                    metrics.path = "system_knowledge"
+                    return "Manual del sistema:\n\n" + "\n\n---\n\n".join(hits)
+                return (
+                    "No encontré una entrada en el manual del sistema para esa consulta. "
+                    "Reformule la pregunta o pida a un administrador ampliar el manual."
+                )
+
         if intent.intent in {
             IntentType.METRICS_SUMMARY,
             IntentType.METRICS_BY_USER,
