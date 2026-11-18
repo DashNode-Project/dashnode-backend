@@ -38,8 +38,8 @@ class SendNotificationUseCase:
             type=cmd.type,
             title=cmd.title.strip(),
             message=cmd.message.strip(),
-            is_read=False,
             created_at=now,
+            read_at=None,
         )
 
         with self._uow:
@@ -86,9 +86,11 @@ class MarkNotificationAsReadUseCase:
         self,
         repo: NotificationRepository,
         uow: UnitOfWork,
+        clock: Clock,
     ) -> None:
         self._repo = repo
         self._uow = uow
+        self._clock = clock
 
     def execute(self, notification_id: str, recipient_id: str) -> NotificationDTO:
         notification = self._repo.get_by_id(notification_id)
@@ -98,7 +100,7 @@ class MarkNotificationAsReadUseCase:
         if notification.recipient_id != recipient_id:
             raise ValueError("No tienes permisos para modificar esta notificación.")
 
-        notification.mark_as_read()
+        notification.mark_as_read(self._clock.now())
 
         with self._uow:
             self._repo.update(notification)

@@ -27,7 +27,11 @@ from app.modules.backlog.application.dtos import (
     UpdateUserStoryCommand,
     UserStoryDTO,
 )
-from app.modules.backlog.application.ports import ActiveMemberLookupPort, ProjectLookupPort
+from app.modules.backlog.application.ports import (
+    ActiveMemberLookupPort,
+    ProjectLookupPort,
+    TaskAssignmentNotifierPort,
+)
 from app.modules.backlog.domain import messages
 from app.modules.backlog.domain.entities import (
     Epic,
@@ -94,6 +98,8 @@ def _story_dto(story: UserStory) -> UserStoryDTO:
         user_role=story.user_role,
         reason=story.reason,
         acceptance_criteria=story.acceptance_criteria,
+        definition_of_ready=story.definition_of_ready,
+        definition_of_done=story.definition_of_done,
         moscow_priority=story.moscow_priority,
         story_points=story.story_points,
         estimation_mode=story.estimation_mode,
@@ -119,6 +125,8 @@ def _task_dto(task: StoryTask) -> StoryTaskDTO:
         story_points=task.story_points,
         logged_hours=task.logged_hours,
         label=task.label,
+        status_before_correction=task.status_before_correction,
+        version=task.version,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -371,6 +379,8 @@ class CreateUserStoryUseCase:
             user_role=cmd.user_role.strip(),
             reason=cmd.reason.strip(),
             acceptance_criteria=(cmd.acceptance_criteria or "").strip(),
+            definition_of_ready=(cmd.definition_of_ready or "").strip(),
+            definition_of_done=(cmd.definition_of_done or "").strip(),
             moscow_priority=cmd.moscow_priority,
             story_points=None,
             estimation_mode=cmd.estimation_mode,
@@ -425,6 +435,8 @@ class UpdateUserStoryUseCase:
         story.user_role = cmd.user_role.strip()
         story.reason = cmd.reason.strip()
         story.acceptance_criteria = (cmd.acceptance_criteria or "").strip()
+        story.definition_of_ready = (cmd.definition_of_ready or "").strip()
+        story.definition_of_done = (cmd.definition_of_done or "").strip()
         story.moscow_priority = cmd.moscow_priority
         story.epic_id = cmd.epic_id
         story.updated_at = now
@@ -646,12 +658,14 @@ class AssignStoryTaskUseCase:
         members: ActiveMemberLookupPort,
         clock: Clock,
         uow: UnitOfWork,
+        assignment_notifier: TaskAssignmentNotifierPort | None = None,
     ) -> None:
         self._backlog = backlog
         self._projects = projects
         self._members = members
         self._clock = clock
         self._uow = uow
+        self._assignment_notifier = assignment_notifier
 
     def execute(
         self, task_id: str, cmd: AssignStoryTaskCommand, actor: CurrentUser
@@ -675,11 +689,29 @@ class AssignStoryTaskUseCase:
                 {"assignee_id": messages.ASSIGNEE_NOT_IN_PROJECT},
             )
 
+        previous_assignee = task.assignee_id
+        project_ctx = self._projects.get_project(task.project_id)
+        project_name = project_ctx.name if project_ctx is not None else "el proyecto"
         now = self._clock.now()
         task.assignee_id = cmd.assignee_id
         task.updated_at = now
         with self._uow:
             self._backlog.update_story_task(task)
+            if (
+                self._assignment_notifier is not None
+                and cmd.assignee_id is not None
+                and cmd.assignee_id != previous_assignee
+            ):
+                version = int(task.version) if getattr(task, "version", None) is not None else 1
+                self._assignment_notifier.notify_task_assigned_in_tx(
+                    project_id=task.project_id,
+                    task_id=task.id,
+                    task_name=task.name,
+                    project_name=project_name,
+                    assignee_id=cmd.assignee_id,
+                    actor_id=actor.id,
+                    version=version,
+                )
             self._uow.commit()
         return _task_dto(task), MessageResponse(message=messages.ASSIGNEE_ASSIGNED)
 

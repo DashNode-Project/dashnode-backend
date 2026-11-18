@@ -104,10 +104,9 @@ def test_list_and_mark_notification() -> None:
     notif = Notification(
         id="notif-1",
         recipient_id="usr-1",
-        type=NotificationType.TASK_STATUS_CHANGED,
-        title="Status Changed",
-        message="Status updated to in-progress",
-        is_read=False,
+        type=NotificationType.TASK_ASSIGNED,
+        title="Tarea asignada",
+        message='Se le asignó la tarea "X" en el proyecto.',
         created_at=clock.now(),
     )
     repo.save(notif)
@@ -116,7 +115,7 @@ def test_list_and_mark_notification() -> None:
     user_notifs = list_uc.execute("usr-1", unread_only=True)
     assert len(user_notifs) == 1
 
-    mark_uc = MarkNotificationAsReadUseCase(repo=repo, uow=uow)
+    mark_uc = MarkNotificationAsReadUseCase(repo=repo, uow=uow, clock=clock)
     updated = mark_uc.execute(notification_id="notif-1", recipient_id="usr-1")
     assert updated.is_read is True
     assert uow.committed is True

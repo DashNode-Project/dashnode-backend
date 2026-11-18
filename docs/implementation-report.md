@@ -463,3 +463,112 @@ Validación local:
 ### Pruebas
 - `tests/unit/test_ai_prompt.py`, `tests/unit/test_ai_use_cases.py`, `tests/api/test_ai_api.py`.
 - Humo manual: `scripts/smoke_ep10_text_chat.py`.
+
+
+---
+
+## Épica 11: Issues y evidencias (HU_DN_07_97 … HU_DN_07_101)
+
+### Análisis del Orquestador (Modo Lote / Épica)
+- **Fecha:** 2026-11-07
+- **Clasificación del lote:** FULL_STACK
+- **Complejidad:** MODERATE (Score: 84/100)
+- **Project Mode:** EXTEND_EXISTING
+- **Ramas:** `feature/ep-11-issues-evidences` (backend y frontend, derivadas de `origin/feature/ep-10-ai-assistant`)
+- **Dependencias:** HU_DN_07_97 (Creación de Issue) cimenta la estructura de datos; HU_DN_07_98 (Evidencias) y HU_DN_07_100 (Detalle) dependen de la existencia de issues; HU_DN_07_99 (Listado) y HU_DN_07_101 (Filtros) gestionan la consulta y segmentación de datos.
+
+### Implementación Backend
+- **Migración de esquema:** `migrations/versions/020_ep11_issues_and_evidences.py`
+  - Tabla `fixes`: `id` (VARCHAR 36), `project_id` (FK projects, CASCADE), `title` (VARCHAR 100), `description` (VARCHAR 5000), `severity` (VARCHAR 20), `type` (VARCHAR 20), `status` (VARCHAR 20, default 'open'), `reporter_id` (FK users), `assignee_id` (FK users), `resolution_note` (TEXT), `resolved_at` (TIMESTAMP), `idempotency_key` (VARCHAR 255), `created_at`, `updated_at`.
+  - Tabla `evidences`: `id` (VARCHAR 36), `fix_id` (FK fixes, CASCADE), `project_id` (FK projects, CASCADE), `title` (VARCHAR 255), `file_name` (VARCHAR 255), `file_type` (VARCHAR 20), `mime_type` (VARCHAR 100), `file_size` (INTEGER), `storage_path` (VARCHAR 500), `sha256_hash` (VARCHAR 64), `duration_seconds` (FLOAT), `uploaded_by` (FK users), `created_at`.
+- **Módulo Fixes (`app/modules/fixes/`):**
+  - `domain/entities.py`: Entidades `Issue`, `Evidence`, enumeraciones `IssueSeverity`, `IssueType`, `IssueStatus`, `EvidenceType`. Validaciones de dominio de título (1-100), descripción (<= 5000), severidad y tipo.
+  - `domain/messages.py`: Literales exactos para mensajes de validación, error y éxito (`TITLE_REQUIRED`, `DESCRIPTION_TOO_LONG`, `SEVERITY_REQUIRED`, `TYPE_REQUIRED`, `UNSUPPORTED_FORMAT`, `FILE_TOO_LARGE`, `VIDEO_TOO_LONG`, `DUPLICATE_EVIDENCE`, `ISSUE_CREATED`, `EVIDENCE_ATTACHED`, `NO_ISSUES_FOUND`, `NO_FILTERED_ISSUES`, `GENERIC_ERROR`).
+  - `domain/ports.py`: Contratos de `IssueRepository`, `EvidenceRepository`, `EvidenceFileStorage`, `SignedUrlGenerator`, `ProjectLookupPort`, `UserDisplayLookupPort`, `IssueNotificationPort`.
+  - `application/file_validation.py`: Validación estricta de formato por firma binaria (magic bytes), stripping de metadata EXIF en JPEG y chunks auxiliares en PNG, parseo de duración en contenedores MP4 (`mvhd`) y WebM (EBML Duration <= 60s), prevención de archivos falsos/polyglots (rechazo de scripts embebidos PHP/HTML/JS y ejecutables PE/ELF/ZIP).
+  - `application/use_cases.py`:
+    - `CreateIssueUseCase`: Validación de pertenencia activa al proyecto, validaciones de dominio, soporte de idempotencia con `Idempotency-Key` (evita duplicados devolviendo el issue existente), estado inicial `open` y encolado de evento de notificación.
+    - `AttachEvidenceUseCase`: Validación de límites de peso (imagen <= 5MB, video <= 25MB y 60s, log <= 1MB), detección de duplicados por hash SHA-256 en el issue (`DUPLICATE_EVIDENCE`), almacenamiento privado con UUID y eliminación de archivos huérfanos/parciales ante fallo.
+    - `ListIssuesUseCase`: Paginación por cursor con límite de 25 elementos, orden por defecto (abiertos primero, luego severidad critical>high>medium>low, luego fecha desc).
+    - `GetIssueDetailUseCase`: Recuperación de datos generales, evidencias con URLs firmadas HMAC SHA-256 con vencimiento estricto de 5 minutos (300s) y resumen consultivo de respuestas de IA.
+    - `DownloadEvidenceUseCase`: Verificación criptográfica de firma HMAC y expiración de timestamp antes de servir el archivo binario.
+  - `infrastructure/repositories.py`: `SqlAlchemyFixRepository`, `SqlAlchemyEvidenceRepository`, `LocalEvidenceFileStorage` y `HmacSignedUrlGenerator`.
+- **Rutas de Orquestación (`app/orchestration/issue_routes.py`):**
+  - `POST /api/v1/projects/{project_id}/issues` (HU_DN_07_97)
+  - `GET  /api/v1/projects/{project_id}/issues` (HU_DN_07_99, HU_DN_07_101)
+  - `GET  /api/v1/projects/{project_id}/issues/{issue_id}` (HU_DN_07_100)
+  - `POST /api/v1/projects/{project_id}/issues/{issue_id}/evidences` (HU_DN_07_98)
+  - `GET  /api/v1/projects/{project_id}/issues/{issue_id}/evidences/{evidence_id}/content` (HU_DN_07_100)
+- **Seguridad y CORS (`app/main.py`):**
+  - Habilitada cabecera `Idempotency-Key` en `CORSMiddleware`.
+  - Aislamiento modular verificado en `pyproject.toml` (contrato BR-4 incluyendo `app.modules.fixes`).
+
+### Pruebas y Quality Gates Backend
+- **Pruebas unitarias:** `tests/unit/test_fixes_domain.py` (10 tests de reglas de negocio, validaciones de campos, desinfección de EXIF, límites de tamaño, verificación de duración de video y firmas HMAC).
+- **Pruebas de API:** `tests/api/test_issues_api.py` (5 tests de integración completos cubriendo HU_DN_07_97 a HU_DN_07_101, validando códigos de estado, mensajes literales exactos, idempotencia, rechazo de polyglots, URLs firmadas y filtros combinados).
+- **Suite completa (`pytest --cov=app --cov-fail-under=80`):** 475 passed, 2 skipped (`test_gemini_integration.py` sin `GEMINI_INTEGRATION=1`), cobertura total 80.89%.
+- **Análisis estático y contratos:** `ruff check .`, `ruff format --check .`, `mypy .` (313 archivos), `lint-imports` (BR-1, BR-2, BR-4 cumplidos) y `pip-audit --skip-editable` sin hallazgos.
+- **Script de QA local:** `scripts/qa_console_ep11_runner.py` (ejecución completa contra servidor HTTP uvicorn en memoria; 7/7 casos PASS).
+- **Escaneo de secretos:** `scripts/scan_secrets.py --all` limpio (365 archivos analizados, 0 secretos).
+
+### Continuación EP-11 — Ciclo de vida de issues, vínculo con tareas y outbox (HU_DN_07_102 … HU_DN_07_105)
+- **Endpoints implementados (`app/orchestration/issue_routes.py`):**
+  - `PATCH /api/v1/projects/{project_id}/issues/{issue_id}/assignee`: asignación a desarrollador miembro activo restringida a Administrador/Gerente, bloqueo optimista por `version` (HTTP 409) y notificación + registro en outbox.
+  - `POST /api/v1/projects/{project_id}/issues/{issue_id}/resolve`: validación de nota de resolución obligatoria (máx. 2000 caracteres), actualización condicional de tarea vinculada si era el último issue abierto (`other_open_issues_count == 0`), notificación al creador y registro en outbox.
+  - `POST /api/v1/projects/{project_id}/issues/{issue_id}/close`: cierre exclusivo por Administrador o Gerente (`resolved` -> `closed`), bloqueo optimista y registro en outbox.
+  - `POST /api/v1/projects/{project_id}/tasks/{task_id}/report-fix`: creación atómica de issue vinculado y transición automática de la tarea a `CORRECTION` preservando `status_before_correction` ante múltiples fixes, con rollback total ante fallos.
+- **Migración e infraestructura transaccional:** `migrations/versions/021_ep11_issue_task_outbox.py` y `app/shared/infrastructure/outbox.py` (`OutboxEventModel`), verificada en PostgreSQL con `upgrade` -> `downgrade` -> `upgrade` y coincidencia ORM en `tests/integration/test_postgres_schema_and_registration.py` (10 passed junto con `test_postgres_login_sessions.py`).
+- **Pruebas EP-11 (unitarias + API):** `tests/unit/test_fixes_domain.py` (13 passed), `tests/api/test_issues_api.py` y `tests/api/test_issues_lifecycle_api.py` (22 passed en ejecución combinada).
+- **Suite completa (`python -m pytest --cov=app --cov-fail-under=80`):** 482 passed, 2 skipped (`test_gemini_integration.py` sin `GEMINI_INTEGRATION=1`), cobertura total **81.39%**.
+- **Análisis estático y contratos:** `ruff check .`, `ruff format --check .` (353 archivos formateados), `mypy .` (0 errores en 317 archivos), `lint-imports` (3 contratos cumplidos: BR-1, BR-2, BR-4).
+- **Script de QA local en vivo:** `scripts/qa_console_ep11_part2_runner.py` (ejecución contra uvicorn local en vivo con código de salida 0; `HU_DN_07_102` a `HU_DN_07_105` en `[PASSED]`, 8 eventos persistidos en `outbox_events`).
+- **Escaneo de secretos:** `python scripts/scan_secrets.py --all` limpio (365 archivos analizados, 0 secretos).
+
+### Implementación EP-12 — Análisis de IA por imagen y video (HU_DN_07_106 … HU_DN_07_113)
+- **Migración de base de datos:** `migrations/versions/022_ep12_ai_analyses.py` y `023_ep12_ai_usage_len.py`
+  - Tabla `ai_analyses`: `id` (VARCHAR 36), `issue_id` (FK fixes CASCADE), `evidence_id` (FK evidences CASCADE), `requested_by` (FK users RESTRICT), `status` (VARCHAR 20, default PENDING), `progress_stage` (VARCHAR 20), `reuse_key` (VARCHAR 64), `prompt_version` (VARCHAR 20), `model_id` (VARCHAR 80), `response` (TEXT), `validation_status` (VARCHAR 20, default PENDING_VALIDATION), `validated_by` (FK users), `validated_at` (TIMESTAMP), `rejected_by` (FK users), `rejected_at` (TIMESTAMP), `error_code` (VARCHAR 40), `input_tokens` (INTEGER), `output_tokens` (INTEGER), `latency_ms` (INTEGER), `created_at` (TIMESTAMP), `deleted_at` (TIMESTAMP), `deleted_by` (FK users).
+  - Índices compuestos y optimizados: `ix_ai_analyses_issue_created` (`issue_id`, `created_at`), `ix_ai_analyses_evidence` (`evidence_id`), `ix_ai_analyses_reuse_key` (`reuse_key`).
+- **Lógica de Dominio y Casos de Uso (`app/modules/fixes/application/`):**
+  - `ai_use_cases.py`:
+    - `RequestAiAnalysisUseCase`: Verificación estricta de checkbox de privacidad (`user_confirmed_no_sensitive_data=True`), reutilización sin costo con `reuse_key = SHA-256(evidence.sha256 || prompt_version)` (status 200, `reused: True`), encolamiento no bloqueante con timeout de 30s (`HTTP 202 Accepted`), control de cuotas diarias independientes por usuario y visión (`ai_user_daily_limit`, `ai_vision_daily_limit`).
+    - `GetAiAnalysisStatusUseCase`: Retorno estructurado de 3 bloques con validación de límite de palabras (máx. 150), fallback de contexto insuficiente (`No hay contexto suficiente para proponer una solución.`), distintivo obligatorio de advertencia (`requires_human_validation: True`), resolución de nombres de usuario validador y rechazador, escape estricto de texto plano contra Prompt Injection e inyección de tags.
+    - `ListAiAnalysesUseCase`: Historial ordenado por fecha de creación desc, exclusión de eliminados lógicos (`deleted_at IS NULL`), control de acceso para miembros activos del proyecto.
+    - `DeleteAiAnalysisUseCase`: Confirmación previa, control RBAC (Admin, Manager o creador), bloqueo en estado de procesamiento (`status == 'PROCESSING'`), borrado suave (`deleted_at`, `deleted_by`) y registro en `audit_logs` (`action = 'ai_analysis.deleted'`) sin modificar el estado del issue ni de tareas.
+    - `ValidateAiAnalysisUseCase` (HU_DN_07_111): Restricción estricta de RBAC (solo Administrador o Gerente), validación de estado previo (`PENDING_VALIDATION` -> HTTP 409 `INVALID_VALIDATION_STATE` en caso contrario), actualización de `validation_status = VALIDATED`, registro de `validated_by` y `validated_at`. Mensaje literal: `'Respuesta de IA validada correctamente.'`.
+    - `RejectAiAnalysisUseCase` (HU_DN_07_112): Restricción estricta de RBAC (solo Administrador o Gerente), bloqueo de re-rechazo (HTTP 409 `INVALID_VALIDATION_STATE` si ya está en `REJECTED`), actualización de `validation_status = REJECTED`, registro de `rejected_by` y `rejected_at`. Mensaje literal: `'Respuesta de IA rechazada.'`.
+    - Contrato de Arquitectura DA-08 Mutación Cero (HU_DN_07_113): Ni la sugerencia de IA ni su validación o rechazo tocan jamás `fixes` ni `story_tasks`.
+  - `vision_pipeline.py`: Pipeline de visión con sanitización y redacción previa de datos sensibles en descripciones (tokens, passwords, api keys), renderizado de prompt inmutable, llamado asíncrono y parsing seguro JSON con 3 bloques y conteo de palabras <= 150.
+- **Transcripción de Voz Resiliente Híbrida (`app/modules/ai/`):**
+  - `app/modules/ai/infrastructure/gemini_transcribe_client.py`: Integración con SDK oficial `google-genai` usando `client.interactions.create`, modo `smart` con `custom_vocabulary=["DashNode", "Sprint", "Backlog", "Kanban", "HU"]` para `gemini-3.5-transcribe` y prompts estrictos de transcripción literal para modelos multimodales de respaldo.
+  - `app/modules/ai/infrastructure/hybrid_transcription_service.py`: Enrutador híbrido resiliente (Prioridad 1 Whisper opcional -> fallback automático sin error de cara al usuario a la cadena REST Gemini), control de enfriamiento (`AI_GEMINI_MODEL_COOLDOWN_SECONDS`), cuotas diarias independientes (`whisper` vs `gemini_transcribe` vs `text-generate`), audio estrictamente en memoria (nunca en disco) y filtro de silencio/alucinaciones (`[SILENCIO]`).
+- **Rutas de Orquestación:**
+  - `POST   /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses` (HU_DN_07_106)
+  - `GET    /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}` (HU_DN_07_107, HU_DN_07_110, HU_DN_07_113)
+  - `GET    /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses` (HU_DN_07_108)
+  - `DELETE /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}` (HU_DN_07_109)
+  - `POST   /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}/validate` (HU_DN_07_111)
+  - `POST   /api/v1/projects/{project_id}/issues/{issue_id}/ai-analyses/{analysis_id}/reject` (HU_DN_07_112)
+  - `POST   /api/v1/ai/voice-transcribe` (Transcripción híbrida resiliente)
+- **Quality Gates Backend:**
+  - `pytest`: **524 tests pasados** (incluyendo suite de estrés y auditoría `test_ai_analysis_stress_audit.py` con 12 pruebas de bordes y permutaciones), 0 fallos, 2 skipped.
+  - `ruff check .`: 0 errores.
+  - `ruff format --check .`: 364 archivos formateados.
+  - `mypy app`: 0 errores en 231 archivos fuente.
+  - `lint-imports`: 3 contratos cumplidos (BR-1, BR-2, BR-4).
+  - `python scripts/scan_secrets.py`: 0 secretos.
+  - `scripts/qa_console_ep12_runner.py`: QA interactivo live HTTP contra Uvicorn pasando al 100% (código de salida 0) con suite de estrés en vivo.
+
+### Implementación EP-13 — Métricas de IA e interacciones (IAM v1, HU_DN_08_118+)
+- **Migración:** `024_ep13_ai_interactions.py` — tablas `ai_interactions`, `ai_interaction_steps`, `ai_ratings`, `ai_registry_access_log`; columna opcional `ai_analyses.interaction_id`.
+- **Módulo `app/modules/ai_metrics/`:** registro fail-closed (`InteractionRegistry`), agregaciones (`AiMetricsService`), RBAC Admin/Gerente global o proyectos gestionados; desarrollador HTTP 403 con texto IAM.
+- **Rutas:** `app/orchestration/ai_metrics_routes.py` — resumen, por usuario, listado, detalle, valoración PUT (1–5).
+- **Cableado:** asistente texto/voz (`use_cases.py`), análisis visual (`ai_use_cases.py`), consultas determinísticas METRICS_* en `orchestrator.py` sin Gemini para cifras; `METRICS_QUERY` con `counts_as_usage=false`.
+- **Pruebas:** `tests/unit/test_ai_metrics_service.py`, `tests/unit/test_assistant_metrics_intent_parser.py`, `tests/api/test_ai_metrics_api.py`.
+- **Diferido v1:** rollups `ai_metrics_daily`, cron de purga (solo `expires_at`), exportación, trigger PG de inmutabilidad en ratings.
+
+### Implementación EP-14 — Notificaciones (HU_DN_09_118 … 123)
+- **Migración:** `026_ep14_notifications.py` — columnas EP-14, `UNIQUE (event_key, recipient_id)`, índices de bandeja y no leídas.
+- **Servicio:** `NotificationService.notify` con plantillas, truncado, idempotencia `ON CONFLICT DO NOTHING`, retención 180 días.
+- **API:** `app/orchestration/notification_routes.py` (lista cursor, contador, lectura, abrir, borrar).
+- **Eventos:** tareas, sprints, issues, reuniones, documentación dentro de la misma transacción del caso de uso.
+- **Pruebas:** `test_notification_service.py`, `test_notifications_api.py`, ajustes reuniones/issues.

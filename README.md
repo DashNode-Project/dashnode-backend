@@ -22,6 +22,8 @@ app/
 │   ├── auth/            # Módulo de Autenticación y Cuentas de Usuario
 │   ├── projects/        # Módulo de Gestión de Proyectos y Miembros
 │   ├── tasks/           # Módulo de Tareas y Máquina de Estados (Draft -> Active -> ...)
+│   ├── ai_metrics/      # EP-13: registro de interacciones IA y métricas IAM
+│   ├── notifications/   # EP-14: notificaciones in-app transaccionales
 │   └── notifications/   # Módulo de Notificaciones In-App
 │       ├── domain/          # Entidades puras y Puertos (Protocols/Interfaces)
 │       ├── application/     # Casos de Uso, DTOs y Orquestación de Negocio

@@ -62,6 +62,8 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
             user_role=model.user_role,
             reason=model.reason,
             acceptance_criteria=model.acceptance_criteria,
+            definition_of_ready=model.definition_of_ready or "",
+            definition_of_done=model.definition_of_done or "",
             moscow_priority=parse_moscow(model.moscow_priority) or MoscowPriority.MUST_HAVE,
             story_points=model.story_points,
             estimation_mode=_parse_estimation_mode(model.estimation_mode),
@@ -97,6 +99,8 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
             is_blocked=bool(model.is_blocked),
             blocked_reason=model.blocked_reason,
             blocked_by_task_id=model.blocked_by_task_id,
+            status_before_correction=model.status_before_correction,
+            version=int(model.version) if model.version is not None else 1,
         )
 
     def save_epic(self, epic: Epic) -> None:
@@ -153,6 +157,8 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
                 user_role=story.user_role,
                 reason=story.reason,
                 acceptance_criteria=story.acceptance_criteria,
+                definition_of_ready=story.definition_of_ready,
+                definition_of_done=story.definition_of_done,
                 moscow_priority=story.moscow_priority.value,
                 story_points=story.story_points,
                 estimation_mode=story.estimation_mode.value,
@@ -173,6 +179,8 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
         model.user_role = story.user_role
         model.reason = story.reason
         model.acceptance_criteria = story.acceptance_criteria
+        model.definition_of_ready = story.definition_of_ready
+        model.definition_of_done = story.definition_of_done
         model.moscow_priority = story.moscow_priority.value
         model.story_points = story.story_points
         model.estimation_mode = story.estimation_mode.value
@@ -227,6 +235,8 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
                 is_blocked=task.is_blocked,
                 blocked_reason=task.blocked_reason,
                 blocked_by_task_id=task.blocked_by_task_id,
+                status_before_correction=task.status_before_correction,
+                version=task.version,
             )
         )
 
@@ -247,6 +257,8 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
         model.is_blocked = task.is_blocked
         model.blocked_reason = task.blocked_reason
         model.blocked_by_task_id = task.blocked_by_task_id
+        model.status_before_correction = task.status_before_correction
+        model.version = task.version
 
     def delete_story_task(self, task_id: str) -> None:
         self._session.execute(delete(StoryTaskModel).where(StoryTaskModel.id == task_id))

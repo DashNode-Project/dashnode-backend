@@ -35,6 +35,8 @@ class UserStoryDTO(BaseModel):
     user_role: str
     reason: str
     acceptance_criteria: str
+    definition_of_ready: str = ""
+    definition_of_done: str = ""
     moscow_priority: MoscowPriority
     story_points: int | None
     estimation_mode: EstimationMode
@@ -60,6 +62,8 @@ class StoryTaskDTO(BaseModel):
     story_points: int | None = None
     logged_hours: Decimal = Decimal("0")
     label: str = ""
+    status_before_correction: str | None = None
+    version: int = 1
     created_at: datetime
     updated_at: datetime
 
@@ -107,6 +111,8 @@ class MyTaskItemDTO(BaseModel):
     status: str
     estimated_hours: Decimal | None
     logged_hours: Decimal
+    epic: dict[str, str] | None = None
+    sprint: dict[str, str] | None = None
 
 
 class MyTasksResponse(BaseModel):
@@ -131,6 +137,8 @@ class CreateUserStoryCommand(BaseModel):
     user_role: str = Field(max_length=200)
     reason: str = Field(max_length=2000)
     acceptance_criteria: str = Field(default="", max_length=8000)
+    definition_of_ready: str = Field(default="", max_length=16000)
+    definition_of_done: str = Field(default="", max_length=16000)
     moscow_priority: MoscowPriority = MoscowPriority.MUST_HAVE
     estimation_mode: EstimationMode = EstimationMode.STORY
     epic_id: str | None = Field(default=None, max_length=36)
@@ -141,6 +149,8 @@ class UpdateUserStoryCommand(BaseModel):
     user_role: str = Field(max_length=200)
     reason: str = Field(max_length=2000)
     acceptance_criteria: str = Field(default="", max_length=8000)
+    definition_of_ready: str = Field(default="", max_length=16000)
+    definition_of_done: str = Field(default="", max_length=16000)
     moscow_priority: MoscowPriority
     epic_id: str = Field(max_length=36)
 

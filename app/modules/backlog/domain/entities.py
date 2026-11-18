@@ -90,6 +90,8 @@ class UserStory:
     created_by: str
     created_at: datetime
     updated_at: datetime
+    definition_of_ready: str = ""
+    definition_of_done: str = ""
     label: str = ""
 
 
@@ -113,3 +115,5 @@ class StoryTask:
     is_blocked: bool = False
     blocked_reason: str | None = None
     blocked_by_task_id: str | None = None
+    status_before_correction: str | None = None
+    version: int = 1

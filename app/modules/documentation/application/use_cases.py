@@ -27,6 +27,28 @@ from app.shared.domain.authorization import AccessDeniedError
 from app.shared.domain.errors import AppError, ErrorKind
 
 
+class DocumentationDecisionNotifierPort(Protocol):
+    def notify_doc_approved_in_tx(
+        self,
+        *,
+        project_id: str,
+        entry_id: str,
+        entry_title: str,
+        author_id: str,
+        actor_id: str,
+    ) -> None: ...
+
+    def notify_doc_rejected_in_tx(
+        self,
+        *,
+        project_id: str,
+        entry_id: str,
+        entry_title: str,
+        author_id: str,
+        actor_id: str,
+    ) -> None: ...
+
+
 class ProjectLookupPort(Protocol):
     def get_project(self, project_id: str) -> object | None: ...
     def is_member(self, project_id: str, user_id: str) -> bool: ...
@@ -487,6 +509,7 @@ class ApproveDocumentationEntryUseCase:
         clock: Clock,
         projects: ProjectLookupPort,
         users: UserLookupPort,
+        doc_notifier: DocumentationDecisionNotifierPort | None = None,
     ) -> None:
         self._repo = repo
         self._uow = uow
@@ -494,6 +517,7 @@ class ApproveDocumentationEntryUseCase:
         self._clock = clock
         self._projects = projects
         self._users = users
+        self._doc_notifier = doc_notifier
 
     def execute(
         self,
@@ -534,6 +558,14 @@ class ApproveDocumentationEntryUseCase:
                 resource_id=entry.id,
                 when=now,
             )
+            if self._doc_notifier is not None and entry.author_id:
+                self._doc_notifier.notify_doc_approved_in_tx(
+                    project_id=project_id,
+                    entry_id=entry.id,
+                    entry_title=entry.title,
+                    author_id=entry.author_id,
+                    actor_id=actor.id,
+                )
             self._uow.commit()
 
         return DocumentationOperationResponse(
@@ -551,6 +583,7 @@ class RejectDocumentationEntryUseCase:
         clock: Clock,
         projects: ProjectLookupPort,
         users: UserLookupPort,
+        doc_notifier: DocumentationDecisionNotifierPort | None = None,
     ) -> None:
         self._repo = repo
         self._uow = uow
@@ -558,6 +591,7 @@ class RejectDocumentationEntryUseCase:
         self._clock = clock
         self._projects = projects
         self._users = users
+        self._doc_notifier = doc_notifier
 
     def execute(
         self,
@@ -595,6 +629,14 @@ class RejectDocumentationEntryUseCase:
                 resource_id=entry.id,
                 when=now,
             )
+            if self._doc_notifier is not None and entry.author_id:
+                self._doc_notifier.notify_doc_rejected_in_tx(
+                    project_id=project_id,
+                    entry_id=entry.id,
+                    entry_title=entry.title,
+                    author_id=entry.author_id,
+                    actor_id=actor.id,
+                )
             self._uow.commit()
 
         return DocumentationOperationResponse(

@@ -77,4 +77,5 @@ def test_concurrent_registrations_create_exactly_one_account(
 
 
 def test_readiness_probe_against_real_database(pg_client: TestClient) -> None:
-    assert pg_client.get("/health/ready").json() == {"status": "ready"}
+    body = pg_client.get("/health/ready").json()
+    assert body["status"] == "ready"

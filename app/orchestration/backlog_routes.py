@@ -50,6 +50,8 @@ from app.orchestration.backlog_adapters import (
     SqlAlchemyActiveMemberLookup,
     SqlAlchemyProjectLookup,
 )
+from app.orchestration.backlog_my_tasks_query import SqlAlchemyMyTasksQuery
+from app.orchestration.notification_adapters import SqlAlchemyDomainNotificationBridge
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
 from app.shared.infrastructure.clock import SystemClock
@@ -326,6 +328,7 @@ def assign_story_task(
         members=SqlAlchemyActiveMemberLookup(db),
         clock=_clock,
         uow=SqlAlchemyUnitOfWork(db),
+        assignment_notifier=SqlAlchemyDomainNotificationBridge(db),
     )
     dto, msg = use_case.execute(task_id, cmd, current_user)
     return TaskAssignResponse(**dto.model_dump(), message=msg.message)
@@ -421,8 +424,12 @@ def list_my_tasks(
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> MyTasksResponse:
+    from app.modules.sprints.infrastructure.repositories import SqlAlchemySprintRepository
+
     use_case = ListMyTasksUseCase(
         backlog=SqlAlchemyBacklogRepository(db),
         projects=SqlAlchemyProjectLookup(db),
+        sprint_lookup=SqlAlchemySprintRepository(db),
+        my_tasks_query=SqlAlchemyMyTasksQuery(db),
     )
     return use_case.execute(current_user, project_id=project_id, status=status_filter)

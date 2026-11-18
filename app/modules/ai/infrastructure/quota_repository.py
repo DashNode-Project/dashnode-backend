@@ -14,6 +14,15 @@ class SqlAlchemyQuotaRepository:
         self._session = session
         self._clock = clock or SystemClock()
 
+    def has_quota(self, service: str) -> bool:
+        limit = self._daily_limit(service)
+        if limit <= 0:
+            return False
+        today = self._clock.now().date()
+        row = self._session.get(AiDailyUsageModel, {"service": service, "usage_date": today})
+        current = row.count if row else 0
+        return current < limit
+
     def check_and_consume(self, service: str) -> None:
         limit = self._daily_limit(service)
         if limit <= 0:
@@ -31,11 +40,17 @@ class SqlAlchemyQuotaRepository:
         self._session.flush()
 
     def _daily_limit(self, service: str) -> int:
-        key = "ai_whisper_daily_limit" if service == "WHISPER" else "ai_gemini_daily_limit"
-        if service == "WHISPER":
+        norm = service.lower()
+        if "whisper" in norm:
+            key = "ai_whisper_daily_limit"
             default = settings.AI_WHISPER_DAILY_LIMIT
+        elif "transcribe" in norm:
+            key = "ai_gemini_transcribe_daily_limit"
+            default = settings.AI_GEMINI_TRANSCRIBE_DAILY_LIMIT
         else:
+            key = "ai_gemini_daily_limit"
             default = settings.AI_GEMINI_DAILY_LIMIT
+
         row = self._session.get(SystemConfigModel, key)
         if row is None:
             return default
@@ -51,3 +66,31 @@ class SqlAlchemyQuotaRepository:
         else:
             row.value = str(value)
         self._session.flush()
+
+
+class InMemoryQuotaRepository:
+    """In-memory quota tracker for testing and lightweight sessions."""
+
+    def __init__(self, clock: Clock | None = None) -> None:
+        self._counts: dict[tuple[str, str], int] = {}
+        self._clock = clock or SystemClock()
+
+    def has_quota(self, service: str) -> bool:
+        norm = service.lower()
+        if "whisper" in norm:
+            limit = settings.AI_WHISPER_DAILY_LIMIT
+        elif "transcribe" in norm:
+            limit = settings.AI_GEMINI_TRANSCRIBE_DAILY_LIMIT
+        else:
+            limit = settings.AI_GEMINI_DAILY_LIMIT
+        if limit <= 0:
+            return False
+        today = str(self._clock.now().date())
+        return self._counts.get((service, today), 0) < limit
+
+    def check_and_consume(self, service: str) -> None:
+        if not self.has_quota(service):
+            raise QuotaExhaustedError(service)
+        today = str(self._clock.now().date())
+        key = (service, today)
+        self._counts[key] = self._counts.get(key, 0) + 1

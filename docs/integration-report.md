@@ -317,3 +317,147 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | Frontend | `npm run test:coverage` | 333 pruebas pasadas en 42 suites (statements 81.3%, lines 84.25%) | APROBADO |
 | Frontend | `scan-secrets.mjs` | 0 secretos detectados | APROBADO |
 
+
+
+---
+
+## Épica 11: Issues y evidencias (HU_DN_07_97 … HU_DN_07_101)
+
+### Contrato Compartido de API y Respuestas
+
+| Método | Endpoint | Rol Mínimo | Propósito | Respuesta Esperada |
+|---|---|---|---|---|
+| `POST` | `/api/v1/projects/{project_id}/issues` | Miembro activo (Admin, Gerente, Dev) | Crear un nuevo issue (Fix) | 201 Created: `{"message": "Issue creado correctamente.", "issue": {...}}`; 400 Validation Error; Idempotency-Key soportada |
+| `GET` | `/api/v1/projects/{project_id}/issues` | Miembro activo | Listar issues con orden por defecto, filtros y cursor | 200 OK: `{"items": [...], "next_cursor": "...", "total": N}`; si vacío: `'El proyecto no tiene issues.'` o `'No se encontraron issues con los filtros aplicados.'` |
+| `GET` | `/api/v1/projects/{project_id}/issues/{issue_id}` | Miembro activo | Consultar detalle de un issue | 200 OK: `IssueDetail` con evidencias firmadas (expiran en 5 min) y resumen consultivo de IA; 404 si no existe |
+| `POST` | `/api/v1/projects/{project_id}/issues/{issue_id}/evidences` | Miembro activo | Adjuntar evidencia (multipart/form-data) | 201 Created: `{"message": "Evidencia adjuntada correctamente.", "evidence": {...}}`; 400 si formato no admitido o límite excedido; 409 si duplicado SHA-256 |
+| `GET` | `/api/v1/projects/{project_id}/issues/{issue_id}/evidences/{id}/content` | Público con URL firmada | Descarga/visualización de contenido | 200 OK con binary content y mime-type; 403 si firma HMAC alterada o timestamp expirado (> 5 min) |
+
+### Matriz de Trazabilidad y Verificación E2E
+
+| Historia de Usuario | Frontend | Backend | Reglas y Criterios Verificados |
+|---|---|---|---|
+| **HU_DN_07_97** | Botón "Nuevo fix" en pestaña "Issues", modal `CreateIssueModal`, validaciones locales de título (1-100), descripción (<=5000), severidad y tipo. Toast de éxito. | `CreateIssueUseCase`, `POST /projects/{id}/issues` | Título obligatorio, longitud máx 100 caracteres; descripción opcional máx 5000 caracteres; severidad obligatoria (Baja, Media, Alta, Crítica); tipo obligatorio (Bug, Regresión, Rendimiento, Seguridad, UX). Idempotency-Key devuelve el issue sin duplicar. Notificación encolada. Estado inicial `open`. |
+| **HU_DN_07_98** | Botón "Adjuntar evidencia", modal `AddEvidenceModal`, barra de progreso, validación de tipo y peso. Toast de éxito. | `AttachEvidenceUseCase`, `POST /projects/{id}/issues/{id}/evidences` | Formatos admitidos: Imagen (<= 5MB, JPG/PNG/WEBP), Video (<= 25MB y 60s, MP4/WEBM), Registro (<= 1MB, LOG/TXT). Rechazo de polyglots. Stripping de EXIF en imágenes. Detección de duplicados por hash SHA-256 (`'Ya existe una evidencia idéntica asociada a este issue.'`). Almacenamiento privado seguro con UUID. |
+| **HU_DN_07_99** | Pestaña `ProjectIssuesTab`, listado en columna izquierda con badges de severidad, estado, tipo, fecha, responsable y conteo de evidencias. Paginación con cursor. | `ListIssuesUseCase`, `GET /projects/{id}/issues` | Orden por defecto: abiertos primero (`open`, `in-progress`), severidad (`critical` > `high` > `medium` > `low`), fecha desc. Paginación por cursor de 25 elementos. Restricción para miembros activos. Estado vacío: `'El proyecto no tiene issues.'`. |
+| **HU_DN_07_100** | Vista de detalle de issue en columna derecha con campos generales, nota de resolución, responsable, previsualización de evidencias y sección consultiva de IA (DA-08). | `GetIssueDetailUseCase` y `DownloadEvidenceUseCase` | URLs de evidencia firmadas con HMAC SHA-256 y vencimiento estricto de 5 minutos (300 s). Rechazo con 403 Forbidden ante firmas inválidas o expiradas. Descarga y vista previa de evidencias funcional. |
+| **HU_DN_07_101** | Barra de filtros combinables (Estado, Severidad, Tipo) sincronizada en URL con `useSearchParams` y reseteo de cursor. | `ListIssuesUseCase` con filtros en queries | Filtrado combinado en servidor con AND lógico. Mensaje literal sin coincidencias: `'No se encontraron issues con los filtros aplicados.'`. |
+
+### Resumen de Quality Gates y Scripts QA
+
+| Repositorio | Verificación | Resultado | Estado |
+|---|---|---|---|
+| Backend | `tests/unit/test_fixes_domain.py` | 9 pruebas unitarias pasando | APROBADO |
+| Backend | `tests/api/test_issues_api.py` | 5 pruebas integrales de API pasando | APROBADO |
+| Backend | `scripts/qa_console_ep11_runner.py` | 7 pasos de QA automatizados (100% OK) | APROBADO |
+| Backend | `scripts/scan_secrets.py --all` | 0 secretos detectados (349 archivos) | APROBADO |
+| Backend | `BR-4 Module Isolation` | `app.modules.fixes` aislado e independiente | APROBADO |
+| Frontend | `src/features/issues/validation.test.ts` | Pruebas de validación unitarias pasando | APROBADO |
+| Frontend | `src/features/issues/api.test.ts` | Pruebas de cliente API pasando | APROBADO |
+| Frontend | `src/features/issues/ProjectIssuesTab.test.tsx` | Pruebas de integración de componentes pasando | APROBADO |
+| Frontend | Escaneo de secretos | 0 secretos detectados (213 archivos) | APROBADO |
+
+---
+
+## Continuación Épica 11: Ciclo de vida de issues y vínculo con tareas (HU_DN_07_102 … HU_DN_07_105)
+
+### Contrato Compartido de API y Respuestas
+
+| Método | Endpoint | Rol Mínimo | Propósito | Respuesta Esperada |
+|---|---|---|---|---|
+| `PATCH` | `/api/v1/projects/{project_id}/issues/{issue_id}/assignee` | Administrador o Gerente | Asignar responsable (desarrollador miembro activo) | 200 OK: `{"message": "...", "issue": {...}}`; 403 si rol es Desarrollador; 409 Conflict si `version` obsoleta |
+| `POST` | `/api/v1/projects/{project_id}/issues/{issue_id}/resolve` | Miembro activo del proyecto | Resolver issue con nota y actualizar tarea si era el último issue abierto | 200 OK: `{"message": "...", "issue": {...}, "task_status": ...}`; 400/422 si nota vacía o > 2000 chars; 409 Conflict por concurrencia |
+| `POST` | `/api/v1/projects/{project_id}/issues/{issue_id}/close` | Administrador o Gerente | Cerrar un issue en estado `resolved` y restaurar tarea si aplica | 200 OK: `{"message": "...", "issue": {...}, "task_status": ...}`; 403 si Desarrollador; 409 si no está `resolved` o `version` desactualizada |
+| `POST` | `/api/v1/projects/{project_id}/tasks/{task_id}/report-fix` | Administrador, Gerente o asignado | Reportar fix desde Backlog/Kanban y mover tarea atómicamente a `CORRECTION` | 201 Created: `{"message": "...", "issue": {...}, "task_status": "CORRECTION"}`; soporta `Idempotency-Key`; rollback total ante fallo |
+
+### Matriz de Trazabilidad y Verificación E2E
+
+| Historia de Usuario | Frontend | Backend | Reglas y Criterios Verificados |
+|---|---|---|---|
+| **HU_DN_07_102** | Selector `Responsable` en `ProjectIssuesTab` cargado con desarrolladores activos y recarga automática ante HTTP 409. Deshabilitado para desarrolladores. | `AssignIssueUseCase`, `PATCH /projects/{id}/issues/{id}/assignee` | Solo Administrador o Gerente pueden asignar. Destinatario debe ser desarrollador miembro activo. Bloqueo optimista por `version`. Notificación al asignado y registro transaccional en `outbox_events`. |
+| **HU_DN_07_103** | Modal `ResolveIssueModal` (nota obligatoria <=2000 chars), botones `Resolver` y `Cerrar issue` (solo Admin/Gerente). | `ResolveIssueUseCase`, `CloseIssueUseCase` | Nota de resolución obligatoria (1..2000 chars). Cierre (`resolved` -> `closed`) exclusivo de Admin/Gerente. Bloqueo optimista en ambas transiciones y notificación al creador. |
+| **HU_DN_07_104** | Botón `Reportar fix` en Backlog (`TaskWorkModal`) y Kanban (`KanbanCard`/`ProjectKanbanTab`), título `Fix: ${task.name}` e insignia `En corrección`. | `ReportTaskFixUseCase`, `POST /projects/{id}/tasks/{id}/report-fix` | Transacción atómica que crea issue con `task_id` y pasa tarea a `CORRECTION` guardando `status_before_correction` solo en el primer fix activo; rollback completo ante fallos (verificado con inyección de fallo en outbox). |
+| **HU_DN_07_105** | Selector condicional `Estado de la tarea` en `ResolveIssueModal` prellenado con `task_previous_status` o `IN_PROGRESS`; bloqueado si `other_open_issues_count > 0`. | `ResolveIssueUseCase`, `CloseIssueUseCase`, `resolve_restorable_task_status` | La tarea solo sale de `CORRECTION` al resolver/cerrar su último issue abierto vinculado; respaldo con `status_before_correction` o `'IN_PROGRESS'` cuando es nulo. |
+
+### Resumen de Quality Gates y Scripts QA (Continuación EP-11)
+
+| Repositorio | Verificación | Resultado | Estado |
+|---|---|---|---|
+| Backend | `pytest tests/unit/test_fixes_domain.py tests/api/test_issues_api.py tests/api/test_issues_lifecycle_api.py -v` | 22 pruebas unitarias y de API pasando | APROBADO |
+| Backend | `python -m pytest --cov=app --cov-fail-under=80` | 482 passed, 2 skipped, cobertura 81.39% | APROBADO |
+| Backend | `tests/integration/test_postgres_schema_and_registration.py` + `test_postgres_login_sessions.py` | 10 passed, migración `021_ep11_issue_task_outbox` verificada | APROBADO |
+| Backend | `ruff check .`, `ruff format --check .`, `mypy .`, `lint-imports` | 0 errores lint/tipos (317 archivos), 3 contratos cumplidos | APROBADO |
+| Backend | `scripts/qa_console_ep11_part2_runner.py` | Ejecución HTTP en vivo (`HU_DN_07_102`..`105` PASSED, 8 outbox events) | APROBADO |
+| Backend | `python scripts/scan_secrets.py --all` | 0 secretos detectados (365 archivos) | APROBADO |
+| Frontend | `npx vitest run src/features/issues src/features/backlog src/features/kanban` | 8 archivos, 56/56 pruebas pasando | APROBADO |
+| Frontend | `npm run typecheck` y `npm run build` | 0 errores TS, bundle Vite generado (2037 módulos, 1.46s) | APROBADO |
+| Frontend | `node scripts/scan-secrets.mjs` | 0 secretos detectados (226 archivos) | APROBADO |
+
+---
+
+## Épica 12: Análisis de IA por imagen y video (HU_DN_07_106 … HU_DN_07_110)
+
+### Contrato Compartido de API y Respuestas
+
+| Método | Endpoint | Rol Mínimo | Propósito | Respuesta Esperada |
+|---|---|---|---|---|
+| `POST` | `/api/v1/projects/{projectId}/issues/{issueId}/ai-analyses` | Miembro activo del proyecto | Solicitar análisis visual de IA sobre imagen/video con checkbox de privacidad | 202 Accepted (`{"analysis_id": "...", "status": "PENDING"}`); 200 OK con `reused: True` si ya existe análisis previo idéntico; 400 si checkbox es falso; 429 si cuota agotada |
+| `GET` | `/api/v1/projects/{projectId}/issues/{issueId}/ai-analyses/{analysisId}` | Miembro activo del proyecto | Consultar estado y resultado del análisis | 200 OK con 3 bloques estructurados (`problem_description`, `probable_cause`, `suggested_solution` <= 150 palabras), distintivo rojo de advertencia y fallback de contexto insuficiente |
+| `GET` | `/api/v1/projects/{projectId}/issues/{issueId}/ai-analyses` | Miembro activo del proyecto | Historial de respuestas de IA almacenadas para el issue | 200 OK: `{"items": [{"id": "...", "requested_by": {...}, "created_at": "...", "validation_status": "...", "summary": "..."}]}`; excluye eliminados lógicos |
+| `DELETE` | `/api/v1/projects/{projectId}/issues/{issueId}/ai-analyses/{analysisId}` | Administrador, Gerente o Creador | Eliminación lógica de una respuesta de IA | 200 OK: `{"message": "Respuesta de IA eliminada correctamente."}`; 403 si otro usuario; 400 si `status == 'PROCESSING'`; registra en `audit_logs` |
+| `POST` | `/api/v1/ai/voice-transcribe` | Usuario autenticado | Transcripción de voz híbrida y resiliente (Whisper/Gemini REST) | 200 OK: `{"recognized_text": "..."}`; fallback automático sin error al usuario; cuotas separadas de chat y cooldown |
+
+### Matriz de Trazabilidad y Verificación E2E
+
+| Historia de Usuario | Frontend | Backend | Reglas y Criterios Verificados |
+|---|---|---|---|
+| **HU_DN_07_106** | `AiAnalysisSection`: Casilla obligatoria *"Confirmo que la evidencia no contiene contraseñas, tokens ni datos personales."*, botón *Analizar con IA* reactivo, sondeo de estado cada 2s hasta 30s. | `RequestAiAnalysisUseCase`: Encolado asíncrono no bloqueante, cálculo de `reuse_key = SHA-256(evidence.sha256 \|\| prompt_version)`, cuotas diarias independientes (`ai_user_daily_limit`, `ai_vision_daily_limit`). | El análisis no se inicia sin confirmación explícita. Respuestas previas con idéntico hash son reutilizadas instantáneamente sin llamadas a APIs de pago externas. |
+| **HU_DN_07_107** | Renderizado de tarjeta con 3 bloques destacados, distintivo rojo en cabecera *"Sugerencia generada por IA no verificada"*, fallback *"No hay contexto suficiente para proponer una solución."*, texto plano sin ejecución de scripts. | `GetAiAnalysisStatusUseCase` y `DefaultVisionAnalysisProvider`: Extracción estructurada y validación de longitud <= 150 palabras totales, escape estricto de HTML y marcado. | Cumplimiento del límite de 150 palabras y advertencia visual permanente requerida por el estándar de seguridad y privacidad. |
+| **HU_DN_07_108** | Sección *"Historial de análisis de IA"* con nombre del solicitante, fecha formateada, etiqueta de estado de validación humana (`Pendiente de validación`, `Validada`, `Rechazada`) y resumen expandible. | `ListAiAnalysesUseCase`: Filtrado con `deleted_at IS NULL`, orden cronológico descendente, control de membresía activa de proyecto. | Visualización ordenada del historial; estado vacío literal *"Este issue no tiene respuestas de IA."*. Acceso restringido a miembros. |
+| **HU_DN_07_109** | Botón de eliminar con diálogo modal de confirmación `ProjectModal` (*"¿Está seguro de que desea eliminar esta respuesta de IA?"*), control de roles para ocultar botón si no corresponde. | `DeleteAiAnalysisUseCase`: Restricción a Admin, Gerente o Creador, bloqueo si `status == 'PROCESSING'`, soft delete (`deleted_at`, `deleted_by`) y auditoría en `audit_logs` (`ai_analysis.deleted`). | Eliminación lógica sin mutación colateral de estado del issue ni de la tarea asociada. |
+| **HU_DN_07_110** | Manejo de códigos de error (`NO_EVIDENCE`, `UNSUPPORTED_FORMAT`, `AI_QUOTA_EXHAUSTED`, etc.) con mensajes amigables y botón *"Reintentar"* que preserva la evidencia y checkbox. | Mapeo tipado en `_translate_issue_error` y códigos de error normalizados en `app/orchestration/error_handling.py`. | Permite reintentar de inmediato sin tener que volver a cargar la evidencia en el formulario. |
+| **HU_DN_07_111** | Botón *"Validar"* visible solo para Admin y Gerente cuando la propuesta está en estado `PENDING_VALIDATION`, toast `'Respuesta de IA validada correctamente.'` y cambio de insignia a `Validada`. | `ValidateAiAnalysisUseCase`: Restricción RBAC (Admin/Manager), validación de estado previo `PENDING_VALIDATION` (409 ante otro estado), transición a `VALIDATED`, registro de `validated_by` y `validated_at`. | Validación humana formal registrada con usuario y timestamp. Bloqueo 409 si ya está validada. |
+| **HU_DN_07_112** | Botón *"Rechazar"* visible para Admin y Gerente en estados pendientes y validadas, toast `'Respuesta de IA rechazada.'` y cambio de insignia a `Rechazada`. | `RejectAiAnalysisUseCase`: Restricción RBAC (Admin/Manager), bloqueo de re-rechazo (409 si ya está `REJECTED`), transición a `REJECTED`, registro de `rejected_by` y `rejected_at`. | Permite rechazar propuestas incorrectas e invalidar propuestas previamente validadas. |
+| **HU_DN_07_113** | Banner visible `'Esta propuesta de IA no ha sido validada. Requiere validación de un Administrador o Gerente antes de actuar.'` con icono `AlertTriangle` mientras no esté validada; nota informativa `'Validada por {name} el {date}.'` con `CheckCircle`. | `GetAiAnalysisStatusUseCase`: Cálculo server-side de `requires_human_validation = (validation_status != VALIDATED)` y resolución de nombres de auditoría. Contrato DA-08 Mutación Cero garantizado (sin cambios en `fixes` ni `story_tasks`). | Advertencia constante y garantía arquitectural de que la IA nunca muta datos de incidencias ni tareas. |
+| **Resilient Voice** | `useVoiceCapture`: Captura de audio en navegador WebM/Opus enviada en memoria a `POST /ai/voice-transcribe`. | `HybridTranscriptionService`: Whisper con fallback silencioso a cadena Gemini REST (`gemini-3.5-transcribe` o multimodales), cooldown de fallos y filtro de silencio (`[SILENCIO]`). | Transcripción de voz tolerante a fallos de cuota, red o proveedor sin interrumpir al usuario. |
+
+## EP-13 — Métricas de IA e interacciones (IAM)
+
+| Método | Endpoint | Rol | Propósito |
+|---|---|---|---|
+| `GET` | `/api/v1/ai/metrics/summary` | Admin, Gerente | Totales (excluye `METRICS_QUERY` y `counts_as_usage=false`) |
+| `GET` | `/api/v1/ai/metrics/by-user` | Admin, Gerente | Desglose por usuario |
+| `GET` | `/api/v1/ai/metrics/interactions` | Admin, Gerente | Listado paginado del registro |
+| `GET` | `/api/v1/ai/interactions/{id}` | Admin, Gerente (alcance) | Detalle con pasos y valoración |
+| `PUT` | `/api/v1/ai/interactions/{id}/rating` | Autor de la interacción | Valoración 1–5 |
+
+Períodos: `today`, `7d`, `30d`, `month`, `custom` (`from`/`to` UTC). Desarrollador: HTTP 403 con mensaje IAM. Asistente (HU 118): intents `METRICS_*` resueltos por `AiMetricsService` sin LLM.
+
+### Resumen de Quality Gates y Scripts QA (Épica 12)
+
+| Repositorio | Verificación | Resultado | Estado |
+|---|---|---|---|
+| Backend | `pytest tests/unit/test_hybrid_transcription.py tests/unit/test_ai_analysis_domain.py tests/unit/test_ai_analysis_stress_audit.py tests/api/test_ai_analysis_api.py` | 42 pruebas unitarias, de API y estrés pasando | APROBADO |
+| Backend | `pytest tests/` | 524 passed, 2 skipped (100% pasando) | APROBADO |
+| Backend | Migraciones PostgreSQL | Migraciones `022_ep12_ai_analyses` y `023_ep12_ai_usage_len` aplicadas e índices verificados | APROBADO |
+| Backend | `ruff check .`, `ruff format --check .`, `mypy app`, `lint-imports` | 0 errores (231 archivos app, 3 contratos cumplidos) | APROBADO |
+| Backend | `scripts/qa_console_ep12_runner.py` | QA interactivo en vivo contra Uvicorn con suite de estrés (100% OK, 0 errores) | APROBADO |
+| Backend | `python scripts/scan_secrets.py` | 0 secretos detectados | APROBADO |
+| Frontend | `npx vitest run src/features/issues` | 5 suites, 37 pruebas pasando | APROBADO |
+| Frontend | `npm run test` (suite completa) | 52 archivos, 393 pruebas pasando | APROBADO |
+| Frontend | `npm run typecheck` y `npm run build` | 0 errores TypeScript, build Vite de producción exitoso en < 1s | APROBADO |
+| Frontend | `npm run lint` y `npm run format:check` | 0 errores/warnings ESLint, Prettier verificado | APROBADO |
+| Frontend | `node scripts/scan-secrets.mjs` | 0 secretos detectados (228 archivos) | APROBADO |
+
+## EP-14 — Notificaciones (contrato API)
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `GET` | `/api/v1/notifications` | Bandeja paginada (`items`, `next_cursor`) |
+| `GET` | `/api/v1/notifications/unread-count` | Insignia (`Cache-Control: no-store`) |
+| `POST` | `/api/v1/notifications/read` | Marcar lote (máx. 100) |
+| `POST` | `/api/v1/notifications/read-all` | Marcar todas |
+| `POST` | `/api/v1/notifications/{id}/open` | Ruta segura + marcar leída |
+| `POST` | `/api/v1/notifications/delete-all` | Borrado con `{ "confirm": true }` |
+
+Creación solo por eventos de dominio (sin `POST /notifications`). Frontend: campana global + `/notificaciones`, polling 30 s (rama `feature/ep-14-notificaciones`).

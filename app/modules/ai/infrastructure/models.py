@@ -18,7 +18,7 @@ class SystemConfigModel(Base):
 class AiDailyUsageModel(Base):
     __tablename__ = "ai_daily_usage"
 
-    service: Mapped[str] = mapped_column(String(20), primary_key=True)
+    service: Mapped[str] = mapped_column(String(100), primary_key=True)
     usage_date: Mapped[date] = mapped_column(Date(), primary_key=True)
     count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
 

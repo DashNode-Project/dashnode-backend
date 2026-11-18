@@ -1,6 +1,7 @@
 """Sprint use cases (EP-07)."""
 
 from datetime import date
+from typing import Protocol
 
 from sqlalchemy.exc import IntegrityError
 
@@ -203,16 +204,30 @@ class AssignUserStoryToSprintUseCase:
         )
 
 
+class SprintStartedNotifierPort(Protocol):
+    def notify_sprint_started_in_tx(
+        self,
+        *,
+        project_id: str,
+        sprint_id: str,
+        sprint_name: str,
+        project_name: str,
+        actor_id: str,
+    ) -> None: ...
+
+
 class StartSprintUseCase:
     def __init__(
         self,
         sprints: SprintRepository,
         projects: ProjectLookupPort,
         uow: UnitOfWork,
+        sprint_started_notifier: SprintStartedNotifierPort | None = None,
     ) -> None:
         self._sprints = sprints
         self._projects = projects
         self._uow = uow
+        self._sprint_started_notifier = sprint_started_notifier
 
     def execute(self, project_id: str, sprint_id: str, actor: CurrentUser) -> StartSprintResponse:
         project = _require_project(project_id, self._projects)
@@ -239,10 +254,21 @@ class StartSprintUseCase:
                 ErrorKind.CONFLICT,
             )
 
+        project_ctx = self._projects.get_project(project_id)
+        project_name = project_ctx.name if project_ctx is not None else "el proyecto"
         try:
-            sprint.status = SprintStatus.ACTIVE
-            self._sprints.update(sprint)
-            self._uow.commit()
+            with self._uow:
+                sprint.status = SprintStatus.ACTIVE
+                self._sprints.update(sprint)
+                if self._sprint_started_notifier is not None:
+                    self._sprint_started_notifier.notify_sprint_started_in_tx(
+                        project_id=project_id,
+                        sprint_id=sprint.id,
+                        sprint_name=sprint.name,
+                        project_name=project_name,
+                        actor_id=actor.id,
+                    )
+                self._uow.commit()
         except IntegrityError as exc:
             self._uow.rollback()
             raise AppError(

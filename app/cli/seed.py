@@ -16,7 +16,8 @@ from app.config import settings
 from app.modules.auth.infrastructure.models import UserModel
 from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
 from app.modules.tasks.infrastructure.models import TaskModel
-from app.shared.infrastructure.database import SessionLocal
+from app.shared.infrastructure import database as db_runtime
+from app.shared.infrastructure.database import initialize_database
 from app.shared.infrastructure.hasher import Argon2PasswordHasher
 from app.shared.infrastructure.id_generator import UuidGenerator
 
@@ -85,7 +86,12 @@ def seed(db: Session | None = None) -> int:
         return 1
 
     owns_session = db is None
-    session = db or SessionLocal()
+    if owns_session:
+        initialize_database()
+    factory = db_runtime.SessionLocal
+    if factory is None and db is None:
+        raise RuntimeError("Database session factory is not initialized.")
+    session = db or factory()  # type: ignore[misc]
     now = datetime.now(UTC)
     try:
         ids: dict[str, str] = {}

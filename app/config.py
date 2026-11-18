@@ -9,6 +9,7 @@ rejected at start-up. No secret has a default value in code.
 """
 
 from typing import Literal, Self
+from urllib.parse import quote_plus
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,6 +23,17 @@ class Settings(BaseSettings):
 
     # --- Persistence (required, no default: credentials never live in code) ---
     DATABASE_URL: str = Field(min_length=1)
+    # Optional local or alternate URL when DATABASE_URL (e.g. Supabase) is unreachable.
+    DATABASE_FALLBACK_URL: str | None = None
+    # Supabase: set ref + password (Dashboard → Database) or a full SUPABASE_DATABASE_URL.
+    SUPABASE_PROJECT_REF: str | None = None
+    SUPABASE_DB_PASSWORD: SecretStr | None = None
+    SUPABASE_DATABASE_URL: str | None = None
+    DATABASE_CONNECT_TIMEOUT_SECONDS: int = Field(default=10, ge=1, le=120)
+    DATABASE_POOL_SIZE: int = Field(default=5, ge=1, le=50)
+    DATABASE_POOL_MAX_OVERFLOW: int = Field(default=10, ge=0, le=50)
+    DATABASE_POOL_TIMEOUT_SECONDS: int = Field(default=30, ge=5, le=300)
+    DATABASE_POOL_RECYCLE_SECONDS: int = Field(default=1800, ge=60, le=86_400)
 
     # Server where the integration tests may create/drop temporary databases.
     TEST_POSTGRES_URL: str | None = None
@@ -80,10 +92,13 @@ class Settings(BaseSettings):
     API_GEMINI: SecretStr | None = None
     API_GEMINI_MODEL: str = "gemini-3.1-flash-lite"
     AI_GEMINI_FALLBACK_MODELS: str = "gemini-3.5-flash-lite,gemini-3.8-flash,gemma-4-31b-it"
+    AI_GEMINI_TRANSCRIBE_MODEL: str = "gemini-3.5-transcribe"
+    AI_GEMINI_TRANSCRIBE_FALLBACK_MODELS: str = "gemini-3.5-flash-lite,gemini-3.6-flash"
     AI_GEMINI_MODEL_COOLDOWN_SECONDS: float = Field(default=300.0, ge=0.0, le=3600.0)
     AI_GEMINI_SDK_RETRY_ATTEMPTS: int = Field(default=1, ge=1, le=3)
     AI_WHISPER_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)
     AI_GEMINI_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)
+    AI_GEMINI_TRANSCRIBE_DAILY_LIMIT: int = Field(default=100, ge=0, le=100_000)
     AI_VOICE_MAX_SECONDS: int = Field(default=60, ge=1, le=120)
     AI_VOICE_MAX_BYTES: int = Field(default=5_242_880, ge=1024, le=20_971_520)
     AI_VOICE_MIN_BYTES: int = Field(default=64, ge=1, le=4096)
@@ -95,6 +110,12 @@ class Settings(BaseSettings):
         ge=10.0,
         le=180.0,
         description="Wall-clock limit for POST /ai/text-generate (includes orchestrator + Gemini).",
+    )
+
+    # --- EP-11 Issues and Evidences (HU_DN_07_100 signed URLs HMAC) -------------
+    SECRET_KEY: SecretStr = Field(
+        default=SecretStr("insecure-dev-secret-key-change-in-production-ep11!"),
+        description="Key used for HMAC signing of evidence download URLs",
     )
 
     @model_validator(mode="after")
@@ -121,6 +142,42 @@ class Settings(BaseSettings):
     @property
     def session_cookie_max_age_seconds(self) -> int:
         return (self.SESSION_TTL_HOURS + self.SESSION_COOKIE_RETENTION_HOURS) * 3600
+
+    def supabase_database_url(self) -> str | None:
+        """Built or explicit Supabase SQLAlchemy URL; None if not configured."""
+        explicit = (self.SUPABASE_DATABASE_URL or "").strip()
+        if explicit:
+            return explicit
+        ref = (self.SUPABASE_PROJECT_REF or "").strip()
+        secret = self.SUPABASE_DB_PASSWORD
+        if not ref or secret is None:
+            return None
+        password = secret.get_secret_value().strip()
+        if not password:
+            return None
+        host = f"db.{ref}.supabase.co"
+        safe_pwd = quote_plus(password)
+        return f"postgresql+psycopg://postgres:{safe_pwd}@{host}:5432/postgres?sslmode=require"
+
+    @property
+    def database_primary_url(self) -> str:
+        """Primary persistence target (Supabase when configured, else DATABASE_URL)."""
+        cloud = self.supabase_database_url()
+        if cloud is not None:
+            return cloud
+        return self.DATABASE_URL.strip()
+
+    @property
+    def database_fallback_url(self) -> str | None:
+        """Contingency URL when primary is unreachable."""
+        explicit = (self.DATABASE_FALLBACK_URL or "").strip() or None
+        if explicit:
+            return explicit
+        primary = self.database_primary_url
+        local = self.DATABASE_URL.strip()
+        if "supabase" in primary.lower() and "supabase" not in local.lower():
+            return local
+        return None
 
 
 settings = Settings()

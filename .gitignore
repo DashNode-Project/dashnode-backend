@@ -29,8 +29,9 @@ build/
 *.pem
 *.key
 
-# Uploaded avatars (local storage)
+# Uploaded avatars & evidences (local storage)
 data/avatars/
+uploads/
 
 # Local databases and dumps
 *.sqlite

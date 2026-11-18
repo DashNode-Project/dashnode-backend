@@ -476,6 +476,10 @@ class GetProjectHealthUseCase:
             progress_percent=indicators.progress_percent,
             velocity=indicators.velocity,
             open_issues=indicators.open_issues,
+            user_stories_count=indicators.user_stories_count,
+            tasks_count=indicators.tasks_count,
+            completed_story_points=indicators.completed_story_points,
+            total_story_points=indicators.total_story_points,
         )
 
 
