@@ -139,6 +139,9 @@ class IssueNotificationPort(Protocol):
         issue_id: str,
         title: str,
         reporter_id: str,
+        *,
+        severity: str = "MEDIA",
+        actor_id: str | None = None,
     ) -> None: ...
 
     def notify_issue_assigned_in_tx(

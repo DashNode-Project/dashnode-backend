@@ -112,6 +112,8 @@ class SqlAlchemyMeetingNotificationSender(NotificationSender):
         return f"{meeting.date} {meeting.start_time}-{meeting.end_time}"
 
     def notify_meeting_scheduled(self, meeting: Meeting, participant_ids: list[str]) -> None:
+        if not meeting.project_id:
+            return
         self._bridge.notify_meeting_scheduled_in_tx(
             project_id=meeting.project_id,
             meeting_id=meeting.id,
@@ -122,6 +124,8 @@ class SqlAlchemyMeetingNotificationSender(NotificationSender):
         )
 
     def notify_meeting_cancelled(self, meeting: Meeting, participant_ids: list[str]) -> None:
+        if not meeting.project_id:
+            return
         self._bridge.notify_meeting_cancelled_in_tx(
             project_id=meeting.project_id,
             meeting_id=meeting.id,

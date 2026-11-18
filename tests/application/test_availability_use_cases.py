@@ -415,7 +415,8 @@ def test_create_meeting_rejects_past_date() -> None:
 
 def test_create_meeting_rejects_same_day_past_start() -> None:
     repo = FakeAvailabilityRepository()
-    clock = FakeClock(NOW)
+    # 15:00 UTC = 10:00 America/Bogota; 09:00 local start is in the past
+    clock = FakeClock(datetime(2026, 10, 12, 15, 0, 0, tzinfo=UTC))
     uow = FakeUnitOfWork()
     id_gen = FakeIdGenerator(["m-past-slot"])
     create_case = CreateMeetingUseCase(repo=repo, id_gen=id_gen, clock=clock, uow=uow)
@@ -438,7 +439,8 @@ def test_create_meeting_rejects_same_day_past_start() -> None:
 
 def test_search_meeting_slots_excludes_past_times_today() -> None:
     repo = FakeAvailabilityRepository()
-    clock = FakeClock(NOW)
+    # 15:00 UTC = 10:00 America/Bogota on 2026-10-12 (Monday).
+    clock = FakeClock(datetime(2026, 10, 12, 15, 0, 0, tzinfo=UTC))
     search_case = SearchMeetingSlotsUseCase(repo=repo, clock=clock)
     mgr = make_actor(id="mgr1", email="mgr@test.com", role="manager")
 

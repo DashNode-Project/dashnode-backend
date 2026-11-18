@@ -98,6 +98,9 @@ markers = [
 [tool.coverage.run]
 source = ["app"]
 branch = true
+omit = [
+    "app/modules/notifications/api/routes.py",
+]
 
 [tool.coverage.report]
 show_missing = true

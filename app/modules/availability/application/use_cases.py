@@ -46,6 +46,7 @@ from app.shared.application.operational_access import deny_admin_operational_acc
 from app.shared.application.ports import Clock, IdGenerator, UnitOfWork
 from app.shared.domain.authorization import AccessDeniedError
 from app.shared.domain.errors import AppError, ErrorKind
+from app.shared.infrastructure.project_local_time import project_local_date, project_local_ymd_hm
 
 
 def _dto_slots_to_domain(
@@ -226,8 +227,7 @@ class SearchMeetingSlotsUseCase:
         if cmd.week_start_date:
             week_monday = cmd.week_start_date
         else:
-            now_dt = self._clock.now()
-            today = now_dt.date()
+            today = project_local_date(self._clock.now())
             monday = today - timedelta(days=today.weekday())
             week_monday = monday.isoformat()
 
@@ -255,9 +255,7 @@ class SearchMeetingSlotsUseCase:
         duration_m = cmd.duration_hours * 60
 
         total_slots_count = 0
-        now_dt = self._clock.now()
-        today_str = now_dt.strftime("%Y-%m-%d")
-        now_time_str = now_dt.strftime("%H:%M")
+        today_str, now_time_str = project_local_ymd_hm(self._clock.now())
 
         for day in DAYS_OF_WEEK:
             if day not in cmd.days:
@@ -410,9 +408,7 @@ def _build_meeting_dto(
 
 def _validate_meeting_schedule_datetime(clock: Clock, date: str, start_time: str) -> None:
     """Rejects past calendar dates and same-day slots that already started."""
-    now = clock.now()
-    today = now.strftime("%Y-%m-%d")
-    now_time = now.strftime("%H:%M")
+    today, now_time = project_local_ymd_hm(clock.now())
     if date < today:
         raise AppError(
             "MEETING_DATE_IN_PAST",
@@ -428,9 +424,7 @@ def _validate_meeting_schedule_datetime(clock: Clock, date: str, start_time: str
 
 
 def _is_meeting_upcoming(clock: Clock, date: str, start_time: str) -> bool:
-    now = clock.now()
-    today = now.strftime("%Y-%m-%d")
-    now_time = now.strftime("%H:%M")
+    today, now_time = project_local_ymd_hm(clock.now())
     return date > today or (date == today and start_time >= now_time)
 
 

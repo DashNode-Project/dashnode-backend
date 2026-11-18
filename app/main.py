@@ -3,6 +3,7 @@
 @origin [Archetype Convention Addition]
 """
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -15,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.modules.auth.api.routes import router as auth_router
-from app.orchestration.notification_routes import router as notifications_router
 from app.modules.tasks.api.routes import router as tasks_router
 from app.orchestration.ai_metrics_routes import router as ai_metrics_router
 from app.orchestration.ai_routes import router as ai_router
@@ -27,6 +27,7 @@ from app.orchestration.error_handling import register_error_handlers
 from app.orchestration.issue_routes import router as issue_router
 from app.orchestration.kanban_routes import router as kanban_router
 from app.orchestration.middleware import OriginCheckMiddleware, SecurityHeadersMiddleware
+from app.orchestration.notification_routes import router as notifications_router
 from app.orchestration.profile_routes import router as profile_router
 from app.orchestration.project_routes import router as projects_router
 from app.orchestration.security import register_session_authenticator
@@ -38,11 +39,18 @@ from app.shared.infrastructure.database import (
     get_db_session,
     initialize_database,
 )
+from app.shared.infrastructure.run_migrations import upgrade_head
 
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     initialize_database()
+    try:
+        upgrade_head()
+    except Exception:
+        logging.getLogger("dashnode.api").exception(
+            "Alembic upgrade failed; apply migrations manually (alembic upgrade head)"
+        )
     yield
 
 

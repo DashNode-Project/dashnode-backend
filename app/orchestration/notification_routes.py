@@ -205,9 +205,7 @@ def list_notifications(
         )
         for row in page
     ]
-    next_cursor = (
-        _encode_cursor(page[-1].created_at, page[-1].id) if has_more and page else None
-    )
+    next_cursor = _encode_cursor(page[-1].created_at, page[-1].id) if has_more and page else None
     return NotificationListResponse(items=items, next_cursor=next_cursor)
 
 
@@ -267,7 +265,7 @@ def mark_read(
     with SqlAlchemyUnitOfWork(db):
         result = db.execute(stmt)
         db.commit()
-    updated = int(result.rowcount or 0)
+    updated = int(getattr(result, "rowcount", 0) or 0)
     return MarkReadResponse(updated=updated, unread_count=_unread_count(db, actor.id))
 
 
@@ -288,7 +286,7 @@ def mark_read_all(
     with SqlAlchemyUnitOfWork(db):
         result = db.execute(stmt)
         db.commit()
-    return MarkReadResponse(updated=int(result.rowcount or 0), unread_count=0)
+    return MarkReadResponse(updated=int(getattr(result, "rowcount", 0) or 0), unread_count=0)
 
 
 @router.post("/delete-all", response_model=DeleteAllResponse)

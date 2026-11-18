@@ -7,7 +7,6 @@ Revises: 025_fix01_dor_dod_kb
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime, timedelta
 
 import sqlalchemy as sa
 from alembic import context, op
@@ -71,19 +70,34 @@ def upgrade() -> None:
             sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         )
 
-    default_expires = datetime.now(UTC) + timedelta(days=180)
-    op.execute(
-        sa.text(
-            """
-            UPDATE notifications
-            SET event_key = COALESCE(event_key, 'legacy:' || id || ':1'),
-                entity_type = COALESCE(entity_type, 'legacy'),
-                entity_id = COALESCE(entity_id, id),
-                read_at = CASE WHEN is_read THEN created_at ELSE read_at END,
-                expires_at = COALESCE(expires_at, :expires_at)
-            """
-        ).bindparams(expires_at=default_expires)
-    )
+    bind = op.get_bind()
+    dialect = bind.dialect.name if bind is not None else "sqlite"
+    if dialect == "postgresql":
+        op.execute(
+            sa.text(
+                """
+                UPDATE notifications
+                SET event_key = COALESCE(event_key, 'legacy:' || id || ':1'),
+                    entity_type = COALESCE(entity_type, 'legacy'),
+                    entity_id = COALESCE(entity_id, id),
+                    read_at = CASE WHEN is_read THEN created_at ELSE read_at END,
+                    expires_at = COALESCE(expires_at, created_at + INTERVAL '180 days')
+                """
+            )
+        )
+    else:
+        op.execute(
+            sa.text(
+                """
+                UPDATE notifications
+                SET event_key = COALESCE(event_key, 'legacy:' || id || ':1'),
+                    entity_type = COALESCE(entity_type, 'legacy'),
+                    entity_id = COALESCE(entity_id, id),
+                    read_at = CASE WHEN is_read THEN created_at ELSE read_at END,
+                    expires_at = COALESCE(expires_at, datetime(created_at, '+180 days'))
+                """
+            )
+        )
 
     # Normalize historical type strings to EP-14 catalog values.
     op.execute(

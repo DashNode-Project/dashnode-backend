@@ -28,8 +28,8 @@ from app.modules.sprints.application.use_cases import (
     StartSprintUseCase,
 )
 from app.modules.sprints.infrastructure.repositories import SqlAlchemySprintRepository
-from app.orchestration.notification_adapters import SqlAlchemyDomainNotificationBridge
 from app.orchestration.backlog_adapters import SqlAlchemyProjectLookup
+from app.orchestration.notification_adapters import SqlAlchemyDomainNotificationBridge
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
 from app.shared.infrastructure.clock import SystemClock

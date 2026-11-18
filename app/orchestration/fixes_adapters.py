@@ -13,12 +13,12 @@ from app.modules.ai.infrastructure.models import AiDailyUsageModel, SystemConfig
 from app.modules.auth.infrastructure.models import UserModel
 from app.modules.backlog.infrastructure.models import StoryTaskModel, TaskStatusHistoryModel
 from app.modules.fixes.domain.entities import TaskSnapshot
-from app.orchestration.notification_adapters import SqlAlchemyDomainNotificationBridge
 from app.modules.projects.infrastructure.models import (
     AuditLogModel,
     ProjectMemberModel,
     ProjectModel,
 )
+from app.orchestration.notification_adapters import SqlAlchemyDomainNotificationBridge
 from app.shared.infrastructure.clock import SystemClock
 from app.shared.infrastructure.id_generator import UuidGenerator
 

@@ -239,7 +239,8 @@ def test_hu_38_successful_meeting_creation_and_notifications(
             )
         ).first()
         assert notif is not None
-        assert "Sprint Review Epica 05" in notif.title
+        assert notif.title == "Reunión programada"
+        assert "Sprint Review Epica 05" in notif.message
 
 
 def test_hu_38_concurrent_meeting_conflict(client: TestClient, db_engine: Engine) -> None:

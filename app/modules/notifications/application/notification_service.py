@@ -61,9 +61,7 @@ class NotificationService:
         recipients: list[str],
         actor_id: str | None,
     ) -> int:
-        unique_recipients = {
-            r for r in recipients if r and (actor_id is None or r != actor_id)
-        }
+        unique_recipients = {r for r in recipients if r and (actor_id is None or r != actor_id)}
         if not unique_recipients:
             return 0
 
@@ -94,19 +92,18 @@ class NotificationService:
 
         dialect = self._session.bind.dialect.name if self._session.bind is not None else "sqlite"
         if dialect == "postgresql":
-            stmt = (
+            result = self._session.execute(
                 pg_insert(NotificationModel)
                 .values(rows)
                 .on_conflict_do_nothing(index_elements=["event_key", "recipient_id"])
             )
         else:
-            stmt = (
+            result = self._session.execute(
                 sqlite_insert(NotificationModel)
                 .values(rows)
                 .on_conflict_do_nothing(index_elements=["event_key", "recipient_id"])
             )
-        result = self._session.execute(stmt)
-        inserted = int(result.rowcount or 0)
+        inserted = int(getattr(result, "rowcount", 0) or 0)
         if recipients and not unique_recipients:
             logger.info(
                 "notification_skipped_actor_only type=%s entity=%s",
