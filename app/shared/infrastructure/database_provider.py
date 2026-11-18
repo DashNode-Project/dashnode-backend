@@ -37,7 +37,7 @@ class DatabaseProviderStatus:
 def _url_label(url: str) -> str:
     if url.startswith("sqlite"):
         return "sqlite"
-    if "supabase" in url.lower():
+    if "supabase" in url.lower() or "pooler.supabase.com" in url.lower():
         return "supabase"
     if url.startswith("postgresql"):
         return "postgresql"
@@ -52,7 +52,12 @@ def _engine_kwargs(url: str) -> dict[str, object]:
     if url.startswith("sqlite"):
         return kwargs
     if url.startswith("postgresql"):
-        kwargs["connect_args"] = {"connect_timeout": settings.DATABASE_CONNECT_TIMEOUT_SECONDS}
+        connect_args: dict[str, object] = {
+            "connect_timeout": settings.DATABASE_CONNECT_TIMEOUT_SECONDS,
+        }
+        if "pooler.supabase.com" in url or ":6543/" in url:
+            connect_args["prepare_threshold"] = None
+        kwargs["connect_args"] = connect_args
         kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
         kwargs["max_overflow"] = settings.DATABASE_POOL_MAX_OVERFLOW
         kwargs["pool_recycle"] = settings.DATABASE_POOL_RECYCLE_SECONDS

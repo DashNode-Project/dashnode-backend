@@ -104,8 +104,6 @@ def rate_interaction(
     service: AiMetricsService = Depends(_service),
     db: Session = Depends(get_db_session),
 ) -> dict[str, str]:
-    result = service.upsert_rating(
-        actor, interaction_id, score=body.score, comment=body.comment
-    )
+    result = service.upsert_rating(actor, interaction_id, score=body.score, comment=body.comment)
     db.commit()
     return result

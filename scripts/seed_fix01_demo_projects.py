@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -23,7 +23,8 @@ from app.modules.fixes.infrastructure.models import FixModel
 from app.modules.projects.domain.entities import ProjectStatus
 from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
 from app.modules.sprints.infrastructure.models import SprintModel
-from app.shared.infrastructure.database import SessionLocal, initialize_database
+from app.shared.infrastructure import database as db_runtime
+from app.shared.infrastructure.database import initialize_database
 from app.shared.infrastructure.id_generator import UuidGenerator
 
 DEMO_PROJECTS: list[dict[str, str]] = [
@@ -117,7 +118,7 @@ def _seed_sprints_and_backlog(db: Session, project: ProjectModel, manager: UserM
         print(f"[skip] Backlog for {project.name}")
         return
     now = datetime.now(UTC)
-    today = date.today()
+    today = now.date()
     sprints: list[SprintModel] = []
     for i in range(4):
         start = today + timedelta(days=-28 + i * 14)
@@ -204,8 +205,8 @@ def _seed_meetings(db: Session, project: ProjectModel, manager: UserModel) -> No
     if db.query(MeetingModel).filter_by(project_id=project.id).first():
         return
     now = datetime.now(UTC)
-    today = date.today()
-    for idx, (title, when, status) in enumerate(
+    today = now.date()
+    for _idx, (title, when, status) in enumerate(
         [
             ("Kickoff", today - timedelta(days=7), "completed"),
             ("Planning próximo", today + timedelta(days=5), "scheduled"),
@@ -298,7 +299,9 @@ def _seed_issues(db: Session, project: ProjectModel, manager: UserModel) -> None
 
 def main() -> None:
     initialize_database()
-    with SessionLocal() as db:
+    if db_runtime.SessionLocal is None:
+        raise RuntimeError("SessionLocal not initialized")
+    with db_runtime.SessionLocal() as db:
         manager = _manager(db)
         for spec in DEMO_PROJECTS:
             project = _ensure_project(db, manager, spec)

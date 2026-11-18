@@ -14,7 +14,8 @@ from sqlalchemy import select
 from app.config import settings
 from app.modules.auth.infrastructure.models import UserModel
 from app.modules.system_knowledge.infrastructure.models import SystemKnowledgeEntryModel
-from app.shared.infrastructure.database import SessionLocal, initialize_database
+from app.shared.infrastructure import database as db_runtime
+from app.shared.infrastructure.database import initialize_database
 from app.shared.infrastructure.id_generator import UuidGenerator
 
 FAQ: list[tuple[str, str, str]] = [
@@ -190,7 +191,9 @@ def main() -> None:
     initialize_database()
     gen = UuidGenerator()
     now = datetime.now(UTC)
-    with SessionLocal() as db:
+    if db_runtime.SessionLocal is None:
+        raise RuntimeError("SessionLocal not initialized")
+    with db_runtime.SessionLocal() as db:
         author = _author(db)
         created = 0
         for question, answer, tags in FAQ:

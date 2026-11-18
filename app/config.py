@@ -157,9 +157,7 @@ class Settings(BaseSettings):
             return None
         host = f"db.{ref}.supabase.co"
         safe_pwd = quote_plus(password)
-        return (
-            f"postgresql+psycopg://postgres:{safe_pwd}@{host}:5432/postgres?sslmode=require"
-        )
+        return f"postgresql+psycopg://postgres:{safe_pwd}@{host}:5432/postgres?sslmode=require"
 
     @property
     def database_primary_url(self) -> str:
