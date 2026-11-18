@@ -1,39 +1,66 @@
-"""
-API tests for Notifications routes.
-@sad 4.1.4
-"""
+"""API tests for EP-14 Notifications routes."""
+
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
+from sqlalchemy.orm import Session
 
+from app.modules.notifications.infrastructure.models import NotificationModel
+from app.shared.infrastructure.id_generator import UuidGenerator
 from tests.support import login_as
 
+_id_gen = UuidGenerator()
 
-def test_notifications_crud_flow(client: TestClient, db_engine: Engine) -> None:
-    user_id = login_as(client, db_engine, email="notifuser@dashnode.io")
 
-    me_resp = client.get("/api/v1/auth/session")
-    assert me_resp.json()["user"]["id"] == user_id
+def _insert_notification(
+    session: Session,
+    *,
+    recipient_id: str,
+    actor_id: str | None = None,
+    unread: bool = True,
+) -> str:
+    now = datetime.now(UTC)
+    nid = _id_gen.generate()
+    session.add(
+        NotificationModel(
+            id=nid,
+            recipient_id=recipient_id,
+            actor_id=actor_id,
+            type="TASK_ASSIGNED",
+            event_key=f"TASK_ASSIGNED:{nid}:1",
+            project_id=None,
+            entity_type="task",
+            entity_id=nid,
+            title="Tarea asignada",
+            message='Se le asignó la tarea "Demo" en DashNode.',
+            created_at=now,
+            read_at=None if unread else now,
+            expires_at=now + timedelta(days=180),
+        )
+    )
+    session.commit()
+    return nid
 
-    # Send notification
-    notif_payload = {
-        "recipient_id": user_id,
-        "type": "task_assigned",
-        "title": "Welcome notification",
-        "message": "Welcome to DashNode",
-    }
-    send_resp = client.post("/api/v1/notifications", json=notif_payload)
-    assert send_resp.status_code == 201
-    notif_id = send_resp.json()["id"]
 
-    # List notifications
-    list_resp = client.get("/api/v1/notifications")
+def test_notifications_list_mark_and_unread_count(client: TestClient, db_engine: Engine) -> None:
+    user_id = login_as(client, db_engine, email="notifuser2@dashnode.io")
+    with Session(db_engine) as session:
+        nid = _insert_notification(session, recipient_id=user_id)
+
+    list_resp = client.get("/api/v1/notifications?limit=25&unread_only=false")
     assert list_resp.status_code == 200
-    items = list_resp.json()
-    assert len(items) >= 1
-    assert any(n["id"] == notif_id for n in items)
+    body = list_resp.json()
+    assert "items" in body
+    assert any(item["id"] == nid for item in body["items"])
 
-    # Mark as read
-    read_resp = client.patch(f"/api/v1/notifications/{notif_id}/read")
+    count_resp = client.get("/api/v1/notifications/unread-count")
+    assert count_resp.status_code == 200
+    assert count_resp.json()["count"] >= 1
+
+    read_resp = client.post("/api/v1/notifications/read", json={"ids": [nid]})
     assert read_resp.status_code == 200
-    assert read_resp.json()["is_read"] is True
+    assert read_resp.json()["unread_count"] >= 0
+
+    count_after = client.get("/api/v1/notifications/unread-count")
+    assert count_after.json()["count"] == read_resp.json()["unread_count"]

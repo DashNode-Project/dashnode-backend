@@ -565,3 +565,10 @@ Validación local:
 - **Cableado:** asistente texto/voz (`use_cases.py`), análisis visual (`ai_use_cases.py`), consultas determinísticas METRICS_* en `orchestrator.py` sin Gemini para cifras; `METRICS_QUERY` con `counts_as_usage=false`.
 - **Pruebas:** `tests/unit/test_ai_metrics_service.py`, `tests/unit/test_assistant_metrics_intent_parser.py`, `tests/api/test_ai_metrics_api.py`.
 - **Diferido v1:** rollups `ai_metrics_daily`, cron de purga (solo `expires_at`), exportación, trigger PG de inmutabilidad en ratings.
+
+### Implementación EP-14 — Notificaciones (HU_DN_09_118 … 123)
+- **Migración:** `026_ep14_notifications.py` — columnas EP-14, `UNIQUE (event_key, recipient_id)`, índices de bandeja y no leídas.
+- **Servicio:** `NotificationService.notify` con plantillas, truncado, idempotencia `ON CONFLICT DO NOTHING`, retención 180 días.
+- **API:** `app/orchestration/notification_routes.py` (lista cursor, contador, lectura, abrir, borrar).
+- **Eventos:** tareas, sprints, issues, reuniones, documentación dentro de la misma transacción del caso de uso.
+- **Pruebas:** `test_notification_service.py`, `test_notifications_api.py`, ajustes reuniones/issues.

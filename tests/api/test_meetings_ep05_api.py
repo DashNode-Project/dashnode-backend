@@ -235,7 +235,7 @@ def test_hu_38_successful_meeting_creation_and_notifications(
         notif = session.scalars(
             select(NotificationModel).where(
                 NotificationModel.recipient_id == dev_id,
-                NotificationModel.type == "meeting_scheduled",
+                NotificationModel.type == "MEETING_SCHEDULED",
             )
         ).first()
         assert notif is not None
@@ -733,7 +733,7 @@ def test_hu_45_cancel_meeting_and_notifications_and_rn_age_05(
         notifs_dev1 = session.scalars(
             select(NotificationModel).where(
                 NotificationModel.recipient_id == dev1_id,
-                NotificationModel.type == "meeting_cancelled",
+                NotificationModel.type == "MEETING_CANCELLED",
             )
         ).all()
         assert len(notifs_dev1) >= 1
@@ -742,7 +742,7 @@ def test_hu_45_cancel_meeting_and_notifications_and_rn_age_05(
         notifs_dev2 = session.scalars(
             select(NotificationModel).where(
                 NotificationModel.recipient_id == dev2_id,
-                NotificationModel.type == "meeting_cancelled",
+                NotificationModel.type == "MEETING_CANCELLED",
             )
         ).all()
         assert len(notifs_dev2) >= 1

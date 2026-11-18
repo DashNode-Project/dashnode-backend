@@ -269,3 +269,15 @@ tests/unit/test_ai_metrics_service.py, tests/unit/test_assistant_metrics_intent_
 ```
 
 **Fuera de alcance v1 (documentado):** `ai_metrics_daily`, jobs Celery/cron, exportación del registro, trigger PG de inmutabilidad (upsert en repositorio).
+
+## EP-14 — Notificaciones
+
+```
+app/modules/notifications/
+  application/catalog.py, notification_service.py
+  infrastructure/models.py
+app/orchestration/notification_routes.py
+app/orchestration/notification_adapters.py (destinatarios + puente transaccional)
+migrations/versions/026_ep14_notifications.py
+tests/unit/test_notification_service.py, tests/api/test_notifications_api.py
+```

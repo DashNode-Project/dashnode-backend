@@ -448,3 +448,16 @@ Períodos: `today`, `7d`, `30d`, `month`, `custom` (`from`/`to` UTC). Desarrolla
 | Frontend | `npm run typecheck` y `npm run build` | 0 errores TypeScript, build Vite de producción exitoso en < 1s | APROBADO |
 | Frontend | `npm run lint` y `npm run format:check` | 0 errores/warnings ESLint, Prettier verificado | APROBADO |
 | Frontend | `node scripts/scan-secrets.mjs` | 0 secretos detectados (228 archivos) | APROBADO |
+
+## EP-14 — Notificaciones (contrato API)
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `GET` | `/api/v1/notifications` | Bandeja paginada (`items`, `next_cursor`) |
+| `GET` | `/api/v1/notifications/unread-count` | Insignia (`Cache-Control: no-store`) |
+| `POST` | `/api/v1/notifications/read` | Marcar lote (máx. 100) |
+| `POST` | `/api/v1/notifications/read-all` | Marcar todas |
+| `POST` | `/api/v1/notifications/{id}/open` | Ruta segura + marcar leída |
+| `POST` | `/api/v1/notifications/delete-all` | Borrado con `{ "confirm": true }` |
+
+Creación solo por eventos de dominio (sin `POST /notifications`). Frontend: campana global + `/notificaciones`, polling 30 s (rama `feature/ep-14-notificaciones`).

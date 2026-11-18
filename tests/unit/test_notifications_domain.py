@@ -16,10 +16,10 @@ def test_notification_creation_and_mark_as_read() -> None:
         type=NotificationType.TASK_ASSIGNED,
         title="Task Assigned",
         message="You have been assigned to task #42",
-        is_read=False,
         created_at=now,
+        read_at=None,
     )
     assert notification.is_read is False
 
-    notification.mark_as_read()
+    notification.mark_as_read(now)
     assert notification.is_read is True
