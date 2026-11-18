@@ -38,6 +38,7 @@ def main() -> None:
     _run([sys.executable, "-m", "app.cli.seed"])
     _run([sys.executable, "scripts/seed_system_knowledge_faq.py"])
     _run([sys.executable, "scripts/seed_fix01_demo_projects.py"])
+    _run([sys.executable, "scripts/repair_demo_integrity.py"])
     print("[ok] Bootstrap complete.")
 
 

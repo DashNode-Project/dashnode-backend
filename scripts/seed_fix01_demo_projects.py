@@ -69,7 +69,7 @@ def _ensure_members(db: Session, project: ProjectModel, manager: UserModel) -> N
             ProjectMemberModel(
                 project_id=project.id,
                 user_id=manager.id,
-                role="manager",
+                role="lead",
                 joined_at=now,
             )
         )
@@ -79,7 +79,7 @@ def _ensure_members(db: Session, project: ProjectModel, manager: UserModel) -> N
             ProjectMemberModel(
                 project_id=project.id,
                 user_id=dev.id,
-                role="developer",
+                role="member",
                 joined_at=now,
             )
         )
