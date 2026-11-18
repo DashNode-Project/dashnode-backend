@@ -231,15 +231,18 @@ class CreateIssueUseCase:
 
         with self._uow:
             self._repo.save(issue)
+            if self._notifications is not None:
+                self._notifications.notify_issue_created(
+                    project_id=project_id,
+                    issue_id=issue.id,
+                    title=issue.title,
+                    reporter_id=actor.id,
+                    severity=issue.severity.value
+                    if hasattr(issue.severity, "value")
+                    else str(issue.severity),
+                    actor_id=actor.id,
+                )
             self._uow.commit()
-
-        if self._notifications is not None:
-            self._notifications.notify_issue_created(
-                project_id=project_id,
-                issue_id=issue.id,
-                title=issue.title,
-                reporter_id=actor.id,
-            )
 
         return IssueOperationResponse(
             message=ISSUE_CREATED,

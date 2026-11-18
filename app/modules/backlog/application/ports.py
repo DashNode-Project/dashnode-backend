@@ -16,6 +16,20 @@ class ActiveMemberLookupPort(Protocol):
     def is_active_project_member(self, project_id: str, user_id: str) -> bool: ...
 
 
+class TaskAssignmentNotifierPort(Protocol):
+    def notify_task_assigned_in_tx(
+        self,
+        *,
+        project_id: str,
+        task_id: str,
+        task_name: str,
+        project_name: str,
+        assignee_id: str,
+        actor_id: str,
+        version: int,
+    ) -> None: ...
+
+
 class MyTaskItemsQueryPort(Protocol):
     def list_for_assignee(
         self,

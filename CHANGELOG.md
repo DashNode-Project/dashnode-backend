@@ -1,5 +1,14 @@
 # Changelog — dashnode-backend
 
+## [Unreleased] — EP-14 Notificaciones
+
+### Added
+- Migración `026_ep14_notifications`: modelo transaccional, `event_key`, `read_at`, retención 180 días.
+- `NotificationService` y catálogo cerrado de 8 eventos (DN-14-02).
+- API `/api/v1/notifications` (lista con cursor, contador, lectura, abrir, borrado).
+- Cableado transaccional en tareas, sprints, issues, reuniones y documentación.
+- Decisiones PO (PA-01…PA-06): sin resubmit/reschedule/resolve en v1; retención 180 días; leer al navegar.
+
 ## [Unreleased] — EP-13 Métricas, valoración y registro de IA
 
 ### Added

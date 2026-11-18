@@ -12,6 +12,7 @@ from sqlalchemy import Engine, text
 
 from app.config import settings
 from app.shared.infrastructure.database import Base
+from tests.integration import orm_registry  # noqa: F401 — full Base.metadata
 from tests.support import DEFAULT_PASSWORD, create_user
 
 pytestmark = pytest.mark.integration

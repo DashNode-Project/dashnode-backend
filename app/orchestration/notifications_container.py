@@ -57,4 +57,5 @@ def get_mark_notification_as_read_use_case(
     return MarkNotificationAsReadUseCase(
         repo=repo,
         uow=uow,
+        clock=clock,
     )

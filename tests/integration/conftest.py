@@ -18,6 +18,7 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
+import tests.integration.orm_registry  # noqa: F401 — populate Base.metadata
 from app.config import settings
 from app.main import app
 from app.shared.infrastructure.database import get_db_session

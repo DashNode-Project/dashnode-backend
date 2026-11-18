@@ -29,6 +29,7 @@ from app.modules.sprints.application.use_cases import (
 )
 from app.modules.sprints.infrastructure.repositories import SqlAlchemySprintRepository
 from app.orchestration.backlog_adapters import SqlAlchemyProjectLookup
+from app.orchestration.notification_adapters import SqlAlchemyDomainNotificationBridge
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
 from app.shared.infrastructure.clock import SystemClock
@@ -165,6 +166,7 @@ def start_sprint(
         sprints=SqlAlchemySprintRepository(db),
         projects=projects,
         uow=SqlAlchemyUnitOfWork(db),
+        sprint_started_notifier=SqlAlchemyDomainNotificationBridge(db),
     )
     return use_case.execute(project_id, sprint_id, actor)
 

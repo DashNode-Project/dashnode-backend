@@ -1435,3 +1435,18 @@ Mensajes literales en `app/modules/documentation/domain/messages.py`. Migracione
 
 **Estado:** COMPLETED
 
+---
+
+## EP-14 — Notificaciones in-app (HU_DN_09_118 … 123)
+
+| ID | Estado | Notas |
+|---|---|---|
+| HU_DN_09_118 | Implementado | Creación transaccional en 8 eventos; exclusión del actor; idempotencia `event_key` |
+| HU_DN_09_119 | Implementado | `GET /api/v1/notifications` con cursor y filtro no leídas |
+| HU_DN_09_120 | Implementado | `GET /api/v1/notifications/unread-count`, rate limit 120/min |
+| HU_DN_09_121 | Implementado | `POST read` y `POST read-all` |
+| HU_DN_09_122 | Implementado | `POST /{id}/open` con revalidación de acceso y ruta |
+| HU_DN_09_123 | Implementado | `POST delete-all` con `confirm: true` |
+
+**Decisiones PO (v1):** Sin notificación por resubmit/reschedule/resolución de issue; retención 180 días; marcar leída al navegar; issue sin gerente → log, issue se crea igual.
+
