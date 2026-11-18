@@ -157,11 +157,14 @@ class AiMetricsService:
         total_interactions = len(usage_rows)
         success_count = len(success_rows)
         error_count = len(usage_rows) - success_count
-        total_tokens = sum(r.input_tokens + r.output_tokens for r in usage_rows)
+        input_tokens = sum(r.input_tokens for r in usage_rows)
+        output_tokens = sum(r.output_tokens for r in usage_rows)
+        total_tokens = input_tokens + output_tokens
+        audio_duration_ms = sum(r.audio_duration_ms for r in usage_rows)
         latencies = [r.total_latency_ms for r in usage_rows if r.total_latency_ms > 0]
         avg_latency = int(sum(latencies) / len(latencies)) if latencies else 0
 
-        return {
+        payload: dict[str, object] = {
             "scope": scope.label,
             "period": {
                 "key": window.key,
@@ -173,9 +176,19 @@ class AiMetricsService:
                 "success_count": success_count,
                 "error_count": error_count,
                 "total_tokens": total_tokens,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
                 "average_latency_ms": avg_latency,
+                "audio_duration_ms": audio_duration_ms,
             },
         }
+        if scope.project_ids is not None:
+            payload["managed_project_count"] = len(scope.project_ids)
+        if project_id:
+            project = self._session.get(ProjectModel, project_id)
+            if project is not None:
+                payload["scope_name"] = project.name
+        return payload
 
     def get_by_user(
         self,
