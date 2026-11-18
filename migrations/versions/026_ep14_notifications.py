@@ -143,23 +143,10 @@ def upgrade() -> None:
             ["recipient_id", "created_at", "id"],
         )
 
-    bind = op.get_bind()
-    dialect = bind.dialect.name if bind is not None else "sqlite"
-    if dialect == "postgresql":
-        op.execute(
-            sa.text(
-                """
-                CREATE INDEX IF NOT EXISTS ix_notif_unread
-                ON notifications (recipient_id) WHERE read_at IS NULL
-                """
-            )
-        )
+    if not _has_index("notifications", "ix_notif_unread"):
+        op.create_index("ix_notif_unread", "notifications", ["recipient_id", "read_at"])
+    if not _has_index("notifications", "ix_notif_expiry"):
         op.create_index("ix_notif_expiry", "notifications", ["expires_at"])
-    else:
-        if not _has_index("notifications", "ix_notif_unread"):
-            op.create_index("ix_notif_unread", "notifications", ["recipient_id", "read_at"])
-        if not _has_index("notifications", "ix_notif_expiry"):
-            op.create_index("ix_notif_expiry", "notifications", ["expires_at"])
 
 
 def downgrade() -> None:
@@ -168,7 +155,7 @@ def downgrade() -> None:
     dialect = bind.dialect.name if bind is not None else "sqlite"
     if dialect == "postgresql":
         op.execute(sa.text("DROP INDEX IF EXISTS ix_notif_unread"))
-    else:
+    elif _has_index("notifications", "ix_notif_unread"):
         op.drop_index("ix_notif_unread", table_name="notifications")
     op.drop_index("ix_notif_recipient_created", table_name="notifications")
     op.drop_constraint("uq_notification_event_recipient", "notifications", type_="unique")
