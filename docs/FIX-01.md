@@ -9,6 +9,17 @@
 Intervención orientada a estabilizar persistencia (Supabase primario vía **pooler** + fallback local), corregir métricas de salud, DoR/DoD, KB del sistema y mejoras UX.  
 **2026-11-17:** Supabase operativo; migración `025`; seed usuarios + 31 FAQ + proyectos **Helix Health Portal** y **OrbitLogistics TMS** en nube; login manager verificado; push en `feature/ep-13-metricas-valoracion-ia`. Varios ítems UX FIX-01 siguen **pendientes** (§11).
 
+**Auditoría 2026-11-17 (noche):**
+
+| Hallazgo | Acción | Verificación |
+|----------|--------|--------------|
+| `GET .../members` → 500 (`manager` no es `ProjectRole`) | `repair_demo_integrity.py` + coerción en repos + seed `lead`/`member` | `200` smoke |
+| Resumen Orbit `0%` / `0 pts` | Repair recalibra tareas DONE por HU | Health: **~34%**, **33/98 pts**, velocity **7.5** |
+| `/users/me/tasks` ~13s (N+1) | Consulta única con joins | **~1.4s** HTTP |
+| Métricas IA vs contrato FE | Mapper en `ai-metrics/api.ts` + ruta detalle `/ai/interactions/{id}` | Vitest 5/5 |
+| Manual sin FAQ/búsqueda | `SystemKnowledgePanel` en `/manual-usuario` | `GET /knowledge/system` → 31 ítems |
+| Mypy CI 13 errores | Tipado scripts/tests + repair | **346 archivos OK** |
+
 ## 1. Problemas identificados y causas raíz
 
 | ID | Problema | Causa raíz | Estado |

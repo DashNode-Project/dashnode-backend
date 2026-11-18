@@ -28,7 +28,8 @@ from app.modules.documentation.infrastructure.models import DocumentationEntryMo
 from app.modules.projects.domain.entities import ProjectStatus
 from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
 from app.modules.sprints.infrastructure.models import SprintModel
-from app.shared.infrastructure.database import SessionLocal
+from app.shared.infrastructure import database as db_runtime
+from app.shared.infrastructure.database import initialize_database
 from app.shared.infrastructure.id_generator import UuidGenerator
 
 PROJECT_NAME = "NovaTech - Plataforma de Gestion Empresarial"
@@ -393,7 +394,10 @@ def _seed_docs(db: Session, project: ProjectModel, manager: UserModel) -> None:
 
 
 def main() -> None:
-    db = SessionLocal()
+    initialize_database()
+    if db_runtime.SessionLocal is None:
+        raise RuntimeError("SessionLocal not initialized")
+    db = db_runtime.SessionLocal()
     try:
         _repair_global_invalid_enums(db)
         manager = _manager(db)

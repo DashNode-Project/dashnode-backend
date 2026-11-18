@@ -11,7 +11,7 @@ from app.shared.infrastructure.database_provider import (
 )
 
 
-def test_sqlite_testing_skips_fallback_probe():
+def test_sqlite_testing_skips_fallback_probe() -> None:
     with patch("app.shared.infrastructure.database_provider.settings") as mock_settings:
         mock_settings.APP_ENV = "testing"
         mock_settings.database_primary_url = "sqlite+pysqlite:///:memory:"
@@ -22,7 +22,7 @@ def test_sqlite_testing_skips_fallback_probe():
     assert status.fallback_active is False
 
 
-def test_primary_used_when_probe_succeeds():
+def test_primary_used_when_probe_succeeds() -> None:
     engine = MagicMock()
     conn = MagicMock()
     engine.connect.return_value.__enter__ = lambda s: conn
@@ -44,7 +44,7 @@ def test_primary_used_when_probe_succeeds():
     engine.dispose.assert_called_once()
 
 
-def test_fallback_when_primary_fails():
+def test_fallback_when_primary_fails() -> None:
     engines = [MagicMock(), MagicMock()]
 
     with (
@@ -70,7 +70,7 @@ def test_fallback_when_primary_fails():
     assert status.limitations
 
 
-def test_raises_when_both_unreachable():
+def test_raises_when_both_unreachable() -> None:
     with (
         patch("app.shared.infrastructure.database_provider.settings") as mock_settings,
         patch(

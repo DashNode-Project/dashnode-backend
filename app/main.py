@@ -3,6 +3,7 @@
 @origin [Archetype Convention Addition]
 """
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -40,7 +41,7 @@ from app.shared.infrastructure.database import (
 
 
 @asynccontextmanager
-async def _lifespan(_app: FastAPI):
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     initialize_database()
     yield
 

@@ -64,7 +64,9 @@ def test_usage_excludes_metrics_query(db_session: Session) -> None:
 
     service = AiMetricsService(db_session)
     summary = service.get_summary(admin, period="30d", from_iso=None, to_iso=None, project_id=None)
-    assert summary["summary"]["total_interactions"] == 1
+    block = summary["summary"]
+    assert isinstance(block, dict)
+    assert block["total_interactions"] == 1
 
 
 def test_manager_scope_filters_other_projects(db_session: Session) -> None:
@@ -121,6 +123,8 @@ def test_manager_scope_filters_other_projects(db_session: Session) -> None:
     listed = service.list_interactions(
         manager, period="30d", from_iso=None, to_iso=None, project_id=None, source=None
     )
-    project_ids = {item["project_id"] for item in listed["items"]}
+    items = listed["items"]
+    assert isinstance(items, list)
+    project_ids = {item["project_id"] for item in items if isinstance(item, dict)}
     assert other.id not in project_ids
     assert managed.id in project_ids

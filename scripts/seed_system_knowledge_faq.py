@@ -10,6 +10,7 @@ backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.modules.auth.infrastructure.models import UserModel
@@ -179,9 +180,9 @@ FAQ: list[tuple[str, str, str]] = [
 ]
 
 
-def _author(db) -> UserModel:
+def _author(db: Session) -> UserModel:
     email = settings.SEED_ADMIN_EMAIL or settings.SEED_MANAGER_EMAIL
-    user = db.query(UserModel).filter_by(email=email).first()
+    user: UserModel | None = db.query(UserModel).filter_by(email=email).first()
     if user is None:
         raise RuntimeError("Seed admin/manager user required for knowledge author")
     return user
