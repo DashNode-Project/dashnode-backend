@@ -23,6 +23,6 @@ def test_upgrade_head_runs_on_postgres(select_url: MagicMock, upgrade: MagicMock
     upgrade.assert_called_once()
 
 
-@patch.object(Path, "is_file", return_value=False)
 def test_upgrade_head_missing_ini() -> None:
-    run_migrations.upgrade_head()
+    with patch.object(Path, "is_file", return_value=False):
+        run_migrations.upgrade_head()
