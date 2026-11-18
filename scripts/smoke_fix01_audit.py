@@ -48,8 +48,8 @@ def main() -> None:
             f"/projects/{pid}",
             f"/projects/{pid}/health",
             f"/projects/{pid}/members",
-            f"/users/me/tasks",
-            f"/knowledge/system",
+            "/users/me/tasks",
+            "/knowledge/system",
             f"/ai/metrics/summary?period=7d&project_id={pid}",
         ):
             r = client.get(f"{BASE}{path}")
@@ -57,7 +57,12 @@ def main() -> None:
         kb = client.get(f"{BASE}/knowledge/system").json()
         items = kb.get("items") or []
         health = client.get(f"{BASE}/projects/{pid}/health").json()
-        print(json.dumps({"orbit_id": pid, "health": health, "kb_count": len(items), "checks": checks}, indent=2))
+        print(
+            json.dumps(
+                {"orbit_id": pid, "health": health, "kb_count": len(items), "checks": checks},
+                indent=2,
+            )
+        )
         bad = [c for c in checks if c[2] != 200]
         if bad:
             sys.exit(2)

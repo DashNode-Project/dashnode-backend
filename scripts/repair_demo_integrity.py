@@ -37,6 +37,29 @@ def _repair_member_roles(db: Session) -> int:
     return fixed
 
 
+def _assign_task_assignees(db: Session, project: ProjectModel) -> int:
+    member_ids = list(
+        db.scalars(
+            select(ProjectMemberModel.user_id).where(ProjectMemberModel.project_id == project.id)
+        ).all()
+    )
+    if not member_ids and project.manager_id:
+        member_ids = [project.manager_id]
+    if not member_ids:
+        return 0
+    orphan_tasks = list(
+        db.scalars(
+            select(StoryTaskModel).where(
+                StoryTaskModel.project_id == project.id,
+                StoryTaskModel.assignee_id.is_(None),
+            )
+        ).all()
+    )
+    for index, task in enumerate(orphan_tasks):
+        task.assignee_id = member_ids[index % len(member_ids)]
+    return len(orphan_tasks)
+
+
 def _repair_demo_progress(db: Session, project: ProjectModel) -> None:
     stories = list(
         db.scalars(
@@ -63,7 +86,9 @@ def _repair_demo_progress(db: Session, project: ProjectModel) -> None:
                 t.status = StoryTaskStatus.DONE.value
         elif idx % 3 == 1:
             for j, t in enumerate(tasks):
-                t.status = StoryTaskStatus.DONE.value if j % 2 == 0 else StoryTaskStatus.IN_PROGRESS.value
+                t.status = (
+                    StoryTaskStatus.DONE.value if j % 2 == 0 else StoryTaskStatus.IN_PROGRESS.value
+                )
         else:
             for t in tasks:
                 if t.status == StoryTaskStatus.TESTING.value:
@@ -76,13 +101,14 @@ def main() -> None:
         raise RuntimeError("SessionLocal not initialized")
     with db_runtime.SessionLocal() as db:
         roles = _repair_member_roles(db)
-        projects = db.scalars(
-            select(ProjectModel).where(ProjectModel.deleted_at.is_(None))
-        ).all()
+        projects = db.scalars(select(ProjectModel).where(ProjectModel.deleted_at.is_(None))).all()
+        assigned = 0
         for project in projects:
+            assigned += _assign_task_assignees(db, project)
             _repair_demo_progress(db, project)
         db.commit()
         print(f"[repair] project member roles fixed: {roles}")
+        print(f"[repair] unassigned tasks assigned: {assigned}")
         print(f"[repair] projects recalibrated for metrics: {len(projects)}")
 
 

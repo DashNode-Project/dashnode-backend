@@ -6,6 +6,7 @@ from decimal import Decimal
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.modules.backlog.application.dtos import MyTaskItemDTO
 from app.modules.backlog.domain.entities import (
     Epic,
     EstimationMode,
@@ -16,10 +17,7 @@ from app.modules.backlog.domain.entities import (
     UserStory,
     parse_story_task_status,
 )
-from app.modules.backlog.application.dtos import MyTaskItemDTO
 from app.modules.backlog.domain.ports import BacklogRepository
-from app.modules.projects.infrastructure.models import ProjectModel
-from app.modules.sprints.infrastructure.models import SprintModel
 from app.modules.backlog.domain.rules import parse_moscow, parse_task_type
 from app.modules.backlog.infrastructure.models import (
     EpicModel,
@@ -28,6 +26,8 @@ from app.modules.backlog.infrastructure.models import (
     TaskTimeLogModel,
     UserStoryModel,
 )
+from app.modules.projects.infrastructure.models import ProjectModel
+from app.modules.sprints.infrastructure.models import SprintModel
 
 
 def _parse_estimation_mode(value: str) -> EstimationMode:
@@ -319,9 +319,7 @@ class SqlAlchemyBacklogRepository(BacklogRepository):
         rows = self._session.execute(stmt).all()
         items: list[MyTaskItemDTO] = []
         for task, project, story, epic, sprint in rows:
-            sprint_payload = (
-                {"id": sprint.id, "name": sprint.name} if sprint is not None else None
-            )
+            sprint_payload = {"id": sprint.id, "name": sprint.name} if sprint is not None else None
             items.append(
                 MyTaskItemDTO(
                     id=task.id,
