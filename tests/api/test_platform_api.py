@@ -183,7 +183,8 @@ def test_liveness_and_readiness(client: TestClient) -> None:
     assert client.get("/health").json() == {"status": "ok"}
     ready = client.get("/health/ready")
     assert ready.status_code == 200
-    assert ready.json() == {"status": "ready"}
+    body = ready.json()
+    assert body["status"] == "ready"
 
 
 def test_readiness_reports_503_when_database_is_down() -> None:

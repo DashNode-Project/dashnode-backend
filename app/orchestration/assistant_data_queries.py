@@ -97,8 +97,55 @@ class AssistantDataService:
             done = all(t.status == StoryTaskStatus.DONE.value for t in tasks) if tasks else False
             status = "completada" if done else "pendiente"
             created = story.created_at.date().isoformat()
-            lines.append(f"{story.title} — sprint: {sprint_label}, creada {created}, {status}")
+            dor = (story.definition_of_ready or "").strip()
+            dod = (story.definition_of_done or "").strip()
+            extra = ""
+            if dor:
+                extra += f" DoR: {dor[:200]}{'…' if len(dor) > 200 else ''}."
+            if dod:
+                extra += f" DoD: {dod[:200]}{'…' if len(dod) > 200 else ''}."
+            lines.append(
+                f"{story.title} — sprint: {sprint_label}, creada {created}, {status}.{extra}"
+            )
         return lines
+
+    def list_project_issues(self, project_id: str, user_id: str, role: str) -> list[str]:
+        from app.modules.fixes.domain.entities import IssueStatus
+        from app.modules.fixes.infrastructure.models import FixModel
+
+        self.ensure_project_access(project_id, user_id, role)
+        fixes = self._session.scalars(
+            select(FixModel)
+            .where(FixModel.project_id == project_id)
+            .order_by(FixModel.created_at.desc())
+            .limit(30)
+        ).all()
+        lines: list[str] = []
+        for fix in fixes:
+            estado = "abierto" if fix.status == IssueStatus.OPEN.value else "cerrado"
+            lines.append(f"{fix.title} — severidad {fix.severity}, {estado}, tipo {fix.type}")
+        return lines
+
+    def search_system_knowledge(self, query: str, limit: int = 5) -> list[str]:
+        from app.modules.system_knowledge.infrastructure.models import SystemKnowledgeEntryModel
+
+        term = query.strip().lower()
+        stmt = select(SystemKnowledgeEntryModel).where(
+            SystemKnowledgeEntryModel.is_deleted.is_(False),
+            SystemKnowledgeEntryModel.is_published.is_(True),
+        )
+        if term:
+            pattern = f"%{term}%"
+            stmt = stmt.where(
+                or_(
+                    SystemKnowledgeEntryModel.question.ilike(pattern),
+                    SystemKnowledgeEntryModel.answer_md.ilike(pattern),
+                )
+            )
+        rows = self._session.scalars(stmt.limit(limit)).all()
+        if not rows:
+            return []
+        return [f"**{row.question}**\n{row.answer_md[:600]}" for row in rows]
 
     def list_tasks(
         self,

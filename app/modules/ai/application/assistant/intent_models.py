@@ -30,6 +30,9 @@ class IntentType(StrEnum):
     PROJECT_SUMMARY = "project_summary"
     GREETING = "greeting"
     CHITCHAT = "chitchat"
+    METRICS_SUMMARY = "metrics_summary"
+    METRICS_BY_USER = "metrics_by_user"
+    METRICS_LIST = "metrics_list"
     UNKNOWN = "unknown"
 
 
@@ -51,6 +54,14 @@ class MeetingFilter(StrEnum):
     USER_PENDING = "user_pending"
 
 
+class MetricsPeriodKey(StrEnum):
+    TODAY = "today"
+    SEVEN_D = "7d"
+    THIRTY_D = "30d"
+    MONTH = "month"
+    CUSTOM = "custom"
+
+
 class ParsedIntent(BaseModel):
     intent: IntentType
     project_ref: str | None = None
@@ -60,6 +71,7 @@ class ParsedIntent(BaseModel):
     document_ref: str | None = None
     use_open_project: bool = False
     conversational_index: int | None = Field(default=None, ge=0, le=20)
+    metrics_period: MetricsPeriodKey = MetricsPeriodKey.THIRTY_D
 
 
 class ClarificationNeeded(Exception):

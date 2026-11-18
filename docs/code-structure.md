@@ -247,3 +247,25 @@ tests/unit/test_hybrid_transcription.py                                      (8 
 tests/api/test_ai_analysis_api.py                                             (8 tests integrales de API: checkbox, encolado, reuso, listado, eliminación, validación y rechazo)
 scripts/qa_console_ep12_runner.py                                             (QA interactivo live HTTP verificando los 8 HUs de EP-12, contrato DA-08 y la transcripción resiliente)
 ```
+
+## EP-13 — Métricas de IA, registro e interacciones (HU_DN_08_118+ v1)
+
+```
+app/modules/ai_metrics/
+  domain/          messages (textos IAM), deferrals v1 en comentarios de modelos
+  application/     interaction_registry (fail-closed PENDING→SUCCESS/ERROR), ai_metrics_service (resumen, por usuario, listado, detalle, valoración), period (UTC)
+  infrastructure/  models (ai_interactions, ai_interaction_steps, ai_ratings, ai_registry_access_log)
+app/orchestration/ai_metrics_routes.py
+  GET  /ai/metrics/summary, /ai/metrics/by-user, /ai/metrics/interactions
+  GET  /ai/interactions/{id}
+  PUT  /ai/interactions/{id}/rating
+app/modules/ai/application/
+  assistant/intent_parser.py + intent_models.py (METRICS_* sin Gemini para cifras)
+  assistant/orchestrator.py (ruta determinística → AiMetricsService)
+  use_cases.py (registro ASSISTANT_TEXT / ASSISTANT_VOICE)
+app/modules/fixes/application/ai_use_cases.py (ISSUE_ANALYSIS + interaction_id en ai_analyses)
+migrations/versions/024_ep13_ai_interactions.py
+tests/unit/test_ai_metrics_service.py, tests/unit/test_assistant_metrics_intent_parser.py, tests/api/test_ai_metrics_api.py
+```
+
+**Fuera de alcance v1 (documentado):** `ai_metrics_daily`, jobs Celery/cron, exportación del registro, trigger PG de inmutabilidad (upsert en repositorio).

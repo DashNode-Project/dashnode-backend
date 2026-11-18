@@ -421,6 +421,18 @@ Mensajes literales: éxito cierre `Sprint finalizado correctamente.`; historial 
 | **HU_DN_07_113** | Banner visible `'Esta propuesta de IA no ha sido validada. Requiere validación de un Administrador o Gerente antes de actuar.'` con icono `AlertTriangle` mientras no esté validada; nota informativa `'Validada por {name} el {date}.'` con `CheckCircle`. | `GetAiAnalysisStatusUseCase`: Cálculo server-side de `requires_human_validation = (validation_status != VALIDATED)` y resolución de nombres de auditoría. Contrato DA-08 Mutación Cero garantizado (sin cambios en `fixes` ni `story_tasks`). | Advertencia constante y garantía arquitectural de que la IA nunca muta datos de incidencias ni tareas. |
 | **Resilient Voice** | `useVoiceCapture`: Captura de audio en navegador WebM/Opus enviada en memoria a `POST /ai/voice-transcribe`. | `HybridTranscriptionService`: Whisper con fallback silencioso a cadena Gemini REST (`gemini-3.5-transcribe` o multimodales), cooldown de fallos y filtro de silencio (`[SILENCIO]`). | Transcripción de voz tolerante a fallos de cuota, red o proveedor sin interrumpir al usuario. |
 
+## EP-13 — Métricas de IA e interacciones (IAM)
+
+| Método | Endpoint | Rol | Propósito |
+|---|---|---|---|
+| `GET` | `/api/v1/ai/metrics/summary` | Admin, Gerente | Totales (excluye `METRICS_QUERY` y `counts_as_usage=false`) |
+| `GET` | `/api/v1/ai/metrics/by-user` | Admin, Gerente | Desglose por usuario |
+| `GET` | `/api/v1/ai/metrics/interactions` | Admin, Gerente | Listado paginado del registro |
+| `GET` | `/api/v1/ai/interactions/{id}` | Admin, Gerente (alcance) | Detalle con pasos y valoración |
+| `PUT` | `/api/v1/ai/interactions/{id}/rating` | Autor de la interacción | Valoración 1–5 |
+
+Períodos: `today`, `7d`, `30d`, `month`, `custom` (`from`/`to` UTC). Desarrollador: HTTP 403 con mensaje IAM. Asistente (HU 118): intents `METRICS_*` resueltos por `AiMetricsService` sin LLM.
+
 ### Resumen de Quality Gates y Scripts QA (Épica 12)
 
 | Repositorio | Verificación | Resultado | Estado |

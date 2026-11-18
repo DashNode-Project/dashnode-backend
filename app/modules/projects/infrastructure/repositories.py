@@ -54,11 +54,20 @@ class SqlAlchemyProjectRepository(ProjectRepository):
             deleted_at=model.deleted_at,
         )
 
+    @staticmethod
+    def _coerce_project_role(raw: str) -> ProjectRole:
+        try:
+            return ProjectRole(raw)
+        except ValueError:
+            if raw in {"manager", "admin", "lead"}:
+                return ProjectRole.LEAD
+            return ProjectRole.MEMBER
+
     def _member_to_domain(self, model: ProjectMemberModel) -> ProjectMember:
         return ProjectMember(
             project_id=model.project_id,
             user_id=model.user_id,
-            role=ProjectRole(model.role),
+            role=self._coerce_project_role(model.role),
             joined_at=model.joined_at,
         )
 

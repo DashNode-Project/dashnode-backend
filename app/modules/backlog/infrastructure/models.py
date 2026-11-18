@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.database import Base
@@ -33,6 +33,12 @@ class UserStoryModel(Base):
     user_role: Mapped[str] = mapped_column(String(200), nullable=False)
     reason: Mapped[str] = mapped_column(String(2000), nullable=False)
     acceptance_criteria: Mapped[str] = mapped_column(String(8000), default="", nullable=False)
+    definition_of_ready: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    definition_of_done: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
     moscow_priority: Mapped[str] = mapped_column(String(20), nullable=False)
     story_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     estimation_mode: Mapped[str] = mapped_column(

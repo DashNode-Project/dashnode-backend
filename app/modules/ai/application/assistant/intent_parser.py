@@ -7,6 +7,7 @@ import re
 from app.modules.ai.application.assistant.intent_models import (
     IntentType,
     MeetingFilter,
+    MetricsPeriodKey,
     ParsedIntent,
     TaskFilter,
 )
@@ -23,6 +24,23 @@ def parse_intent(
     normalized = normalize_text(raw)
     project_ref = _clean_project_ref(_extract_project_ref(raw, open_project_name))
     sprint_ref = _extract_sprint_ref(raw)
+    metrics_period = _extract_metrics_period(normalized)
+
+    if _asks_metrics_by_user(normalized):
+        return ParsedIntent(
+            intent=IntentType.METRICS_BY_USER,
+            metrics_period=metrics_period,
+        )
+    if _asks_metrics_list(normalized):
+        return ParsedIntent(
+            intent=IntentType.METRICS_LIST,
+            metrics_period=metrics_period,
+        )
+    if _asks_metrics_summary(normalized):
+        return ParsedIntent(
+            intent=IntentType.METRICS_SUMMARY,
+            metrics_period=metrics_period,
+        )
 
     conv_index = _conversational_index(normalized, last_project_names)
     if conv_index is not None and _asks_members(normalized):
@@ -698,3 +716,54 @@ def _summary_conversational_index(normalized: str, last_project_names: list[str]
     if re.search(r"\b(proyecto anterior|el anterior|la anterior|ultimo proyecto)\b", normalized):
         return 0
     return _conversational_index(normalized, last_project_names)
+
+
+_METRICS_HINTS = re.compile(
+    r"\b(metricas?\s+de\s+ia|metricas?\s+ia|interacciones?\s+de\s+ia|"
+    r"registro\s+de\s+ia|consumo\s+de\s+ia|tokens\s+de\s+ia|"
+    r"latencia\s+de\s+ia|uso\s+de\s+ia|uso\s+ia|usaron?\s+ia|usó\s+ia)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _asks_metrics_summary(normalized: str) -> bool:
+    if not _METRICS_HINTS.search(normalized):
+        return False
+    return not (_asks_metrics_by_user(normalized) or _asks_metrics_list(normalized))
+
+
+def _asks_metrics_by_user(normalized: str) -> bool:
+    if not _METRICS_HINTS.search(normalized):
+        return False
+    return bool(
+        re.search(
+            r"\b(por\s+usuario|por\s+usuarios|usuarios?\s+que\s+usaron|"
+            r"quien\s+uso\s+ia|desglose\s+por\s+usuario)\b",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _asks_metrics_list(normalized: str) -> bool:
+    if not _METRICS_HINTS.search(normalized):
+        return False
+    return bool(
+        re.search(
+            r"\b(lista|listar|historial|registro|ultimas?\s+interacciones)\b",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _extract_metrics_period(normalized: str) -> MetricsPeriodKey:
+    if re.search(r"\bhoy\b|\btoday\b", normalized, flags=re.IGNORECASE):
+        return MetricsPeriodKey.TODAY
+    if re.search(r"\b7\s*d[ií]as\b|\bultimos?\s+7\b|\b7d\b", normalized, flags=re.IGNORECASE):
+        return MetricsPeriodKey.SEVEN_D
+    if re.search(r"\b30\s*d[ií]as\b|\bultimos?\s+30\b|\b30d\b", normalized, flags=re.IGNORECASE):
+        return MetricsPeriodKey.THIRTY_D
+    if re.search(r"\beste\s+mes\b|\bdel\s+mes\b|\bmonth\b", normalized, flags=re.IGNORECASE):
+        return MetricsPeriodKey.MONTH
+    return MetricsPeriodKey.THIRTY_D

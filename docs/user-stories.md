@@ -1415,6 +1415,13 @@ Mensajes literales en `app/modules/documentation/domain/messages.py`. Migracione
 
 ---
 
+## EP-13 — Métricas de IA, registro y valoración (v1)
+
+| ID | Estado | Notas |
+|---|---|---|
+| HU_DN_08_118 | Implementado (backend v1) | Consultas METRICS_* en asistente sin Gemini; API de métricas y registro; valoración PUT |
+| HU_DN_08_119+ | Diferido | Rollups diarios, exportación, purga programada |
+
 ## HU_DN_07_113 — Visualizar un aviso de validación humana al generarse una propuesta de IA
 **Como** Desarrollador, Gerente o Administrador  
 **Quiero** Ver claramente una advertencia de que la propuesta de IA no está validada por humanos  

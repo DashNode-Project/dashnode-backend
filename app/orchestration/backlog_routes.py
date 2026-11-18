@@ -50,6 +50,7 @@ from app.orchestration.backlog_adapters import (
     SqlAlchemyActiveMemberLookup,
     SqlAlchemyProjectLookup,
 )
+from app.orchestration.backlog_my_tasks_query import SqlAlchemyMyTasksQuery
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
 from app.shared.infrastructure.clock import SystemClock
@@ -421,8 +422,12 @@ def list_my_tasks(
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> MyTasksResponse:
+    from app.modules.sprints.infrastructure.repositories import SqlAlchemySprintRepository
+
     use_case = ListMyTasksUseCase(
         backlog=SqlAlchemyBacklogRepository(db),
         projects=SqlAlchemyProjectLookup(db),
+        sprint_lookup=SqlAlchemySprintRepository(db),
+        my_tasks_query=SqlAlchemyMyTasksQuery(db),
     )
     return use_case.execute(current_user, project_id=project_id, status=status_filter)

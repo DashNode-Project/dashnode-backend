@@ -34,7 +34,8 @@ from app.modules.backlog.infrastructure.models import EpicModel, StoryTaskModel,
 from app.modules.kanban.infrastructure.models import KanbanColumnSettingsModel
 from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
 from app.modules.sprints.infrastructure.models import SprintModel
-from app.shared.infrastructure.database import SessionLocal
+from app.shared.infrastructure import database as db_runtime
+from app.shared.infrastructure.database import initialize_database
 from app.shared.infrastructure.hasher import Argon2PasswordHasher
 from app.shared.infrastructure.id_generator import UuidGenerator
 
@@ -103,7 +104,10 @@ def ensure_member(
 
 
 def seed_kanban_data() -> int:
-    db = SessionLocal()
+    initialize_database()
+    if db_runtime.SessionLocal is None:
+        raise RuntimeError("SessionLocal not initialized")
+    db = db_runtime.SessionLocal()
     try:
         print("\n" + "=" * 70)
         print(" INICIANDO POBLADO DE DATOS DE PRUEBA PARA TABLERO KANBAN (EP-08)")

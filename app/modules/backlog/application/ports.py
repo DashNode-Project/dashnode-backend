@@ -3,6 +3,7 @@
 from typing import Protocol
 
 from app.modules.backlog.application.access import ProjectContext
+from app.modules.backlog.application.dtos import MyTaskItemDTO
 
 
 class ProjectLookupPort(Protocol):
@@ -13,3 +14,13 @@ class ProjectLookupPort(Protocol):
 
 class ActiveMemberLookupPort(Protocol):
     def is_active_project_member(self, project_id: str, user_id: str) -> bool: ...
+
+
+class MyTaskItemsQueryPort(Protocol):
+    def list_for_assignee(
+        self,
+        assignee_id: str,
+        *,
+        project_id: str | None = None,
+        status_filter: str | None = None,
+    ) -> list[MyTaskItemDTO]: ...

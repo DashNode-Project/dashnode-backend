@@ -1,6 +1,7 @@
 """Use cases for voice and text AI assistant flows (EP-10)."""
 
 import logging
+import time
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
@@ -25,6 +26,14 @@ from app.modules.ai.domain.ports import (
     QuotaPort,
     TranscriptionPort,
 )
+from app.modules.ai_metrics.application.interaction_registry import (
+    SOURCE_ASSISTANT_TEXT,
+    SOURCE_ASSISTANT_VOICE,
+    SOURCE_METRICS_QUERY,
+    InteractionRegistry,
+    StepRecord,
+)
+from app.modules.ai_metrics.infrastructure.models import AiInteractionModel
 from app.shared.domain.errors import AppError, ErrorKind
 from app.shared.infrastructure.ai_request_trace import log_ai_stage
 
@@ -56,6 +65,13 @@ class TextGenerateCommand:
     user_role: str
 
 
+@dataclass
+class AssistantPipelineResult:
+    response: VoiceProcessResponse
+    interaction_id: str | None = None
+    answer_meta: dict[str, object] | None = None
+
+
 def validate_voice_audio(
     cmd: VoiceProcessCommand,
     *,
@@ -81,17 +97,98 @@ def generate_assistant_response(
     project_id: str | None,
     user_id: str,
     user_role: str,
-) -> VoiceProcessResponse:
+    *,
+    source: str = SOURCE_ASSISTANT_TEXT,
+    audio_duration_ms: int = 0,
+) -> AssistantPipelineResult:
+    registry = InteractionRegistry(session)
+    started = time.perf_counter()
+    interaction_id = registry.start_pending(
+        user_id=user_id,
+        project_id=project_id,
+        source=source,
+        request_text=recognized,
+        counts_as_usage=True,
+        audio_duration_ms=audio_duration_ms,
+    )
     orchestrator = AssistantOrchestrator(session, generation, quotas, data)
     try:
         answer = orchestrator.answer(recognized, user_id, user_role, project_id).strip()
+        answer_meta = orchestrator.consume_answer_meta()
+        if answer_meta and answer_meta.get("registry_source") == SOURCE_METRICS_QUERY:
+            row = session.get(AiInteractionModel, interaction_id)
+            if row is not None:
+                row.source = SOURCE_METRICS_QUERY
+                row.counts_as_usage = False
+                session.flush()
+            registry.record_step(
+                interaction_id,
+                1,
+                StepRecord(step_type="METRICS_QUERY", status="SUCCESS", latency_ms=0),
+            )
+        else:
+            registry.record_step(
+                interaction_id,
+                1,
+                StepRecord(
+                    step_type="GENERATION",
+                    status="SUCCESS",
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                ),
+            )
+        if not answer:
+            registry.complete_error(
+                interaction_id,
+                error_code="EMPTY_ANSWER",
+                total_latency_ms=int((time.perf_counter() - started) * 1000),
+            )
+            return AssistantPipelineResult(
+                response=VoiceProcessResponse(
+                    recognized_text=recognized,
+                    assistant_response=None,
+                    status=AssistantResponseStatus.ERROR,
+                    error=msg.AI_PROCESSING_ERROR,
+                ),
+                interaction_id=interaction_id,
+                answer_meta=answer_meta,
+            )
+        registry.complete_success(
+            interaction_id,
+            response_text=answer,
+            model_id=None,
+            total_latency_ms=int((time.perf_counter() - started) * 1000),
+            audio_duration_ms=audio_duration_ms,
+        )
+        return AssistantPipelineResult(
+            response=VoiceProcessResponse(
+                recognized_text=recognized,
+                assistant_response=answer,
+                status=AssistantResponseStatus.RESPONDED,
+            ),
+            interaction_id=interaction_id,
+            answer_meta=answer_meta,
+        )
     except ClarificationNeeded as exc:
-        return VoiceProcessResponse(
-            recognized_text=recognized,
-            assistant_response=exc.message,
-            status=AssistantResponseStatus.RESPONDED,
+        registry.complete_success(
+            interaction_id,
+            response_text=exc.message,
+            model_id=None,
+            total_latency_ms=int((time.perf_counter() - started) * 1000),
+        )
+        return AssistantPipelineResult(
+            response=VoiceProcessResponse(
+                recognized_text=recognized,
+                assistant_response=exc.message,
+                status=AssistantResponseStatus.RESPONDED,
+            ),
+            interaction_id=interaction_id,
         )
     except QuotaExhaustedError as exc:
+        registry.complete_error(
+            interaction_id,
+            error_code="QUOTA_EXHAUSTED",
+            total_latency_ms=int((time.perf_counter() - started) * 1000),
+        )
         raise AppError(
             "FREE_QUOTA_EXHAUSTED",
             msg.FREE_QUOTA_EXHAUSTED,
@@ -100,25 +197,20 @@ def generate_assistant_response(
         ) from exc
     except Exception:
         logger.exception("assistant_unhandled_error user_id=%s", user_id)
-        return VoiceProcessResponse(
-            recognized_text=recognized,
-            assistant_response=msg.AI_PROCESSING_ERROR,
-            status=AssistantResponseStatus.ERROR,
-            error=msg.AI_PROCESSING_ERROR,
+        registry.complete_error(
+            interaction_id,
+            error_code="UNHANDLED",
+            total_latency_ms=int((time.perf_counter() - started) * 1000),
         )
-
-    if not answer:
-        return VoiceProcessResponse(
-            recognized_text=recognized,
-            assistant_response=None,
-            status=AssistantResponseStatus.ERROR,
-            error=msg.AI_PROCESSING_ERROR,
+        return AssistantPipelineResult(
+            response=VoiceProcessResponse(
+                recognized_text=recognized,
+                assistant_response=msg.AI_PROCESSING_ERROR,
+                status=AssistantResponseStatus.ERROR,
+                error=msg.AI_PROCESSING_ERROR,
+            ),
+            interaction_id=interaction_id,
         )
-    return VoiceProcessResponse(
-        recognized_text=recognized,
-        assistant_response=answer,
-        status=AssistantResponseStatus.RESPONDED,
-    )
 
 
 class ProcessVoiceUseCase:
@@ -166,6 +258,7 @@ class ProcessVoiceUseCase:
 
         recognized = _validated_recognized_text(recognized)
 
+        audio_ms = int((cmd.duration_seconds or 0) * 1000)
         return generate_assistant_response(
             self._session,
             self._generation,
@@ -175,7 +268,9 @@ class ProcessVoiceUseCase:
             cmd.project_id,
             cmd.user_id,
             cmd.user_role,
-        )
+            source=SOURCE_ASSISTANT_VOICE,
+            audio_duration_ms=audio_ms,
+        ).response
 
 
 def _whisper_app_error(exc: WhisperProcessingError) -> AppError:
@@ -249,7 +344,7 @@ class GenerateTextUseCase:
 
     def execute(self, cmd: TextGenerateCommand) -> TextGenerateResponse:
         log_ai_stage("generate_text_use_case_start", user_id=cmd.user_id)
-        result = generate_assistant_response(
+        pipeline = generate_assistant_response(
             self._session,
             self._generation,
             self._quotas,
@@ -259,11 +354,22 @@ class GenerateTextUseCase:
             cmd.user_id,
             cmd.user_role,
         )
+        result = pipeline.response
+        meta = pipeline.answer_meta or {}
         response = TextGenerateResponse(
             recognized_text=cmd.text.strip(),
             assistant_response=result.assistant_response,
             status=result.status,
             error=result.error,
+            intent=str(meta["intent"]) if meta.get("intent") is not None else None,
+            period=str(meta["period"]) if meta.get("period") is not None else None,
+            scope=str(meta["scope"]) if meta.get("scope") is not None else None,
+            data=meta.get("data") if isinstance(meta.get("data"), dict) else None,
+            panel_link=str(meta["panel_link"]) if meta.get("panel_link") is not None else None,
+            clarification=(
+                str(meta["clarification"]) if meta.get("clarification") is not None else None
+            ),
+            interaction_id=pipeline.interaction_id,
         )
         log_ai_stage(
             "generate_text_use_case_done",

@@ -11,7 +11,7 @@ from app.modules.backlog.application.dtos import (
     MyTaskItemDTO,
     MyTasksResponse,
 )
-from app.modules.backlog.application.ports import ProjectLookupPort
+from app.modules.backlog.application.ports import MyTaskItemsQueryPort, ProjectLookupPort
 from app.modules.backlog.application.use_cases import _require_project
 from app.modules.backlog.domain import messages
 from app.modules.backlog.domain.entities import (
@@ -20,6 +20,7 @@ from app.modules.backlog.domain.entities import (
     parse_story_task_status,
 )
 from app.modules.backlog.domain.ports import BacklogRepository
+from app.modules.sprints.domain.ports import SprintRepository
 from app.shared.application.identity import CurrentUser
 from app.shared.application.ports import Clock, IdGenerator, UnitOfWork
 from app.shared.domain.authorization import AccessDeniedError
@@ -150,17 +151,38 @@ class ChangeStoryTaskStatusUseCase:
 
 
 class ListMyTasksUseCase:
-    def __init__(self, backlog: BacklogRepository, projects: ProjectLookupPort) -> None:
+    def __init__(
+        self,
+        backlog: BacklogRepository,
+        projects: ProjectLookupPort,
+        *,
+        sprint_lookup: SprintRepository | None = None,
+        my_tasks_query: MyTaskItemsQueryPort | None = None,
+    ) -> None:
         self._backlog = backlog
         self._projects = projects
+        self._sprints = sprint_lookup
+        self._my_tasks_query = my_tasks_query
 
     def execute(
         self, actor: CurrentUser, *, project_id: str | None, status: str | None
     ) -> MyTasksResponse:
+        wanted_status = parse_story_task_status(status) if status else None
+        if self._my_tasks_query is not None:
+            fast_items = self._my_tasks_query.list_for_assignee(
+                actor.id,
+                project_id=project_id,
+                status_filter=wanted_status.value if wanted_status else None,
+            )
+            if not fast_items:
+                if wanted_status or project_id:
+                    return MyTasksResponse(tasks=[], message=messages.MY_TASKS_FILTER_EMPTY)
+                return MyTasksResponse(tasks=[], message=messages.MY_TASKS_EMPTY)
+            return MyTasksResponse(tasks=fast_items)
+
         rows = self._backlog.list_tasks_for_assignee(actor.id)
         if not rows:
             return MyTasksResponse(tasks=[], message=messages.MY_TASKS_EMPTY)
-        wanted_status = parse_story_task_status(status) if status else None
         items: list[MyTaskItemDTO] = []
         for task in rows:
             if project_id and task.project_id != project_id:
@@ -171,6 +193,15 @@ class ListMyTasksUseCase:
             story = self._backlog.get_user_story(task.user_story_id)
             if project is None or story is None:
                 continue
+            epic_payload = None
+            epic = self._backlog.get_epic(story.epic_id)
+            if epic is not None:
+                epic_payload = {"id": epic.id, "name": epic.name}
+            sprint_payload = None
+            if story.sprint_id and self._sprints is not None:
+                sprint = self._sprints.get_by_id(story.sprint_id)
+                if sprint is not None:
+                    sprint_payload = {"id": sprint.id, "name": sprint.name}
             items.append(
                 MyTaskItemDTO(
                     id=task.id,
@@ -180,6 +211,8 @@ class ListMyTasksUseCase:
                     status=task.status.value,
                     estimated_hours=task.estimated_hours,
                     logged_hours=task.logged_hours,
+                    epic=epic_payload,
+                    sprint=sprint_payload,
                 )
             )
         if not items:

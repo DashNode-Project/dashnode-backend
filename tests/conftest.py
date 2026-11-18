@@ -42,6 +42,7 @@ from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.main import app  # noqa: E402
+from app.modules.ai_metrics.infrastructure import models as _ai_metrics_models  # noqa: E402, F401
 from app.shared.infrastructure.database import Base, get_db_session  # noqa: E402
 
 
