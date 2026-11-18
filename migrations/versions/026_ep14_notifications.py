@@ -173,13 +173,25 @@ def downgrade() -> None:
     op.drop_index("ix_notif_recipient_created", table_name="notifications")
     op.drop_constraint("uq_notification_event_recipient", "notifications", type_="unique")
 
+    default = sa.false() if dialect == "postgresql" else "0"
     with op.batch_alter_table("notifications") as batch:
-        batch.add_column(sa.Column("is_read", sa.Boolean(), nullable=False, server_default="0"))
-    op.execute(
-        sa.text(
-            "UPDATE notifications SET is_read = CASE WHEN read_at IS NOT NULL THEN 1 ELSE 0 END"
+        batch.add_column(
+            sa.Column("is_read", sa.Boolean(), nullable=False, server_default=default)
         )
-    )
+    if dialect == "postgresql":
+        op.execute(
+            sa.text(
+                "UPDATE notifications SET is_read = CASE "
+                "WHEN read_at IS NOT NULL THEN TRUE ELSE FALSE END"
+            )
+        )
+    else:
+        op.execute(
+            sa.text(
+                "UPDATE notifications SET is_read = CASE "
+                "WHEN read_at IS NOT NULL THEN 1 ELSE 0 END"
+            )
+        )
     with op.batch_alter_table("notifications") as batch:
         batch.drop_column("expires_at")
         batch.drop_column("read_at")
