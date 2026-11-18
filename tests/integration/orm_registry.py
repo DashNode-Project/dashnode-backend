@@ -7,6 +7,7 @@ def register_all_sqlalchemy_models() -> None:
     from app.modules.auth.infrastructure import models as _auth  # noqa: F401
     from app.modules.availability.infrastructure import models as _availability  # noqa: F401
     from app.modules.backlog.infrastructure import models as _backlog  # noqa: F401
+    from app.modules.devops.infrastructure import models as _devops  # noqa: F401
     from app.modules.documentation.infrastructure import models as _documentation  # noqa: F401
     from app.modules.fixes.infrastructure import models as _fixes  # noqa: F401
     from app.modules.kanban.infrastructure import models as _kanban  # noqa: F401
