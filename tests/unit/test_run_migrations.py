@@ -18,7 +18,7 @@ def test_upgrade_head_skips_sqlite(select_url: MagicMock, upgrade: MagicMock) ->
 @patch("app.shared.infrastructure.database_provider.select_database_url")
 def test_upgrade_head_runs_on_postgres(select_url: MagicMock, upgrade: MagicMock) -> None:
     status = MagicMock(url_label="supabase", role=MagicMock(value="primary"))
-    select_url.return_value = ("postgresql://user:pass@host/db", status)
+    select_url.return_value = ("postgresql://postgres@localhost:5432/dashnode_ci", status)
     run_migrations.upgrade_head()
     upgrade.assert_called_once()
 

@@ -77,7 +77,7 @@ def upgrade() -> None:
             sa.text(
                 """
                 UPDATE notifications
-                SET event_key = COALESCE(event_key, 'legacy:' || id || ':1'),
+                SET event_key = COALESCE(event_key, 'legacy:' || id || '\:1'),
                     entity_type = COALESCE(entity_type, 'legacy'),
                     entity_id = COALESCE(entity_id, id),
                     read_at = CASE WHEN is_read THEN created_at ELSE read_at END,
@@ -90,7 +90,7 @@ def upgrade() -> None:
             sa.text(
                 """
                 UPDATE notifications
-                SET event_key = COALESCE(event_key, 'legacy:' || id || ':1'),
+                SET event_key = COALESCE(event_key, 'legacy:' || id || '\:1'),
                     entity_type = COALESCE(entity_type, 'legacy'),
                     entity_id = COALESCE(entity_id, id),
                     read_at = CASE WHEN is_read THEN created_at ELSE read_at END,
