@@ -22,6 +22,8 @@ from app.orchestration.ai_routes import router as ai_router
 from app.orchestration.auth_container import build_session_authenticator
 from app.orchestration.availability_routes import router as availability_router
 from app.orchestration.backlog_routes import router as backlog_router
+from app.orchestration.command_routes import router as commands_router
+from app.orchestration.devops_routes import router as devops_router
 from app.orchestration.documentation_routes import router as documentation_router
 from app.orchestration.error_handling import register_error_handlers
 from app.orchestration.issue_routes import router as issue_router
@@ -93,6 +95,8 @@ app.include_router(ai_router, prefix="/api/v1")
 app.include_router(ai_metrics_router, prefix="/api/v1")
 app.include_router(issue_router, prefix="/api/v1")
 app.include_router(system_knowledge_router, prefix="/api/v1")
+app.include_router(commands_router, prefix="/api/v1")
+app.include_router(devops_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["public"])
