@@ -27,7 +27,11 @@ from app.modules.backlog.application.dtos import (
     UpdateUserStoryCommand,
     UserStoryDTO,
 )
-from app.modules.backlog.application.ports import ActiveMemberLookupPort, ProjectLookupPort
+from app.modules.backlog.application.ports import (
+    ActiveMemberLookupPort,
+    ProjectLookupPort,
+    TaskAssignmentNotifierPort,
+)
 from app.modules.backlog.domain import messages
 from app.modules.backlog.domain.entities import (
     Epic,
@@ -654,12 +658,14 @@ class AssignStoryTaskUseCase:
         members: ActiveMemberLookupPort,
         clock: Clock,
         uow: UnitOfWork,
+        assignment_notifier: TaskAssignmentNotifierPort | None = None,
     ) -> None:
         self._backlog = backlog
         self._projects = projects
         self._members = members
         self._clock = clock
         self._uow = uow
+        self._assignment_notifier = assignment_notifier
 
     def execute(
         self, task_id: str, cmd: AssignStoryTaskCommand, actor: CurrentUser
@@ -683,11 +689,29 @@ class AssignStoryTaskUseCase:
                 {"assignee_id": messages.ASSIGNEE_NOT_IN_PROJECT},
             )
 
+        previous_assignee = task.assignee_id
+        project_ctx = self._projects.get_project(task.project_id)
+        project_name = project_ctx.name if project_ctx is not None else "el proyecto"
         now = self._clock.now()
         task.assignee_id = cmd.assignee_id
         task.updated_at = now
         with self._uow:
             self._backlog.update_story_task(task)
+            if (
+                self._assignment_notifier is not None
+                and cmd.assignee_id is not None
+                and cmd.assignee_id != previous_assignee
+            ):
+                version = int(task.version) if getattr(task, "version", None) is not None else 1
+                self._assignment_notifier.notify_task_assigned_in_tx(
+                    project_id=task.project_id,
+                    task_id=task.id,
+                    task_name=task.name,
+                    project_name=project_name,
+                    assignee_id=cmd.assignee_id,
+                    actor_id=actor.id,
+                    version=version,
+                )
             self._uow.commit()
         return _task_dto(task), MessageResponse(message=messages.ASSIGNEE_ASSIGNED)
 

@@ -13,7 +13,7 @@ from app.modules.ai.infrastructure.models import AiDailyUsageModel, SystemConfig
 from app.modules.auth.infrastructure.models import UserModel
 from app.modules.backlog.infrastructure.models import StoryTaskModel, TaskStatusHistoryModel
 from app.modules.fixes.domain.entities import TaskSnapshot
-from app.modules.notifications.infrastructure.models import NotificationModel
+from app.orchestration.notification_adapters import SqlAlchemyDomainNotificationBridge
 from app.modules.projects.infrastructure.models import (
     AuditLogModel,
     ProjectMemberModel,
@@ -199,23 +199,11 @@ class SqlAlchemyFixTaskCoordinator:
 class SqlAlchemyIssueNotificationSender:
     def __init__(self, session: Session) -> None:
         self._session = session
+        self._bridge = SqlAlchemyDomainNotificationBridge(session)
 
-    def _project_recipients(self, project_id: str, exclude_user_id: str) -> set[str]:
+    def _project_name(self, project_id: str) -> str:
         project = self._session.get(ProjectModel, project_id)
-        if project is None:
-            return set()
-        recipients: set[str] = set()
-        if project.manager_id and project.manager_id != exclude_user_id:
-            recipients.add(project.manager_id)
-        members = (
-            self._session.query(ProjectMemberModel.user_id)
-            .filter(ProjectMemberModel.project_id == project_id)
-            .all()
-        )
-        for (m_id,) in members:
-            if m_id != exclude_user_id:
-                recipients.add(m_id)
-        return recipients
+        return (project.name if project else "") or "el proyecto"
 
     def notify_issue_created(
         self,
@@ -223,25 +211,18 @@ class SqlAlchemyIssueNotificationSender:
         issue_id: str,
         title: str,
         reporter_id: str,
+        *,
+        severity: str = "MEDIA",
+        actor_id: str | None = None,
     ) -> None:
-        recipients = self._project_recipients(project_id, reporter_id)
-        now = _clock.now()
-        for r_id in recipients:
-            self._session.add(
-                NotificationModel(
-                    id=_id_gen.generate(),
-                    recipient_id=r_id,
-                    type="issue_created",
-                    title="Nuevo Fix creado",
-                    message=f"Se ha registrado el issue: {title}",
-                    is_read=False,
-                    created_at=now,
-                )
-            )
-        try:
-            self._session.commit()
-        except Exception:
-            self._session.rollback()
+        self._bridge.notify_issue_reported_in_tx(
+            project_id=project_id,
+            issue_id=issue_id,
+            title=title,
+            project_name=self._project_name(project_id),
+            severity=severity,
+            actor_id=actor_id or reporter_id,
+        )
 
     def notify_issue_assigned_in_tx(
         self,
@@ -252,19 +233,19 @@ class SqlAlchemyIssueNotificationSender:
         assignee_id: str | None,
         actor_id: str,
         when: datetime,
+        version: int = 1,
     ) -> None:
-        if not assignee_id or assignee_id == actor_id:
+        _ = when
+        if not assignee_id:
             return
-        self._session.add(
-            NotificationModel(
-                id=_id_gen.generate(),
-                recipient_id=assignee_id,
-                type="issue_assigned",
-                title="Issue asignado",
-                message=f"Se te ha asignado el issue: {title}",
-                is_read=False,
-                created_at=when,
-            )
+        self._bridge.notify_issue_assigned_in_tx(
+            project_id=project_id,
+            issue_id=issue_id,
+            title=title,
+            project_name=self._project_name(project_id),
+            assignee_id=assignee_id,
+            actor_id=actor_id,
+            version=version,
         )
 
     def notify_issue_resolved_in_tx(
@@ -278,26 +259,15 @@ class SqlAlchemyIssueNotificationSender:
         actor_id: str,
         when: datetime,
     ) -> None:
-        recipients: set[str] = set()
-        project = self._session.get(ProjectModel, project_id)
-        if project and project.manager_id and project.manager_id != actor_id:
-            recipients.add(project.manager_id)
-        if reporter_id != actor_id:
-            recipients.add(reporter_id)
-        if assignee_id and assignee_id != actor_id:
-            recipients.add(assignee_id)
-        for r_id in recipients:
-            self._session.add(
-                NotificationModel(
-                    id=_id_gen.generate(),
-                    recipient_id=r_id,
-                    type="issue_resolved",
-                    title="Issue resuelto",
-                    message=f"Se ha resuelto el issue: {title}",
-                    is_read=False,
-                    created_at=when,
-                )
-            )
+        _ = (
+            project_id,
+            issue_id,
+            title,
+            reporter_id,
+            assignee_id,
+            actor_id,
+            when,
+        )
 
     def notify_task_fix_reported_in_tx(
         self,
@@ -309,20 +279,17 @@ class SqlAlchemyIssueNotificationSender:
         title: str,
         reporter_id: str,
         when: datetime,
+        severity: str = "MEDIA",
     ) -> None:
-        recipients = self._project_recipients(project_id, reporter_id)
-        for r_id in recipients:
-            self._session.add(
-                NotificationModel(
-                    id=_id_gen.generate(),
-                    recipient_id=r_id,
-                    type="task_fix_reported",
-                    title="Fix reportado en tarea",
-                    message=f"Se reportó el fix '{title}' en la tarea: {task_name}",
-                    is_read=False,
-                    created_at=when,
-                )
-            )
+        _ = (task_id, task_name, when)
+        self._bridge.notify_issue_reported_in_tx(
+            project_id=project_id,
+            issue_id=issue_id,
+            title=title,
+            project_name=self._project_name(project_id),
+            severity=severity,
+            actor_id=reporter_id,
+        )
 
 
 class SqlAlchemyAiQuotaLookup:

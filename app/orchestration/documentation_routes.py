@@ -32,6 +32,7 @@ from app.modules.documentation.infrastructure.repositories import (
     SqlAlchemyDocumentationRepository,
 )
 from app.orchestration.backlog_adapters import SqlAlchemyProjectLookup
+from app.orchestration.notification_adapters import SqlAlchemyDomainNotificationBridge
 from app.orchestration.security import get_current_user
 from app.shared.application.identity import CurrentUser
 from app.shared.infrastructure.clock import SystemClock
@@ -252,6 +253,7 @@ def approve_documentation_entry(
         clock=_clock,
         projects=projects,
         users=users,
+        doc_notifier=SqlAlchemyDomainNotificationBridge(db),
     )
     return use_case.execute(project_id, entry_id, actor)
 
@@ -277,6 +279,7 @@ def reject_documentation_entry(
         clock=_clock,
         projects=projects,
         users=users,
+        doc_notifier=SqlAlchemyDomainNotificationBridge(db),
     )
     return use_case.execute(project_id, entry_id, cmd, actor)
 

@@ -12,8 +12,8 @@ from app.modules.availability.domain.ports import (
     UserBasicInfo,
     UserLookup,
 )
-from app.modules.notifications.infrastructure.models import NotificationModel
 from app.modules.projects.infrastructure.models import ProjectMemberModel, ProjectModel
+from app.orchestration.notification_adapters import SqlAlchemyDomainNotificationBridge
 from app.shared.application.ports import Clock, IdGenerator
 
 
@@ -105,39 +105,28 @@ class SqlAlchemyMeetingNotificationSender(NotificationSender):
 
     def __init__(self, session: Session, id_gen: IdGenerator, clock: Clock) -> None:
         self._session = session
-        self._id_gen = id_gen
         self._clock = clock
+        self._bridge = SqlAlchemyDomainNotificationBridge(session)
+
+    def _when_label(self, meeting: Meeting) -> str:
+        return f"{meeting.date} {meeting.start_time}-{meeting.end_time}"
 
     def notify_meeting_scheduled(self, meeting: Meeting, participant_ids: list[str]) -> None:
-        now = self._clock.now()
-        for pid in participant_ids:
-            notif = NotificationModel(
-                id=self._id_gen.generate(),
-                recipient_id=pid,
-                type="meeting_scheduled",
-                title=f"Reunión programada: {meeting.title}",
-                message=(
-                    f"Se ha programado la reunión '{meeting.title}' ({meeting.type}) "
-                    f"para el {meeting.date} de {meeting.start_time} a {meeting.end_time}."
-                ),
-                is_read=False,
-                created_at=now,
-            )
-            self._session.add(notif)
+        self._bridge.notify_meeting_scheduled_in_tx(
+            project_id=meeting.project_id,
+            meeting_id=meeting.id,
+            meeting_title=meeting.title,
+            when_label=self._when_label(meeting),
+            participant_ids=participant_ids,
+            actor_id=meeting.creator_id,
+        )
 
     def notify_meeting_cancelled(self, meeting: Meeting, participant_ids: list[str]) -> None:
-        now = self._clock.now()
-        for pid in participant_ids:
-            notif = NotificationModel(
-                id=self._id_gen.generate(),
-                recipient_id=pid,
-                type="meeting_cancelled",
-                title=f"Reunión cancelada: {meeting.title}",
-                message=(
-                    f"La reunión '{meeting.title}' programada para el {meeting.date} "
-                    "ha sido cancelada."
-                ),
-                is_read=False,
-                created_at=now,
-            )
-            self._session.add(notif)
+        self._bridge.notify_meeting_cancelled_in_tx(
+            project_id=meeting.project_id,
+            meeting_id=meeting.id,
+            meeting_title=meeting.title,
+            when_label=self._when_label(meeting),
+            participant_ids=participant_ids,
+            actor_id=None,
+        )

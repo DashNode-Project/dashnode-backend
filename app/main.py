@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.modules.auth.api.routes import router as auth_router
-from app.modules.notifications.api.routes import router as notifications_router
+from app.orchestration.notification_routes import router as notifications_router
 from app.modules.tasks.api.routes import router as tasks_router
 from app.orchestration.ai_metrics_routes import router as ai_metrics_router
 from app.orchestration.ai_routes import router as ai_router
