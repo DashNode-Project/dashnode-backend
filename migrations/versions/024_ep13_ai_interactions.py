@@ -7,7 +7,7 @@ Revises: 023_ep12_ai_usage_len
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
+from alembic import context, op
 
 revision: str = "024_ep13_ai_interactions"
 down_revision: str | None = "023_ep12_ai_usage_len"
@@ -16,6 +16,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _has_column(table: str, column: str) -> bool:
+    if context.is_offline_mode():
+        return False
     bind = op.get_bind()
     insp = sa.inspect(bind)
     return any(col["name"] == column for col in insp.get_columns(table))
@@ -122,7 +124,7 @@ def upgrade() -> None:
         ["accessor_user_id", "created_at"],
     )
 
-    if not _has_column("ai_analyses", "interaction_id"):
+    if context.is_offline_mode() or not _has_column("ai_analyses", "interaction_id"):
         op.add_column(
             "ai_analyses",
             sa.Column(
@@ -135,7 +137,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if _has_column("ai_analyses", "interaction_id"):
+    if context.is_offline_mode() or _has_column("ai_analyses", "interaction_id"):
         op.drop_column("ai_analyses", "interaction_id")
     op.drop_index("ix_ai_registry_access_user", table_name="ai_registry_access_log")
     op.drop_table("ai_registry_access_log")
