@@ -175,9 +175,7 @@ def downgrade() -> None:
 
     default = sa.false() if dialect == "postgresql" else "0"
     with op.batch_alter_table("notifications") as batch:
-        batch.add_column(
-            sa.Column("is_read", sa.Boolean(), nullable=False, server_default=default)
-        )
+        batch.add_column(sa.Column("is_read", sa.Boolean(), nullable=False, server_default=default))
     if dialect == "postgresql":
         op.execute(
             sa.text(
@@ -188,8 +186,7 @@ def downgrade() -> None:
     else:
         op.execute(
             sa.text(
-                "UPDATE notifications SET is_read = CASE "
-                "WHEN read_at IS NOT NULL THEN 1 ELSE 0 END"
+                "UPDATE notifications SET is_read = CASE WHEN read_at IS NOT NULL THEN 1 ELSE 0 END"
             )
         )
     with op.batch_alter_table("notifications") as batch:
