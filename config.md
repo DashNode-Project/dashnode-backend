@@ -1,24 +1,17 @@
-# DashNode Backend — Configuration (EP-13 addendum)
+# Configuración operativa — EP-15 / EP-16
 
-## AI interaction registry (IAM)
+Claves en `system_configs` (sembradas por migración `027_ep15_16_cmd_devops`):
 
-No additional environment variables are required for EP-13 v1. Interaction rows set
-`expires_at` at creation time (retention purge job deferred).
+| Clave | Valor por defecto | Uso |
+|---|---|---|
+| `devops_sim_success_lint` | 0.92 | Probabilidad de éxito lint |
+| `devops_sim_success_test` | 0.85 | Probabilidad de éxito test |
+| `devops_sim_success_build` | 0.95 | Probabilidad de éxito build |
+| `devops_sim_success_deploy` | 0.98 | Probabilidad de éxito deploy |
+| `devops_sim_duration_lint_s` | 12 | Duración planeada lint |
+| `devops_sim_duration_test_s` | 48 | Duración planeada test |
+| `devops_sim_duration_build_s` | 30 | Duración planeada build |
+| `devops_sim_duration_deploy_s` | 20 | Duración planeada deploy |
+| `devops_manual_run_cooldown_s` | 300 | Enfriamiento entre disparos manuales |
 
-## Metrics API
-
-| Endpoint | Roles |
-|----------|--------|
-| `GET /api/v1/ai/metrics/summary` | Admin, Manager |
-| `GET /api/v1/ai/metrics/by-user` | Admin, Manager |
-| `GET /api/v1/ai/metrics/interactions` | Admin, Manager |
-| `GET /api/v1/ai/interactions/{id}` | Admin, Manager (scoped) |
-| `PUT /api/v1/ai/interactions/{id}/rating` | Owner of interaction |
-
-Query `period`: `today`, `7d`, `30d`, `month`, `custom` (requires `from` and `to` in UTC ISO).
-
-## EP-14 Notificaciones
-
-- Retención: 180 días (`expires_at`).
-- Polling del contador: 30 s; límite `GET /api/v1/notifications/unread-count`: 120 req/min/usuario.
-- Sin WebSocket/SSE; creación solo vía transacciones de dominio (sin `POST /notifications`).
+La paleta de comandos no usa variables de entorno adicionales; el catálogo es código versionado (`cmd-v1.0.0`).

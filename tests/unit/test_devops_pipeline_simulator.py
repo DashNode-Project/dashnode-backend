@@ -59,6 +59,19 @@ def test_derive_stage_status_transitions(offset_seconds: int, expected: StageDis
     assert derive_stage_status(plan, now) == expected
 
 
+def test_derive_stage_status_success_after_planned_end() -> None:
+    start = datetime(2026, 3, 2, 10, 0, tzinfo=UTC)
+    end = start + timedelta(seconds=10)
+    plan = PipelineStagePlan(
+        stage=DevopsStage.BUILD,
+        position=3,
+        outcome=DevopsOutcome.SUCCESS,
+        planned_start=start,
+        planned_end=end,
+    )
+    assert derive_stage_status(plan, end) == StageDisplayStatus.EXITOSA
+
+
 def test_derive_stage_status_skipped_is_omitida() -> None:
     start = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
     plan = PipelineStagePlan(

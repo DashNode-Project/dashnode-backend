@@ -4,7 +4,10 @@ from datetime import timedelta
 
 import pytest
 
-from app.modules.devops.application.use_cases import GetLatestPipelineUseCase, TriggerPipelineUseCase
+from app.modules.devops.application.use_cases import (
+    GetLatestPipelineUseCase,
+    TriggerPipelineUseCase,
+)
 from app.modules.devops.domain.entities import (
     DevopsOutcome,
     DevopsStage,
@@ -15,7 +18,7 @@ from app.modules.devops.domain.entities import (
 from app.shared.application.identity import CurrentUser
 from app.shared.domain.authorization import AccessDeniedError
 from app.shared.domain.errors import AppError
-from tests.fakes import FakeClock, FakeIdGenerator, FakeUnitOfWork, T0
+from tests.fakes import T0, FakeClock, FakeIdGenerator, FakeUnitOfWork
 
 
 class _FakeProjects:
