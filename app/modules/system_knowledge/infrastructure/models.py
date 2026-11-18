@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.database import Base
@@ -10,6 +10,7 @@ from app.shared.infrastructure.database import Base
 
 class SystemKnowledgeEntryModel(Base):
     __tablename__ = "system_knowledge_entries"
+    __table_args__ = (Index("ix_system_knowledge_question", "question"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     question: Mapped[str] = mapped_column(String(500), nullable=False)

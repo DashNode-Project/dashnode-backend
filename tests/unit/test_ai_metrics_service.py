@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.modules.ai_metrics.application.ai_metrics_service import AiMetricsService
 from app.modules.ai_metrics.application.interaction_registry import (
     SOURCE_ASSISTANT_TEXT,
+    SOURCE_ASSISTANT_VOICE,
     SOURCE_METRICS_QUERY,
     InteractionRegistry,
 )
@@ -128,3 +129,59 @@ def test_manager_scope_filters_other_projects(db_session: Session) -> None:
     project_ids = {item["project_id"] for item in items if isinstance(item, dict)}
     assert other.id not in project_ids
     assert managed.id in project_ids
+
+
+def test_summary_reports_audio_tokens_and_project_name(db_session: Session) -> None:
+    ids = UuidGenerator()
+    clock = SystemClock()
+    now = clock.now()
+    project = ProjectModel(
+        id=ids.generate(),
+        name="Helix",
+        description="",
+        owner_id="owner",
+        manager_id="mgr-1",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(project)
+    db_session.flush()
+
+    registry = InteractionRegistry(db_session)
+    voice_id = registry.start_pending(
+        user_id="mgr-1",
+        project_id=project.id,
+        source=SOURCE_ASSISTANT_VOICE,
+        request_text="hola voz",
+        audio_duration_ms=4500,
+    )
+    registry.complete_success(
+        voice_id,
+        response_text="ok",
+        model_id="gemini",
+        input_tokens=10,
+        output_tokens=5,
+        audio_duration_ms=4500,
+    )
+    db_session.commit()
+
+    manager = CurrentUser(
+        id="mgr-1",
+        email="m@test.local",
+        name="Mgr",
+        role="manager",
+        is_active=True,
+        created_at=now,
+    )
+    summary = AiMetricsService(db_session).get_summary(
+        manager,
+        period="30d",
+        from_iso=None,
+        to_iso=None,
+        project_id=project.id,
+    )
+    block = summary["summary"]
+    assert isinstance(block, dict)
+    assert block["audio_duration_ms"] == 4500
+    assert block["input_tokens"] == 10
+    assert summary.get("scope_name") == "Helix"
