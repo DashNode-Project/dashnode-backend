@@ -17,7 +17,9 @@ def _create_project(client: TestClient, mgr_id: str) -> str:
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()["id"]
+    project_id = response.json()["id"]
+    assert isinstance(project_id, str)
+    return project_id
 
 
 def test_openapi_exposes_commands_and_devops_paths(client: TestClient) -> None:

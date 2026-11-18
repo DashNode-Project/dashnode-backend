@@ -2,6 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import Engine
 
 from tests.support import login_as
 
@@ -19,10 +20,12 @@ def _create_project(client: TestClient, mgr_id: str) -> str:
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()["id"]
+    project_id = response.json()["id"]
+    assert isinstance(project_id, str)
+    return project_id
 
 
-def test_devops_pipeline_round_trip(pg_client: TestClient, pg_engine) -> None:
+def test_devops_pipeline_round_trip(pg_client: TestClient, pg_engine: Engine) -> None:
     mgr_id = login_as(pg_client, pg_engine, email="devopspg@dashnode.io", role="manager")
     project_id = _create_project(pg_client, mgr_id)
     empty = pg_client.get(f"/api/v1/projects/{project_id}/devops/pipeline/latest")

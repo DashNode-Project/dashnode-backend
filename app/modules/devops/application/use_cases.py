@@ -117,7 +117,7 @@ class TriggerPipelineUseCase:
         if last is not None:
             cooldown = self._pipeline.cooldown_seconds()
             now = self._clock.now()
-            elapsed = (now - last.created_at).total_seconds()
+            elapsed = (now - last).total_seconds()
             if elapsed < cooldown:
                 retry = int(cooldown - elapsed)
                 raise AppError(

@@ -83,7 +83,7 @@ class SqlAlchemyDevopsPipelineRepository:
             return 300
         return int(float(row.value))
 
-    def latest_run_created_at(self, project_id: str) -> DevopsPipelineRunModel | None:
+    def _latest_run_row(self, project_id: str) -> DevopsPipelineRunModel | None:
         row = self._session.scalars(
             select(DevopsPipelineRunModel)
             .where(DevopsPipelineRunModel.project_id == project_id)
@@ -96,6 +96,12 @@ class SqlAlchemyDevopsPipelineRepository:
         if row is not None:
             row.created_at = _aware(row.created_at)
         return row
+
+    def latest_run_created_at(self, project_id: str) -> datetime | None:
+        row = self._latest_run_row(project_id)
+        if row is None:
+            return None
+        return row.created_at
 
     def save_run(self, run: PipelineRun, *, stage_row_ids: list[str]) -> None:
         self._session.add(
@@ -122,7 +128,7 @@ class SqlAlchemyDevopsPipelineRepository:
             )
 
     def get_latest(self, project_id: str) -> PipelineRun | None:
-        row = self.latest_run_created_at(project_id)
+        row = self._latest_run_row(project_id)
         if row is None:
             return None
         stage_rows = self._session.scalars(

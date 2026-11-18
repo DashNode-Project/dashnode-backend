@@ -1,10 +1,12 @@
 """DevOps repository defaults on SQLite."""
 
+from sqlalchemy.orm import Session
+
 from app.modules.ai.infrastructure.models import SystemConfigModel
 from app.modules.devops.infrastructure.repositories import SqlAlchemyDevopsPipelineRepository
 
 
-def test_load_sim_config_reads_system_rows(db_session) -> None:
+def test_load_sim_config_reads_system_rows(db_session: Session) -> None:
     db_session.add(SystemConfigModel(key="devops_sim_duration_lint_s", value="20"))
     db_session.commit()
     repo = SqlAlchemyDevopsPipelineRepository(db_session)
@@ -12,12 +14,12 @@ def test_load_sim_config_reads_system_rows(db_session) -> None:
     assert cfg.duration_lint_s == 20
 
 
-def test_cooldown_default_when_config_missing(db_session) -> None:
+def test_cooldown_default_when_config_missing(db_session: Session) -> None:
     repo = SqlAlchemyDevopsPipelineRepository(db_session)
     assert repo.cooldown_seconds() == 300
 
 
-def test_load_sim_config_applies_all_keys(db_session) -> None:
+def test_load_sim_config_applies_all_keys(db_session: Session) -> None:
     rows = {
         "devops_sim_success_lint": "0.5",
         "devops_sim_success_test": "0.6",
@@ -36,6 +38,6 @@ def test_load_sim_config_applies_all_keys(db_session) -> None:
     assert cfg.duration_deploy_s == 44
 
 
-def test_get_latest_returns_none_when_empty(db_session) -> None:
+def test_get_latest_returns_none_when_empty(db_session: Session) -> None:
     repo = SqlAlchemyDevopsPipelineRepository(db_session)
     assert repo.get_latest("missing-project") is None

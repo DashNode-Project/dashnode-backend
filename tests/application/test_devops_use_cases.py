@@ -1,9 +1,12 @@
 """DevOps use-case behaviour with fakes."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import cast
 
 import pytest
 
+from app.modules.auth.domain.entities import User, UserRole
+from app.modules.auth.domain.ports import UserRepository
 from app.modules.devops.application.use_cases import (
     GetLatestPipelineUseCase,
     TriggerPipelineUseCase,
@@ -14,7 +17,10 @@ from app.modules.devops.domain.entities import (
     DevopsTrigger,
     PipelineRun,
     PipelineStagePlan,
+    SimConfig,
 )
+from app.modules.devops.domain.ports import DevopsPipelineRepository
+from app.modules.projects.domain.ports import ProjectRepository
 from app.shared.application.identity import CurrentUser
 from app.shared.domain.authorization import AccessDeniedError
 from app.shared.domain.errors import AppError
@@ -34,15 +40,15 @@ class _FakeProjects:
 
 
 class _FakePipeline:
-    def load_sim_config(self):
-        from app.modules.devops.domain.entities import SimConfig
+    last_saved: PipelineRun
 
+    def load_sim_config(self) -> SimConfig:
         return SimConfig()
 
     def cooldown_seconds(self) -> int:
         return 0
 
-    def latest_run_created_at(self, project_id: str) -> None:
+    def latest_run_created_at(self, project_id: str) -> datetime | None:
         return None
 
     def save_run(self, run: PipelineRun, *, stage_row_ids: list[str]) -> None:
@@ -71,14 +77,35 @@ class _FakePipeline:
 
 
 class _FakeUsers:
-    def get_by_id(self, user_id: str) -> object | None:
-        return type("U", (), {"id": user_id, "name": "Ana"})()
+    def get_by_id(self, user_id: str) -> User | None:
+        return User(
+            id=user_id,
+            email="ana@b.io",
+            hashed_password="hash",
+            name="Ana",
+            role=UserRole.DEVELOPER,
+            is_active=True,
+            created_at=T0,
+            updated_at=T0,
+        )
+
+
+def _as_projects(*, exists: bool, access: bool) -> ProjectRepository:
+    return cast(ProjectRepository, _FakeProjects(exists=exists, access=access))
+
+
+def _as_users(repo: _FakeUsers) -> UserRepository:
+    return cast(UserRepository, repo)
+
+
+def _as_pipeline(repo: _FakePipeline) -> DevopsPipelineRepository:
+    return cast(DevopsPipelineRepository, repo)
 
 
 def test_trigger_pipeline_denies_non_member() -> None:
     use_case = TriggerPipelineUseCase(
-        pipeline=_FakePipeline(),
-        projects=_FakeProjects(exists=True, access=False),
+        pipeline=_as_pipeline(_FakePipeline()),
+        projects=_as_projects(exists=True, access=False),
         clock=FakeClock(T0),
         id_gen=FakeIdGenerator("run-denied"),
         uow=FakeUnitOfWork(),
@@ -97,8 +124,8 @@ def test_trigger_pipeline_denies_non_member() -> None:
 
 def test_trigger_pipeline_not_found_project() -> None:
     use_case = TriggerPipelineUseCase(
-        pipeline=_FakePipeline(),
-        projects=_FakeProjects(exists=False, access=False),
+        pipeline=_as_pipeline(_FakePipeline()),
+        projects=_as_projects(exists=False, access=False),
         clock=FakeClock(T0),
         id_gen=FakeIdGenerator("run-nf"),
         uow=FakeUnitOfWork(),
@@ -118,8 +145,8 @@ def test_trigger_pipeline_not_found_project() -> None:
 
 def test_trigger_pipeline_denies_developer() -> None:
     use_case = TriggerPipelineUseCase(
-        pipeline=_FakePipeline(),
-        projects=_FakeProjects(exists=True, access=True),
+        pipeline=_as_pipeline(_FakePipeline()),
+        projects=_as_projects(exists=True, access=True),
         clock=FakeClock(T0),
         id_gen=FakeIdGenerator("run-x"),
         uow=FakeUnitOfWork(),
@@ -141,12 +168,12 @@ def test_trigger_pipeline_raises_when_cooldown_active() -> None:
         def cooldown_seconds(self) -> int:
             return 300
 
-        def latest_run_created_at(self, project_id: str) -> object:
-            return type("Row", (), {"created_at": T0})()
+        def latest_run_created_at(self, project_id: str) -> datetime | None:
+            return T0
 
     use_case = TriggerPipelineUseCase(
-        pipeline=_CooldownPipeline(),
-        projects=_FakeProjects(exists=True, access=True),
+        pipeline=_as_pipeline(_CooldownPipeline()),
+        projects=_as_projects(exists=True, access=True),
         clock=FakeClock(T0 + timedelta(seconds=30)),
         id_gen=FakeIdGenerator("run-cd"),
         uow=FakeUnitOfWork(),
@@ -167,8 +194,8 @@ def test_trigger_pipeline_raises_when_cooldown_active() -> None:
 def test_trigger_pipeline_as_manager() -> None:
     pipeline = _FakePipeline()
     use_case = TriggerPipelineUseCase(
-        pipeline=pipeline,
-        projects=_FakeProjects(exists=True, access=True),
+        pipeline=_as_pipeline(pipeline),
+        projects=_as_projects(exists=True, access=True),
         clock=FakeClock(T0),
         id_gen=FakeIdGenerator("run-new"),
         uow=FakeUnitOfWork(),
@@ -192,9 +219,9 @@ def test_get_latest_empty_pipeline() -> None:
             return None
 
     use_case = GetLatestPipelineUseCase(
-        pipeline=_EmptyPipeline(),
-        projects=_FakeProjects(exists=True, access=True),
-        users=_FakeUsers(),
+        pipeline=_as_pipeline(_EmptyPipeline()),
+        projects=_as_projects(exists=True, access=True),
+        users=_as_users(_FakeUsers()),
         clock=FakeClock(T0),
     )
     actor = CurrentUser(
@@ -212,9 +239,9 @@ def test_get_latest_empty_pipeline() -> None:
 
 def test_get_latest_denies_non_member() -> None:
     use_case = GetLatestPipelineUseCase(
-        pipeline=_FakePipeline(),
-        projects=_FakeProjects(exists=True, access=False),
-        users=_FakeUsers(),
+        pipeline=_as_pipeline(_FakePipeline()),
+        projects=_as_projects(exists=True, access=False),
+        users=_as_users(_FakeUsers()),
         clock=FakeClock(T0),
     )
     actor = CurrentUser(
@@ -255,9 +282,9 @@ def test_get_latest_seed_run_labels_trigger() -> None:
             return seed_run
 
     use_case = GetLatestPipelineUseCase(
-        pipeline=_SeedPipeline(),
-        projects=_FakeProjects(exists=True, access=True),
-        users=_FakeUsers(),
+        pipeline=_as_pipeline(_SeedPipeline()),
+        projects=_as_projects(exists=True, access=True),
+        users=_as_users(_FakeUsers()),
         clock=FakeClock(end + timedelta(seconds=1)),
     )
     actor = CurrentUser(
@@ -306,9 +333,9 @@ def test_get_latest_marks_skip_reason_after_failure() -> None:
             return run
 
     use_case = GetLatestPipelineUseCase(
-        pipeline=_FailedPipeline(),
-        projects=_FakeProjects(exists=True, access=True),
-        users=_FakeUsers(),
+        pipeline=_as_pipeline(_FailedPipeline()),
+        projects=_as_projects(exists=True, access=True),
+        users=_as_users(_FakeUsers()),
         clock=FakeClock(mid + timedelta(seconds=1)),
     )
     actor = CurrentUser(
@@ -327,13 +354,13 @@ def test_get_latest_marks_skip_reason_after_failure() -> None:
 
 def test_get_latest_omits_triggered_by_when_user_missing() -> None:
     class _MissingUserRepo(_FakeUsers):
-        def get_by_id(self, user_id: str) -> object | None:
+        def get_by_id(self, user_id: str) -> User | None:
             return None
 
     use_case = GetLatestPipelineUseCase(
-        pipeline=_FakePipeline(),
-        projects=_FakeProjects(exists=True, access=True),
-        users=_MissingUserRepo(),
+        pipeline=_as_pipeline(_FakePipeline()),
+        projects=_as_projects(exists=True, access=True),
+        users=_as_users(_MissingUserRepo()),
         clock=FakeClock(T0 + timedelta(seconds=15)),
     )
     actor = CurrentUser(
@@ -350,9 +377,9 @@ def test_get_latest_omits_triggered_by_when_user_missing() -> None:
 
 def test_get_latest_returns_computed_stages() -> None:
     use_case = GetLatestPipelineUseCase(
-        pipeline=_FakePipeline(),
-        projects=_FakeProjects(exists=True, access=True),
-        users=_FakeUsers(),
+        pipeline=_as_pipeline(_FakePipeline()),
+        projects=_as_projects(exists=True, access=True),
+        users=_as_users(_FakeUsers()),
         clock=FakeClock(T0 + timedelta(seconds=15)),
     )
     actor = CurrentUser(
@@ -371,9 +398,9 @@ def test_get_latest_returns_computed_stages() -> None:
 
 def test_get_latest_not_found() -> None:
     use_case = GetLatestPipelineUseCase(
-        pipeline=_FakePipeline(),
-        projects=_FakeProjects(exists=False, access=False),
-        users=_FakeUsers(),
+        pipeline=_as_pipeline(_FakePipeline()),
+        projects=_as_projects(exists=False, access=False),
+        users=_as_users(_FakeUsers()),
         clock=FakeClock(T0),
     )
     actor = CurrentUser(
