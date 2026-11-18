@@ -1,13 +1,13 @@
 # FIX-01 — Registro de intervención (estado parcial)
 
-**Fecha:** 2026-11-16  
+**Fecha:** 2026-11-17 (actualizado)  
 **Rama:** `feature/ep-13-metricas-valoracion-ia`  
 **Repositorios:** `dashnode-backend`, `dashnode-frontend`
 
 ## Resumen ejecutivo
 
-Intervención orientada a estabilizar persistencia (Supabase primario + fallback local), corregir métricas de salud del proyecto, ampliar contratos de API, incorporar DoR/DoD, base de conocimientos del sistema y mejoras UX en Resumen / Equipo / Mis tareas / Usuarios.  
-**No se ejecutó push ni PR.** Varios requerimientos de FIX-01 siguen **pendientes** (véase §11).
+Intervención orientada a estabilizar persistencia (Supabase primario vía **pooler** + fallback local), corregir métricas de salud, DoR/DoD, KB del sistema y mejoras UX.  
+**2026-11-17:** Supabase operativo; migración `025`; seed usuarios + 31 FAQ + proyectos **Helix Health Portal** y **OrbitLogistics TMS** en nube; login manager verificado; push en `feature/ep-13-metricas-valoracion-ia`. Varios ítems UX FIX-01 siguen **pendientes** (§11).
 
 ## 1. Problemas identificados y causas raíz
 
