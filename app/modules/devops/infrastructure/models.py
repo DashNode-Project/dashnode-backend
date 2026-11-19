@@ -20,8 +20,6 @@ class ProjectDevOpsProfileModel(Base):
         String(36),
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
-        unique=True,
     )
     repository_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ci_cd_provider: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -59,7 +57,6 @@ class ProjectDevOpsRevisionModel(Base):
         String(36),
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     changed_by: Mapped[str | None] = mapped_column(
         String(36),

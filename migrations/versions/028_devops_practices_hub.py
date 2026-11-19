@@ -28,7 +28,6 @@ def upgrade() -> None:
             sa.String(length=36),
             sa.ForeignKey("projects.id", ondelete="CASCADE"),
             nullable=False,
-            unique=True,
         ),
         sa.Column("repository_url", sa.String(length=500), nullable=True),
         sa.Column("ci_cd_provider", sa.String(length=100), nullable=True),
@@ -67,11 +66,7 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("now()"),
         ),
-    )
-    op.create_index(
-        "ix_project_devops_profiles_project_id",
-        "project_devops_profiles",
-        ["project_id"],
+        sa.UniqueConstraint("project_id", name="uq_project_devops_profiles_project_id"),
     )
 
     op.create_table(
@@ -117,6 +112,5 @@ def downgrade() -> None:
         table_name="project_devops_revisions",
     )
     op.drop_table("project_devops_revisions")
-    op.drop_index("ix_project_devops_profiles_project_id", table_name="project_devops_profiles")
     op.drop_table("project_devops_profiles")
     # Simulator tables are not restored on downgrade (EP-16 replaced simulation).
