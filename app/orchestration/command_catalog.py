@@ -243,7 +243,16 @@ SYSTEM_COMMANDS: tuple[CommandTemplate, ...] = (
         "PAGE",
         "PROJECT",
         _ALL,
-        ("devops", "pipeline", "build", "deploy"),
+        (
+            "devops",
+            "arquitectura",
+            "despliegue",
+            "entornos",
+            "ramas",
+            "ci/cd",
+            "runbook",
+            "calidad",
+        ),
         route_template="/proyectos/{projectId}/devops",
     ),
 )

@@ -1,11 +1,13 @@
 # Changelog — dashnode-backend
 
-## [Unreleased] — EP-15 Paleta de comandos y EP-16 DevOps simulado
+## [Unreleased] — EP-15 Paleta de comandos y EP-16 DevOps Hub
 
 ### Added
 - `GET /api/v1/commands` con catálogo `cmd-v1.0.0` filtrado por rol y membresía.
-- Módulo `app/modules/devops/`, migración `027`, endpoints de pipeline simulado (latest + disparo manual).
-- Semillas `devops_sim_*` en `system_configs`.
+- DevOps Hub: `project_devops_profiles` / `project_devops_revisions` (migración `028`), APIs `GET/PUT .../devops` y `GET .../devops/revisions`.
+
+### Removed
+- Pipeline simulado, tablas `devops_pipeline_*`, claves `devops_sim_*` y endpoints `/devops/pipeline/*`.
 
 ## [Unreleased] — EP-14 Notificaciones
 

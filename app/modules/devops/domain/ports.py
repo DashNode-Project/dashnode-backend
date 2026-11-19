@@ -1,20 +1,23 @@
-"""DevOps repository ports."""
+"""DevOps practices repository port."""
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Protocol
 
-from app.modules.devops.domain.entities import PipelineRun, SimConfig
+from app.modules.devops.domain.entities import DevOpsRevision, ProjectDevOpsProfile
 
 
-class DevopsPipelineRepository(Protocol):
-    def load_sim_config(self) -> SimConfig: ...
+class DevOpsProfileRepository(Protocol):
+    def get_by_project_id(self, project_id: str) -> ProjectDevOpsProfile | None: ...
 
-    def cooldown_seconds(self) -> int: ...
+    def save(self, profile: ProjectDevOpsProfile) -> None: ...
 
-    def latest_run_created_at(self, project_id: str) -> datetime | None: ...
+    def add_revision(self, revision: DevOpsRevision) -> None: ...
 
-    def save_run(self, run: PipelineRun, *, stage_row_ids: list[str]) -> None: ...
-
-    def get_latest(self, project_id: str) -> PipelineRun | None: ...
+    def list_revisions(
+        self,
+        project_id: str,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[DevOpsRevision]: ...
