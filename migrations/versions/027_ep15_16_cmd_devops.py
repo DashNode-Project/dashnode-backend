@@ -104,12 +104,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        op.f("ix_devops_pipeline_stage_runs_run_id"), table_name="devops_pipeline_stage_runs"
-    )
-    op.drop_index("ix_devops_stage_run", table_name="devops_pipeline_stage_runs")
-    op.drop_table("devops_pipeline_stage_runs")
-    op.drop_index(op.f("ix_devops_pipeline_runs_project_id"), table_name="devops_pipeline_runs")
-    op.drop_index("ix_devops_runs_project_latest", table_name="devops_pipeline_runs")
-    op.drop_table("devops_pipeline_runs")
+    # IF EXISTS: migration 028 may have already removed these tables (CASCADE drops indexes).
+    op.execute(sa.text("DROP TABLE IF EXISTS devops_pipeline_stage_runs CASCADE"))
+    op.execute(sa.text("DROP TABLE IF EXISTS devops_pipeline_runs CASCADE"))
     op.execute(sa.text("DELETE FROM system_configs WHERE key LIKE 'devops_%'"))
