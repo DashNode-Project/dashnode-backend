@@ -1450,3 +1450,19 @@ Mensajes literales en `app/modules/documentation/domain/messages.py`. Migracione
 
 **Decisiones PO (v1):** Sin notificación por resubmit/reschedule/resolución de issue; retención 180 días; marcar leída al navegar; issue sin gerente → log, issue se crea igual.
 
+---
+
+## EP-15 — Paleta de comandos (HU_DN_09_124 … 126)
+
+| ID | Estado | Notas |
+|---|---|---|
+| HU_DN_09_124 | Implementado | Ctrl/Cmd+K, Escape, foco atrapado/restaurado |
+| HU_DN_09_125 | Implementado | Búsqueda local normalizada, ARIA combobox, máx. 8 resultados |
+| HU_DN_09_126 | Implementado | `GET /api/v1/commands` filtrado por rol y membresía |
+
+## EP-16 — DevOps pipeline simulado (HU_DN_09_128)
+
+| ID | Estado | Notas |
+|---|---|---|
+| HU_DN_09_128 | Implementado | Cuatro etapas, estados derivados al leer, distintivo Simulado, cooldown manual 300 s |
+

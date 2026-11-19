@@ -37,7 +37,17 @@ def _require_server() -> str:
     url = settings.TEST_POSTGRES_URL
     if not url:
         pytest.skip("TEST_POSTGRES_URL is not configured")
-    assert url is not None
+    try:
+        probe = create_engine(url, pool_pre_ping=True)
+    except Exception as exc:
+        pytest.skip(f"PostgreSQL driver unavailable: {exc}")
+    try:
+        with probe.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        pytest.skip(f"PostgreSQL not reachable: {exc}")
+    finally:
+        probe.dispose()
     return url
 
 

@@ -572,3 +572,9 @@ Validación local:
 - **API:** `app/orchestration/notification_routes.py` (lista cursor, contador, lectura, abrir, borrar).
 - **Eventos:** tareas, sprints, issues, reuniones, documentación dentro de la misma transacción del caso de uso.
 - **Pruebas:** `test_notification_service.py`, `test_notifications_api.py`, ajustes reuniones/issues.
+
+### Implementación EP-15 / EP-16 — Paleta de comandos y DevOps simulado (HU_DN_09_124 … 128)
+- **EP-15:** `GET /api/v1/commands` (`app/orchestration/command_routes.py` + catálogo `command_catalog.py` cmd-v1.0.0), filtrado por rol y membresía; cliente con búsqueda normalizada, ARIA combobox, Ctrl/Cmd+K y caché por sesión.
+- **EP-16:** Migración `027_ep15_16_cmd_devops.py`, simulador `app/modules/devops/`, `GET/POST .../devops/pipeline/latest|runs`, estados derivados al leer, distintivo Simulado en UI.
+- **Pruebas:** `test_commands_api.py`, `test_devops_api.py`, `test_devops_pipeline_simulator.py`, `test_devops_use_cases.py`; suite local `594+` passed (integración PostgreSQL opcional).
+- **Cobertura:** ~79.84% combinada (stmt+branch); suite 595+ passed; integración PostgreSQL se omite si el servidor no está disponible.

@@ -461,3 +461,21 @@ Períodos: `today`, `7d`, `30d`, `month`, `custom` (`from`/`to` UTC). Desarrolla
 | `POST` | `/api/v1/notifications/delete-all` | Borrado con `{ "confirm": true }` |
 
 Creación solo por eventos de dominio (sin `POST /notifications`). Frontend: campana global + `/notificaciones`, polling 30 s (rama `feature/ep-14-notificaciones`).
+
+## EP-15 — Paleta de comandos (contrato API)
+
+| Método | Ruta | Auth | Respuesta |
+|---|---|---|---|
+| `GET` | `/api/v1/commands` | Sesión válida | `catalog_version`, `commands[]`, `projects[]`; `Cache-Control: no-store` |
+| | | | 401 `UNAUTHENTICATED` sin sesión |
+
+El catálogo visible lo decide el servidor (`CMD-01`). El cliente indexa una vez por sesión y busca en memoria (RNF-REN-09).
+
+## EP-16 — DevOps simulado (contrato API)
+
+| Método | Ruta | Auth | Respuesta |
+|---|---|---|---|
+| `GET` | `/api/v1/projects/{projectId}/devops/pipeline/latest` | Miembro activo | Última ejecución simulada o `run_id: null` |
+| `POST` | `/api/v1/projects/{projectId}/devops/pipeline/runs` | Admin/Gerente miembro | 201 nueva ejecución; 429 `COOLDOWN_ACTIVE`; 403 desarrollador |
+
+Frontend: `/proyectos/:id/devops`, distintivo **Simulado**, polling 5 s mientras haya etapa `EN_EJECUCION`.

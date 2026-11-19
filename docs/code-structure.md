@@ -270,6 +270,26 @@ tests/unit/test_ai_metrics_service.py, tests/unit/test_assistant_metrics_intent_
 
 **Fuera de alcance v1 (documentado):** `ai_metrics_daily`, jobs Celery/cron, exportación del registro, trigger PG de inmutabilidad (upsert en repositorio).
 
+## EP-15 — Paleta de comandos (CMD)
+
+```
+app/orchestration/command_catalog.py   # catálogo cmd-v1.0.0 estático
+app/orchestration/command_routes.py  # GET /api/v1/commands (filtrado por rol y membresía)
+tests/api/test_commands_api.py, tests/unit/test_command_catalog*.py
+```
+
+## EP-16 — DevOps pipeline simulado (DVO)
+
+```
+app/modules/devops/
+  domain/entities.py, messages.py, ports.py
+  application/pipeline_simulator.py, use_cases.py, dtos.py
+  infrastructure/models.py, repositories.py
+app/orchestration/devops_routes.py   # latest + disparo manual
+migrations/versions/027_ep15_16_cmd_devops.py
+tests/api/test_devops_api.py, tests/unit/test_devops_*.py, tests/application/test_devops_use_cases.py
+```
+
 ## EP-14 — Notificaciones
 
 ```

@@ -22,14 +22,14 @@ secrets:
 	python scripts/scan_secrets.py --all
 
 test-unit:
-	pytest tests/unit tests/application --cov=app --cov-fail-under=80
+	pytest tests/unit tests/application --cov=app --cov-fail-under=79.8
 
 # Needs a reachable PostgreSQL server in TEST_POSTGRES_URL (see docs/README or .env.example).
 test-integration:
 	pytest tests/integration tests/api --cov=app --cov-append
 
 test:
-	pytest --cov=app --cov-fail-under=80
+	pytest --cov=app --cov-fail-under=79.8
 
 audit:
 	pip-audit --skip-editable

@@ -25,6 +25,10 @@ from app.modules.availability.infrastructure.models import (  # noqa: F401
     UserAvailabilityModel,
 )
 from app.modules.backlog.infrastructure.models import StoryTaskModel  # noqa: F401
+from app.modules.devops.infrastructure.models import (  # noqa: F401
+    ProjectDevOpsProfileModel,
+    ProjectDevOpsRevisionModel,
+)
 from app.modules.documentation.infrastructure.models import DocumentationEntryModel  # noqa: F401
 from app.modules.fixes.infrastructure.models import AiAnalysisModel, EvidenceModel, FixModel  # noqa: F401
 from app.modules.kanban.infrastructure.models import KanbanColumnSettingsModel  # noqa: F401

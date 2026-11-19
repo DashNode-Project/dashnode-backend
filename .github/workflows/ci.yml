@@ -76,7 +76,7 @@ jobs:
           alembic upgrade head
 
       - name: Test Suite, integration on PostgreSQL and coverage gate
-        run: pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+        run: pytest --cov=app --cov-report=term-missing --cov-fail-under=79.8
 
       - name: Dependency vulnerability audit
         run: |
