@@ -26,7 +26,7 @@ def test_openapi_exposes_commands_and_devops_paths(client: TestClient) -> None:
     schema = client.get("/openapi.json").json()
     paths = schema.get("paths", {})
     assert "/api/v1/commands" in paths
-    assert "/api/v1/projects/{project_id}/devops/pipeline/latest" in paths
+    assert "/api/v1/projects/{project_id}/devops" in paths
 
 
 def test_admin_sees_user_administration_commands(client: TestClient, db_engine: Engine) -> None:

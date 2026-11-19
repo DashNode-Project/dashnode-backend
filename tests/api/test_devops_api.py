@@ -1,10 +1,10 @@
-"""EP-16 DevOps pipeline API tests."""
+"""EP-16 DevOps practices hub API tests."""
+
+from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
-from sqlalchemy.orm import sessionmaker
 
-from app.modules.devops.infrastructure.models import DevopsPipelineStageRunModel
 from tests.support import DEFAULT_PASSWORD, create_user, login_as
 
 
@@ -12,7 +12,7 @@ def _create_project(client: TestClient, mgr_id: str) -> str:
     response = client.post(
         "/api/v1/projects",
         json={
-            "name": "Pipeline Test",
+            "name": "DevOps Hub",
             "description": "",
             "priority": "media",
             "tech_stack": [],
@@ -25,75 +25,123 @@ def _create_project(client: TestClient, mgr_id: str) -> str:
     return project_id
 
 
-def test_latest_pipeline_empty(client: TestClient, db_engine: Engine) -> None:
-    mgr_id = create_user(db_engine, email="mgrpipe@dashnode.io", role="manager", name="Mgr Pipe")
-    client.post(
-        "/api/v1/auth/login",
-        json={"email": "mgrpipe@dashnode.io", "password": DEFAULT_PASSWORD},
-    )
+def _sample_put() -> dict[str, Any]:
+    return {
+        "repository_url": "https://github.com/acme/dashnode",
+        "ci_cd_provider": "GitHub Actions",
+        "branching_strategy": "GitHub Flow",
+        "branching_rules_md": "PR obligatorio a `main`.",
+        "pipeline_stages": [
+            {
+                "order": 1,
+                "name": "Lint",
+                "tool": "Ruff + Mypy",
+                "commands": "ruff check . && mypy .",
+                "trigger_event": "Pull Request",
+                "is_required": True,
+            }
+        ],
+        "environments": [
+            {
+                "name": "Production",
+                "url": "https://app.example.com",
+                "branch": "main",
+                "deploy_strategy": "Manual con aprobación",
+                "requires_approval": True,
+            }
+        ],
+        "quality_gates_md": "Cobertura >= 80%",
+        "deployment_runbook_md": "Ejecutar migraciones Alembic.",
+        "rollback_observability_md": "Revertir commit y redeploy.",
+        "change_summary": "Configuración inicial",
+    }
+
+
+def test_openapi_has_devops_hub_paths(client: TestClient) -> None:
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/api/v1/projects/{project_id}/devops" in paths
+    assert "/api/v1/projects/{project_id}/devops/revisions" in paths
+    assert "is_simulated" not in client.get("/openapi.json").text
+
+
+def test_get_unconfigured_profile(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="devhub1@dashnode.io", role="manager")
     project_id = _create_project(client, mgr_id)
-    response = client.get(f"/api/v1/projects/{project_id}/devops/pipeline/latest")
+    response = client.get(f"/api/v1/projects/{project_id}/devops")
     assert response.status_code == 200
     body = response.json()
-    assert body["run_id"] is None
-    assert body["stages"] == []
-    assert body["is_simulated"] is True
+    assert body["is_configured"] is False
+    assert body["can_edit"] is True
+    assert body["pipeline_stages"] == []
 
 
-def test_developer_cannot_trigger_pipeline(client: TestClient, db_engine: Engine) -> None:
-    mgr_id = create_user(db_engine, email="mgrpipe2@dashnode.io", role="manager")
-    create_user(db_engine, email="devpipe@dashnode.io", role="developer")
+def test_manager_can_upsert_and_list_revisions(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="devhub2@dashnode.io", role="manager")
+    project_id = _create_project(client, mgr_id)
+    put = client.put(f"/api/v1/projects/{project_id}/devops", json=_sample_put())
+    assert put.status_code == 200
+    body = put.json()
+    assert body["is_configured"] is True
+    assert len(body["pipeline_stages"]) == 1
+    revisions = client.get(f"/api/v1/projects/{project_id}/devops/revisions")
+    assert revisions.status_code == 200
+    assert len(revisions.json()["items"]) == 1
+
+
+def test_developer_can_read_but_not_put(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="devhub3mgr@dashnode.io", role="manager")
+    dev_id = create_user(db_engine, email="devhub3dev@dashnode.io", role="developer")
+    project_id = _create_project(client, mgr_id)
+    assert (
+        client.post(f"/api/v1/projects/{project_id}/members", json={"user_id": dev_id}).status_code
+        == 201
+    )
     client.post(
         "/api/v1/auth/login",
-        json={"email": "mgrpipe2@dashnode.io", "password": DEFAULT_PASSWORD},
+        json={"email": "devhub3dev@dashnode.io", "password": DEFAULT_PASSWORD},
     )
+    read = client.get(f"/api/v1/projects/{project_id}/devops")
+    assert read.status_code == 200
+    assert read.json()["can_edit"] is False
+    assert (
+        client.put(f"/api/v1/projects/{project_id}/devops", json=_sample_put()).status_code == 403
+    )
+
+
+def test_non_member_forbidden(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="devhub4mgr@dashnode.io", role="manager")
     project_id = _create_project(client, mgr_id)
+    create_user(db_engine, email="outsider@dashnode.io", role="developer")
     client.post(
         "/api/v1/auth/login",
-        json={"email": "devpipe@dashnode.io", "password": DEFAULT_PASSWORD},
+        json={"email": "outsider@dashnode.io", "password": DEFAULT_PASSWORD},
     )
-    response = client.post(f"/api/v1/projects/{project_id}/devops/pipeline/runs")
-    assert response.status_code == 403
+    assert client.get(f"/api/v1/projects/{project_id}/devops").status_code == 403
 
 
-def test_trigger_and_read_pipeline(client: TestClient, db_engine: Engine) -> None:
-    mgr_id = login_as(client, db_engine, email="mgrpipe3@dashnode.io", role="manager")
+def test_not_found_project(client: TestClient, db_engine: Engine) -> None:
+    login_as(client, db_engine, email="devhub5@dashnode.io", role="manager")
+    assert client.get("/api/v1/projects/missing/devops").status_code == 404
+
+
+def test_unauthenticated(client: TestClient) -> None:
+    assert client.get("/api/v1/projects/p-1/devops").status_code == 401
+
+
+def test_validation_invalid_repo_url(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="devhub6@dashnode.io", role="manager")
     project_id = _create_project(client, mgr_id)
-    created = client.post(f"/api/v1/projects/{project_id}/devops/pipeline/runs")
-    assert created.status_code == 201
-    latest = client.get(f"/api/v1/projects/{project_id}/devops/pipeline/latest")
-    assert latest.status_code == 200
-    body = latest.json()
-    assert body["run_id"] == created.json()["run_id"]
-    assert len(body["stages"]) == 4
-    assert body["is_simulated"] is True
+    payload = _sample_put()
+    payload["repository_url"] = "ftp://bad"
+    response = client.put(f"/api/v1/projects/{project_id}/devops", json=payload)
+    assert response.status_code == 400
 
 
-def test_pipeline_trigger_respects_cooldown(client: TestClient, db_engine: Engine) -> None:
-    mgr_id = login_as(client, db_engine, email="mgrpipe5@dashnode.io", role="manager")
+def test_validation_duplicate_stage_order(client: TestClient, db_engine: Engine) -> None:
+    mgr_id = login_as(client, db_engine, email="devhub7@dashnode.io", role="manager")
     project_id = _create_project(client, mgr_id)
-    assert client.post(f"/api/v1/projects/{project_id}/devops/pipeline/runs").status_code == 201
-    retry = client.post(f"/api/v1/projects/{project_id}/devops/pipeline/runs")
-    assert retry.status_code == 429
-    assert retry.json()["error"]["code"] == "COOLDOWN_ACTIVE"
-
-
-def test_pipeline_not_found(client: TestClient, db_engine: Engine) -> None:
-    login_as(client, db_engine, email="mgrpipe6@dashnode.io", role="manager")
-    response = client.get("/api/v1/projects/missing-project/devops/pipeline/latest")
-    assert response.status_code == 404
-
-
-def test_read_latest_does_not_write(client: TestClient, db_engine: Engine) -> None:
-    mgr_id = login_as(client, db_engine, email="mgrpipe4@dashnode.io", role="manager")
-    project_id = _create_project(client, mgr_id)
-    client.post(f"/api/v1/projects/{project_id}/devops/pipeline/runs")
-    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
-    session = factory()
-    try:
-        before = session.query(DevopsPipelineStageRunModel).count()
-        client.get(f"/api/v1/projects/{project_id}/devops/pipeline/latest")
-        after = session.query(DevopsPipelineStageRunModel).count()
-        assert before == after
-    finally:
-        session.close()
+    payload = _sample_put()
+    stage = payload["pipeline_stages"][0]
+    payload["pipeline_stages"] = [stage, {**stage, "name": "Test"}]
+    response = client.put(f"/api/v1/projects/{project_id}/devops", json=payload)
+    assert response.status_code == 400

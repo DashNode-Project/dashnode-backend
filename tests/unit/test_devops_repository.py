@@ -1,43 +1,55 @@
-"""DevOps repository defaults on SQLite."""
+"""DevOps profile repository on SQLite."""
 
 from sqlalchemy.orm import Session
 
-from app.modules.ai.infrastructure.models import SystemConfigModel
-from app.modules.devops.infrastructure.repositories import SqlAlchemyDevopsPipelineRepository
+from app.modules.devops.domain.entities import (
+    EnvironmentSpec,
+    PipelineStageSpec,
+    ProjectDevOpsProfile,
+)
+from app.modules.devops.infrastructure.repositories import SqlAlchemyDevOpsProfileRepository
+from app.modules.projects.infrastructure.models import ProjectModel
+from tests.fakes import T0
 
 
-def test_load_sim_config_reads_system_rows(db_session: Session) -> None:
-    db_session.add(SystemConfigModel(key="devops_sim_duration_lint_s", value="20"))
+def test_save_and_load_profile(db_session: Session) -> None:
+    db_session.add(
+        ProjectModel(
+            id="proj-1",
+            name="Demo",
+            description="",
+            status="planificacion",
+            priority="media",
+            tech_stack="[]",
+            manager_id="m-1",
+            owner_id="m-1",
+            meeting_link=None,
+            created_at=T0,
+            updated_at=T0,
+        )
+    )
+    db_session.flush()
+    repo = SqlAlchemyDevOpsProfileRepository(db_session)
+    profile = ProjectDevOpsProfile(
+        id="prof-1",
+        project_id="proj-1",
+        repository_url="https://github.com/acme/app",
+        ci_cd_provider="GitHub Actions",
+        branching_strategy="Trunk",
+        branching_rules_md=None,
+        pipeline_stages=[
+            PipelineStageSpec(1, "Lint", "Ruff", "ruff check .", "PR", True),
+        ],
+        environments=[
+            EnvironmentSpec("Prod", "https://app.io", "main", "Manual", True),
+        ],
+        updated_by="u-1",
+        created_at=T0,
+        updated_at=T0,
+    )
+    repo.save(profile)
     db_session.commit()
-    repo = SqlAlchemyDevopsPipelineRepository(db_session)
-    cfg = repo.load_sim_config()
-    assert cfg.duration_lint_s == 20
-
-
-def test_cooldown_default_when_config_missing(db_session: Session) -> None:
-    repo = SqlAlchemyDevopsPipelineRepository(db_session)
-    assert repo.cooldown_seconds() == 300
-
-
-def test_load_sim_config_applies_all_keys(db_session: Session) -> None:
-    rows = {
-        "devops_sim_success_lint": "0.5",
-        "devops_sim_success_test": "0.6",
-        "devops_sim_success_build": "0.7",
-        "devops_sim_success_deploy": "0.8",
-        "devops_sim_duration_lint_s": "11",
-        "devops_sim_duration_test_s": "22",
-        "devops_sim_duration_build_s": "33",
-        "devops_sim_duration_deploy_s": "44",
-    }
-    for key, value in rows.items():
-        db_session.add(SystemConfigModel(key=key, value=value))
-    db_session.commit()
-    cfg = SqlAlchemyDevopsPipelineRepository(db_session).load_sim_config()
-    assert cfg.success_lint == 0.5
-    assert cfg.duration_deploy_s == 44
-
-
-def test_get_latest_returns_none_when_empty(db_session: Session) -> None:
-    repo = SqlAlchemyDevopsPipelineRepository(db_session)
-    assert repo.get_latest("missing-project") is None
+    loaded = repo.get_by_project_id("proj-1")
+    assert loaded is not None
+    assert loaded.repository_url == profile.repository_url
+    assert loaded.pipeline_stages[0].name == "Lint"
